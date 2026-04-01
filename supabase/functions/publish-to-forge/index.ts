@@ -31,13 +31,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const forgeApiKey = Deno.env.get("EXPERT_FORGE_API_KEY");
-    const rawForgeUrl = Deno.env.get("EXPERT_FORGE_GATEWAY_URL") || Deno.env.get("EXPERT_FORGE_URL") || "";
-    const forgeGatewayUrl = rawForgeUrl && rawForgeUrl.includes("api-gateway")
-      ? rawForgeUrl
-      : rawForgeUrl
-        ? `${rawForgeUrl.replace(/\/$/, "")}/functions/v1/api-gateway`
-        : "https://nhfocnjtgwuamelovncq.supabase.co/functions/v1/api-gateway";
-    console.log(`Expert Forge Gateway URL resolved to: ${forgeGatewayUrl}`);
+    const forgeGatewayUrl = "https://nhfocnjtgwuamelovncq.supabase.co/functions/v1/api-gateway";
     const forgeProjectId = "5123d6ea-14aa-4f73-a547-07393d583e89";
 
     if (!forgeApiKey) throw new Error("EXPERT_FORGE_API_KEY not configured");

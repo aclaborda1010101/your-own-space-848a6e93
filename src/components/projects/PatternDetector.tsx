@@ -10,8 +10,10 @@ import {
   Radar, Database, Shield, Layers, BarChart3, FileSpreadsheet,
   Plus, Loader2, ChevronDown, ExternalLink, AlertTriangle,
   CheckCircle2, XCircle, TrendingUp, TrendingDown, Minus, Info,
-  Award, Eye, Euro, Target, Lightbulb, RefreshCw, Key,
+  Award, Eye, Euro, Target, Lightbulb, RefreshCw, Key, Upload,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { usePatternDetector, Signal, CredibilityData, EconomicBacktest } from "@/hooks/usePatternDetector";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";

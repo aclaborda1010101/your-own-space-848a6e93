@@ -3107,6 +3107,15 @@ Estacionalidad: ${JSON.stringify(phase1?.seasonality_patterns || [])}
 Fuentes disponibles: ${JSON.stringify(allSources.map((s: any) => ({ name: s.source_name, type: s.source_type, data: s.data_type })).slice(0, 20))}
 ${componentVinculationBlock}
 ${compositeMetricsBlock}
+${(() => {
+  if (patternMap.length > 0) {
+    const patternList = patternMap.flatMap((l: any) => 
+      (l.patterns || []).map((p: any) => `  - [Capa ${l.layer}] ${p.pattern_name}: ${p.what_to_detect} (método: ${p.detection_method})`)
+    ).join("\n");
+    return `\n═══ MAPA DE PATRONES PLANIFICADOS (Phase 1b) ═══\nGenera señales para TODOS estos patrones. Si alguno no tiene señal, explica por qué.\n\n${patternList}\n\nIncluye "pattern_coverage" en tu respuesta: {covered: [...], uncovered: [{name, reason}]}`;
+  }
+  return "";
+})()}
 ${datasetContextPipeline || ""}
 
 Genera patrones en 5 capas:

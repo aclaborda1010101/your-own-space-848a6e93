@@ -2361,6 +2361,8 @@ SEÑALES NO CONVENCIONALES OBLIGATORIAS PARA CENTROS COMERCIALES
 4. "Indicador Teletrabajo Coworkings" → Densidad coworkings radio 5km
 5. "Proxy Poder Adquisitivo Gimnasios" → Ratio gimnasios premium vs low-cost
 6. "Crecimiento Empresarial LinkedIn" → Densidad ofertas empleo radio 5km
+7. "Ratio Gasto Tarjeta vs Renta Disponible" → Gasto real con tarjeta vs renta media zona. >15% = alta propensión consumo
+8. "Flujo Movilidad Pico Sábado" → Desplazamientos entrantes sábado 10-14h / población residente. >2.5x = polo atracción
 
 ▶ CAPA 5 — Edge extremo con fórmulas:
 1. "Latent Demand Score" → (Búsquedas / Oferta) × Crecimiento población. >2.5 = oportunidad
@@ -2368,6 +2370,12 @@ SEÑALES NO CONVENCIONALES OBLIGATORIAS PARA CENTROS COMERCIALES
 3. "Climate Refuge Score" → (Días >32°C + Lluvia >10mm + AQI>150) / 365. >0.25 = refugio climático
 4. "Dead Hours Vitality Index" → Tráfico horas muertas / Tráfico pico sábado. >0.3 = base fuerte
 5. "Correlacion Pet Shops Demografia" → Densidad pet shops + veterinarias como proxy poder adquisitivo
+6. "Benchmark Success Score" → Score 0-100 comparando composición/ocupación/mix vs top 20 centros exitosos España
+7. "Resilience Index" → (1-Herfindahl) × Diversidad × (1-Dependencia anchor). Anti-fragilidad del centro
+
+▶ CAPA 3 — Señales adicionales:
+5. "Índice Rotación Locales Comerciales" → Ratio locales que cambian operador/año radio 2km. Alta rotación = zona inestable
+6. "Proxy Satisfacción Zona Google" → Rating medio Google Maps radio 1km. >4.2 = zona con buena experiencia comercial
 
 RECORDATORIO: Señales convencionales en Capas 1-2, no convencionales en Capas 3-5. Cada señal DEBE tener contradicting_evidence específica.`;
         }

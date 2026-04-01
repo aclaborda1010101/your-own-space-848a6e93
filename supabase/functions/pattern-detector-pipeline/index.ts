@@ -291,6 +291,112 @@ Responde con este JSON exacto:
 }
 
 // ═══════════════════════════════════════
+// PHASE 1b: Pattern Design Map (Pattern-First Architecture)
+// ═══════════════════════════════════════
+
+async function executePhase1b(runId: string, sector: string, geography: string, objective: string) {
+  await updateRun(runId, { status: "running_phase_1b", current_phase: 1 });
+
+  const phaseResults = await getRunPhaseResults(runId);
+  const phase1 = phaseResults.phase_1 as Record<string, unknown> || {};
+
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `Eres un arquitecto de inteligencia de negocio senior. Tu tarea es DISEÑAR el mapa de patrones que se buscarán ANTES de buscar fuentes de datos.
+Para cada patrón defines QUÉ datos necesita y DE DÓNDE podrían obtenerse. Esto guía la búsqueda de fuentes posterior.
+Responde SOLO con JSON válido.`
+    },
+    {
+      role: "user",
+      content: `Diseña el mapa completo de patrones a detectar para este análisis:
+
+Sector: ${sector}
+Geografía: ${geography}
+Objetivo: ${objective}
+Análisis sectorial: ${(phase1 as any)?.sector_analysis || "N/A"}
+Variables clave: ${JSON.stringify((phase1 as any)?.key_variables || [])}
+Hipótesis causales: ${JSON.stringify((phase1 as any)?.causal_hypotheses || [])}
+KPIs sectoriales: ${JSON.stringify((phase1 as any)?.sector_specific_kpis || [])}
+Sectores análogos: ${JSON.stringify((phase1 as any)?.analogous_sectors || [])}
+
+Para cada una de las 5 CAPAS DE INTELIGENCIA, define los patrones específicos que se buscarán.
+Mínimo 3 patrones por capa (15-25 total). Cada patrón debe declarar:
+- Qué datos necesita exactamente
+- Qué fuentes ideales proporcionarían esos datos
+- Qué método de detección se usará
+- Qué decisión de negocio habilita
+- Frecuencia mínima del dato y profundidad histórica requerida
+
+Responde con JSON:
+{
+  "pattern_map": [
+    {
+      "layer": 1,
+      "layer_name": "Evidentes",
+      "patterns": [
+        {
+          "pattern_name": "nombre específico del patrón",
+          "what_to_detect": "qué se busca detectar concretamente",
+          "why_matters": "por qué importa para el negocio",
+          "data_needed": ["tipo de dato 1", "tipo de dato 2"],
+          "ideal_sources": ["fuente ideal 1 con URL si posible", "fuente 2"],
+          "minimum_frequency": "daily|weekly|monthly|quarterly",
+          "minimum_history": "meses o años necesarios",
+          "detection_method": "trend_analysis|correlation|anomaly|regression|clustering|causal|formula_composite",
+          "decision_enabled": "qué decisión concreta habilita este patrón",
+          "cross_reference": "con qué dato interno del cliente se cruza"
+        }
+      ]
+    },
+    {
+      "layer": 2,
+      "layer_name": "Proceso / Analítica Avanzada",
+      "patterns": [...]
+    },
+    {
+      "layer": 3,
+      "layer_name": "Dolor / Señales Débiles",
+      "patterns": [...]
+    },
+    {
+      "layer": 4,
+      "layer_name": "Éxito Oculto / Inteligencia Lateral",
+      "patterns": [...]
+    },
+    {
+      "layer": 5,
+      "layer_name": "Sistémico / Edge Extremo",
+      "patterns": [...]
+    }
+  ],
+  "total_patterns": 20,
+  "total_unique_sources_needed": 18,
+  "coverage_by_layer": {"1": 4, "2": 4, "3": 5, "4": 4, "5": 3},
+  "source_priority_ranking": [
+    {"source": "nombre fuente", "patterns_served": 3, "layers_covered": [1, 3, 4], "priority": "critical|important|nice_to_have"}
+  ]
+}`
+    }
+  ];
+
+  try {
+    const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+    const parsed = safeParseJson(result) as any;
+
+    phaseResults.phase_1b = parsed;
+    await updateRun(runId, { phase_results: phaseResults, status: "phase_1b_complete" });
+
+    console.log(`[Phase 1b] Pattern map done: ${parsed.total_patterns || "?"} patterns, ${parsed.total_unique_sources_needed || "?"} sources needed`);
+    return parsed;
+  } catch (err) {
+    console.error("Phase 1b error:", err);
+    await updateRun(runId, { status: "failed", error_log: `Phase 1b failed: ${err}` });
+    throw err;
+  }
+}
+
+// ═══════════════════════════════════════
 // PHASE 2: Source Discovery (AI-based, no Firecrawl)
 // ═══════════════════════════════════════
 

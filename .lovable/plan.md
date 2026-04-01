@@ -1,106 +1,101 @@
 
 
-# Plan: Google Drive Integration for Pattern Detector Datasets
+# Plan: Invertir el Flujo del Pipeline -- Primero Patrones, Luego Fuentes
 
-## Summary
-Replace the placeholder "Datasets" tab with a functional UI that accepts a Google Drive folder URL, crawls all files in it via the Google Drive API, analyzes each file's relevance to pattern detection, and ingests the relevant ones.
+## El Problema (tienes razón)
 
-## Problem
-Currently the Datasets tab is a disabled placeholder. The user wants to paste a Drive folder link and have the system automatically discover, classify, and ingest all documents (PDF, Excel, CSV, etc.) without manual file-by-file uploads.
-
-## Architecture
+El flujo actual es:
 
 ```text
-┌─────────────────────┐
-│  PatternDetector UI  │  ← paste Drive folder URL
-│  (Datasets tab)      │
-└──────────┬──────────┘
-           │ supabase.functions.invoke("drive-folder-ingest")
-           ▼
-┌─────────────────────────┐
-│  Edge Function           │
-│  drive-folder-ingest     │
-│  1. List all files in    │
-│     folder (recursive)   │
-│  2. Download each file   │
-│  3. Extract text         │
-│  4. LLM classifies       │
-│     relevance            │
-│  5. Store results in     │
-│     pattern_detector_    │
-│     datasets table       │
-└─────────────────────────┘
+Phase 1: Comprensión del sector (genérica)
+Phase 2: Buscar fuentes de datos (el LLM inventa 5-8 fuentes genéricas)
+Phase 3: Quality Gate (evalúa cobertura con las pocas fuentes)
+Phase 4: Confidence Cap
+Phase 4b: Benchmarks (solo centros_comerciales)
+Phase 5: Detectar señales/patrones ← AQUÍ recién decide qué buscar
+Phase 6: Backtesting
+Phase 7: Hipótesis
 ```
 
-## Prerequisites — Google Drive Connector
+El problema: las fuentes (Phase 2) se eligen SIN saber qué patrones se necesitan. El LLM genera 5-8 fuentes genéricas (INE, Google Trends, etc.) y luego en Phase 5 intenta detectar patrones sofisticados que NO puede fundamentar porque no tiene las fuentes necesarias. Es como ir a comprar ingredientes sin saber qué vas a cocinar.
 
-**No Google Drive connector exists** in the current workspace. Since Lovable's standard connectors don't include Google Drive as a listed option, we need to use a **Google Service Account** approach:
+## La Solución: Nuevo Flujo "Pattern-First"
 
-1. User creates a Google Cloud Service Account with Drive API read access
-2. User shares the Drive folder with the service account email
-3. Service account JSON key is stored as a Supabase secret (`GOOGLE_SERVICE_ACCOUNT_KEY`)
-
-This gives the system read access to any folder shared with the service account — no OAuth flow needed.
-
-## Changes
-
-### 1. New DB table: `pattern_detector_datasets`
-Stores files discovered from Drive folders per run.
-
-```sql
-CREATE TABLE pattern_detector_datasets (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  run_id UUID NOT NULL,
-  user_id UUID REFERENCES auth.users(id) NOT NULL,
-  source_url TEXT NOT NULL,           -- Drive folder URL
-  file_name TEXT NOT NULL,
-  file_mime_type TEXT,
-  file_size_bytes BIGINT,
-  drive_file_id TEXT NOT NULL,
-  extracted_text TEXT,
-  relevance_score NUMERIC(3,2),       -- 0.00 to 1.00
-  relevance_reason TEXT,
-  classification TEXT,                 -- e.g. "financial_report", "lease_contract", "traffic_study"
-  status TEXT DEFAULT 'pending',       -- pending | processing | relevant | irrelevant | error
-  error_message TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
-ALTER TABLE pattern_detector_datasets ENABLE ROW LEVEL SECURITY;
--- RLS: users see only their own rows
+```text
+Phase 1: Comprensión del sector (se mantiene igual)
+Phase 1b: NUEVO — Diseño de Patrones por Capa
+   → Define QUÉ patrones buscar en cada capa (1-5)
+   → Para cada patrón: qué datos necesita, qué fuente los tiene
+   → Output: mapa patrón→fuente requerida
+Phase 2: Búsqueda de Fuentes DIRIGIDA
+   → Recibe el mapa de Phase 1b como input
+   → Busca fuentes ESPECÍFICAS para cada patrón definido
+   → Genera 15-25 fuentes (no 5-8) porque sabe exactamente qué necesita
+Phase 3-7: Se mantienen igual pero con datos mucho más ricos
 ```
 
-### 2. New Edge Function: `drive-folder-ingest`
-Actions:
-- **`list_folder`**: Takes a Drive folder URL, extracts folder ID, lists all files recursively via Google Drive API (using service account), returns file manifest with names/types/sizes
-- **`classify_files`**: For each file, downloads content, extracts text (PDF via pdf-parse, XLSX via sheet parsing, CSV/JSON directly), sends a sample to LLM to classify relevance (0-1 score + category), inserts into `pattern_detector_datasets`
-- **`get_status`**: Returns current ingestion progress for a run
+## Cambios Concretos
 
-The function processes files in batches of 5 to stay within Edge Function time limits. For large folders (>20 files), it self-invokes to continue processing remaining files.
+### 1. Nueva Phase 1b: `executePhase1b` — Pattern Design Map
 
-### 3. Updated UI: `PatternDetector.tsx` — Datasets tab
-Replace the placeholder with:
-- **Input field** for Drive folder URL (validates Google Drive folder URL format)
-- **"Analizar carpeta" button** that triggers the ingestion
-- **Progress indicator** showing files found / processed / relevant / irrelevant
-- **File table** showing each discovered file with: name, type, size, relevance score, classification, status badge
-- Files marked as "relevant" are highlighted; "irrelevant" are greyed out
-- Option to manually override classification (mark as relevant/irrelevant)
+Se inserta entre Phase 1 y Phase 2. Recibe el output de Phase 1 (sector analysis, key variables, causal hypotheses) y genera:
 
-### 4. Connect datasets to Pattern Detector pipeline
-In `pattern-detector-pipeline/index.ts`, modify Phase 5 (signals) to check if `pattern_detector_datasets` has relevant files for the current run. If so, inject extracted text summaries into the LLM prompt so signals are grounded in real project data.
+```json
+{
+  "pattern_map": [
+    {
+      "layer": 3,
+      "layer_name": "Señales débiles",
+      "patterns": [
+        {
+          "pattern_name": "Rotación Locales Comerciales",
+          "what_to_detect": "Tasa de cierre/apertura de locales en radio 5km",
+          "why_matters": "Alta rotación = zona inestable o en transición",
+          "data_needed": ["listados inmobiliarios comerciales", "licencias actividad económica"],
+          "ideal_sources": ["Idealista API", "Datos abiertos ayuntamiento"],
+          "minimum_frequency": "weekly",
+          "minimum_history": "24 meses",
+          "detection_method": "trend_analysis",
+          "decision_enabled": "Evitar zonas con rotación >15% anual"
+        }
+      ]
+    }
+  ],
+  "total_unique_sources_needed": 18,
+  "coverage_by_layer": { "1": 4, "2": 5, "3": 6, "4": 5, "5": 4 }
+}
+```
 
-## Files Modified/Created
-1. **Migration** — new `pattern_detector_datasets` table + RLS
-2. **`supabase/functions/drive-folder-ingest/index.ts`** — new Edge Function
-3. **`src/components/projects/PatternDetector.tsx`** — replace Datasets tab placeholder
-4. **`supabase/functions/pattern-detector-pipeline/index.ts`** — inject dataset context into Phase 5
+El prompt exige un mínimo de 3 patrones por capa (15-25 total) y que cada patrón declare explícitamente sus fuentes necesarias.
 
-## Secret Required
-- `GOOGLE_SERVICE_ACCOUNT_KEY` — JSON key for a Google Cloud Service Account with Drive API access. User must share target folders with the service account email.
+### 2. Modificar Phase 2: Source Discovery DIRIGIDA
 
-## What is NOT touched
-- Existing phases 1-4b, 6-7 of the pattern detector pipeline
-- Other tabs (Sources, Quality Gate, Signals, Credibility, Backtesting)
-- No changes to the serve handler structure
+Actualmente Phase 2 recibe solo `key_variables` de Phase 1. Se cambia para que reciba el `pattern_map` de Phase 1b como input principal. El prompt se reformula:
+
+- "Para cada patrón definido, busca la mejor fuente de datos disponible"
+- El catálogo de `SECTOR_UNCONVENTIONAL_SOURCES` se inyecta como referencia
+- Se exige que cada fuente se vincule a al menos un patrón del mapa
+- Mínimo 15 fuentes (vs las 5-8 actuales)
+
+### 3. Actualizar Phase 5: Referencias cruzadas con el mapa
+
+Phase 5 recibe el `pattern_map` de Phase 1b para verificar que genera señales para TODOS los patrones planificados, no solo los que el LLM decide inventar. Si un patrón del mapa no tiene señal, debe explicar por qué (falta de fuente vs irrelevancia).
+
+### 4. Actualizar Quality Gate (Phase 3)
+
+El Quality Gate evalúa cobertura contra el `pattern_map`: no solo "cuántas fuentes tengo" sino "cuántos patrones planificados tienen fuentes disponibles". Cambia la métrica de cobertura.
+
+### 5. Integrar en `run_all` y `pipeline_run`
+
+Añadir la llamada a Phase 1b en ambos flujos de ejecución, entre Phase 1 y Phase 2.
+
+## Archivos Modificados
+1. `supabase/functions/pattern-detector-pipeline/index.ts` — nueva Phase 1b + modificar Phase 2, 3, 5
+
+## Lo que NO se toca
+- Phase 4, 4b, 6, 7 (no cambian)
+- Public Query Handler, API keys, feedback
+- Serve handler structure
+- UI (no necesita cambios, los datos fluyen igual)
+- No hay migración de BD
 

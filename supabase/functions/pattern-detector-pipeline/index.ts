@@ -2077,10 +2077,20 @@ IMPORTANTE:
           await executePhase3(run_id, run.user_id);
           await executePhase4(run_id);
           await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
+          await executePhase4b(run_id, run.sector);
           await executeCredibilityEngine(run_id, run.user_id);
           await executePhase6(run_id, run.user_id, run.sector);
           await executeEconomicBacktesting(run_id, run.user_id, run.sector);
           await executePhase7(run_id, run.sector, run.business_objective || "");
+          // Fire-and-forget learning-observer
+          try {
+            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            fetch(`${supabaseUrl}/functions/v1/learning-observer`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+              body: JSON.stringify({ action: "evaluate_feedback", runId: run_id, projectId: null }),
+            }).catch(e => console.warn("[run_all] learning-observer fire-and-forget failed:", e));
+          } catch (_) { /* non-blocking */ }
         } catch (err) {
           console.error("run_all error:", err);
           await updateRun(run_id, { status: "failed", error_log: `Pipeline failed: ${err}` });

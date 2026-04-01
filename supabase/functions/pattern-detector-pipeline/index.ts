@@ -3086,6 +3086,16 @@ Responde con:
           hypothesesResult = { model_verdict: "NOT_RELIABLE_YET", hypotheses: [], verdict_explanation: String(hypoErr) };
         }
 
+        // Fire-and-forget learning-observer
+        try {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          fetch(`${supabaseUrl}/functions/v1/learning-observer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+            body: JSON.stringify({ action: "evaluate_feedback", runId: "pipeline_run", projectId: body.project_id || null, signals: layers.flatMap((l: any) => (l.signals || []).map((s: any) => s.signal_name)).slice(0, 20), verdict: hypothesesResult.model_verdict }),
+          }).catch(e => console.warn("[pipeline_run] learning-observer fire-and-forget failed:", e));
+        } catch (_) { /* non-blocking */ }
+
         // ════════════════════════════════════════════════════════════
         // BUILD STRUCTURED OUTPUT
         // ════════════════════════════════════════════════════════════

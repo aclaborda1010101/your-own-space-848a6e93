@@ -3922,6 +3922,8 @@ Responde con:
 
         // ── Final output ──
         const detectorOutput = {
+          pattern_design_map: phase1b?.pattern_map || [],
+          pattern_coverage: phase2?.pattern_coverage || null,
           signals_by_layer: signalsByLayer,
           credibility_engine: credibilityEngine,
           backtesting: {

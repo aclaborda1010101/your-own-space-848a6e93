@@ -1588,6 +1588,7 @@ Señales validadas: ${JSON.stringify((signals || []).slice(0, 15).map(s => ({
 })))}
 Backtest: uplift vs baseline ${backtest?.uplift_vs_baseline_pct || "N/A"}%, win rate ${backtest?.win_rate_pct || "N/A"}%
 Economic backtesting: ${JSON.stringify(phaseResults.economic_backtesting || {})}
+${benchmarkContext}
 
 Responde con:
 {

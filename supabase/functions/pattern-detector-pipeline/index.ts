@@ -2893,7 +2893,10 @@ Responde con JSON:
           : 0;
 
         const reliabilityBonus = avgReliability >= 7 ? 10 : 0;
-        const coveragePct = Math.min(100, allSources.length * 18 + reliabilityBonus);
+        const totalPatternsPlanned = patternMap.reduce((s: number, l: any) => s + (l.patterns?.length || 0), 0);
+        const coveragePct = totalPatternsPlanned > 0
+          ? Math.min(100, Math.round((allSources.length / totalPatternsPlanned) * 100))
+          : Math.min(100, allSources.length * 18 + reliabilityBonus);
 
         let qgVerdict: "PASS" | "PASS_CONDITIONAL" = "PASS";
         let confidenceCap = 1.0;

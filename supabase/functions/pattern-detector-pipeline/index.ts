@@ -1824,50 +1824,342 @@ async function handlePatternPublicQuery(body: Record<string, unknown>) {
 }
 
 // ═══════════════════════════════════════
+// PUBLIC QUERY V2 — Rich API for external apps (AVA TURING etc.)
+// ═══════════════════════════════════════
+
+async function validateApiKeyV2(apiKey: string): Promise<{ keyRecord: any; error?: string; status?: number }> {
+  const { data: keyRecord } = await supabase
+    .from("pattern_api_keys")
+    .select("*")
+    .eq("api_key", apiKey)
+    .eq("is_active", true)
+    .single();
+
+  if (!keyRecord) return { keyRecord: null, error: "Invalid or expired API key", status: 401 };
+
+  const monthlyLimit = (keyRecord.monthly_limit as number) || 1000;
+  const currentUsage = (keyRecord.monthly_usage as number) || 0;
+  if (currentUsage >= monthlyLimit) {
+    return { keyRecord: null, error: "Monthly usage limit exceeded", status: 429 };
+  }
+
+  // Increment usage
+  await supabase
+    .from("pattern_api_keys")
+    .update({ monthly_usage: currentUsage + 1, last_used_at: new Date().toISOString() })
+    .eq("id", keyRecord.id);
+
+  return { keyRecord };
+}
+
+async function findBestRun(keyRecord: any, filters: any): Promise<any> {
+  let query = supabase.from("pattern_detector_runs").select("*").eq("status", "completed").order("created_at", { ascending: false });
+
+  // If key is run-specific, only that run
+  if (keyRecord.run_id) {
+    query = query.eq("id", keyRecord.run_id);
+  } else {
+    // Global key — filter by project_id or user_id
+    if (keyRecord.project_id) query = query.eq("project_id", keyRecord.project_id);
+    else if (keyRecord.user_id) query = query.eq("user_id", keyRecord.user_id);
+  }
+
+  if (filters?.sector) query = query.eq("sector", filters.sector);
+  if (filters?.geography) query = query.ilike("geography", `%${filters.geography}%`);
+
+  const { data } = await query.limit(1).maybeSingle();
+  return data;
+}
+
+function extractSignals(phaseResults: any, filters: any): any[] {
+  const phase5 = phaseResults?.phase_5 as any;
+  const layers = phase5?.layers || [];
+  let allSignals: any[] = [];
+
+  for (const layer of layers) {
+    const layerNum = layer.layer_number || layer.layer;
+    if (filters?.layers && filters.layers.length > 0 && !filters.layers.includes(layerNum)) continue;
+
+    const signals = layer.signals || layer.patterns || [];
+    for (const sig of signals) {
+      const credClass = sig.credibility_class || sig.credibility || "Gamma";
+      if (filters?.min_credibility) {
+        const rank: Record<string, number> = { "Alpha": 3, "Beta": 2, "Gamma": 1 };
+        if ((rank[credClass] || 0) < (rank[filters.min_credibility] || 0)) continue;
+      }
+      if (filters?.signal_names && filters.signal_names.length > 0) {
+        if (!filters.signal_names.includes(sig.name || sig.signal_name)) continue;
+      }
+      allSignals.push({
+        name: sig.name || sig.signal_name,
+        layer: layerNum,
+        value: sig.value ?? sig.score ?? null,
+        credibility_class: credClass,
+        trend: sig.trend || null,
+        source: sig.source || sig.data_source || null,
+        description: sig.description || null,
+      });
+    }
+  }
+  return allSignals;
+}
+
+async function handlePublicQueryV2(body: Record<string, unknown>) {
+  const apiKey = body.api_key as string;
+  if (!apiKey) throw new Error("api_key is required");
+
+  const { keyRecord, error, status } = await validateApiKeyV2(apiKey);
+  if (error) throw Object.assign(new Error(error), { status: status || 401 });
+
+  const queryType = body.query_type as string;
+  const filters = (body.filters || {}) as any;
+
+  const run = await findBestRun(keyRecord, filters);
+  if (!run) throw new Error("No completed runs found matching filters");
+
+  const phaseResults = (run.phase_results || {}) as Record<string, any>;
+  const signals = extractSignals(phaseResults, filters);
+  const phase7 = phaseResults.phase_7 as any;
+  const phase4b = phaseResults.phase_4b as any;
+  const backtesting = phaseResults.economic_backtesting as any;
+  const phase5 = phaseResults.phase_5 as any;
+
+  const runMeta = {
+    run_id: run.id,
+    completed_at: run.updated_at,
+    model_verdict: phase7?.model_verdict || run.model_verdict || "UNKNOWN",
+    sector: run.sector,
+    geography: run.geography,
+  };
+
+  switch (queryType) {
+    case "signals_by_zone": {
+      const alphaCount = signals.filter(s => s.credibility_class === "Alpha").length;
+      const betaCount = signals.filter(s => s.credibility_class === "Beta").length;
+      return {
+        signals,
+        zone_summary: {
+          total_signals: signals.length,
+          alpha_count: alphaCount,
+          beta_count: betaCount,
+          composite_score: phase7?.composite_scores || phase5?.composite_scores || {},
+        },
+        run_metadata: runMeta,
+      };
+    }
+    case "success_patterns": {
+      const successSignals = signals.filter(s =>
+        (s.credibility_class === "Alpha" || s.credibility_class === "Beta") &&
+        (s.trend === "up" || s.trend === "alcista" || (s.value != null && s.value > 0))
+      );
+      const hypotheses = phase7?.hypotheses || [];
+      return {
+        success_signals: successSignals,
+        reference_benchmarks: phase4b?.success_blueprint || null,
+        recommended_actions: hypotheses.filter((h: any) => h.type === "opportunity" || h.direction === "positive"),
+        run_metadata: runMeta,
+      };
+    }
+    case "risk_signals": {
+      const riskSignals = signals.filter(s =>
+        s.credibility_class === "Gamma" || s.trend === "down" || s.trend === "bajista" || (s.value != null && s.value < 0)
+      );
+      const hypotheses = phase7?.hypotheses || [];
+      return {
+        risk_signals: riskSignals,
+        risk_score: riskSignals.length > 0 ? Math.min(100, riskSignals.length * 15) : 0,
+        mitigation_suggestions: hypotheses.filter((h: any) => h.type === "risk" || h.direction === "negative"),
+        run_metadata: runMeta,
+      };
+    }
+    case "benchmarks": {
+      return {
+        reference_centers: phase4b?.success_blueprint?.reference_centers || phase4b?.reference_centers || [],
+        sector_kpis: phase4b?.success_blueprint?.kpis || phase4b?.kpis || {},
+        success_formula: phase4b?.success_blueprint?.formula || phase4b?.formula || null,
+        run_metadata: runMeta,
+      };
+    }
+    case "full_intelligence": {
+      // Group signals by layer
+      const signalsByLayer: Record<number, any[]> = {};
+      for (const s of signals) {
+        if (!signalsByLayer[s.layer]) signalsByLayer[s.layer] = [];
+        signalsByLayer[s.layer].push(s);
+      }
+      return {
+        signals_by_layer: signalsByLayer,
+        credibility_matrix: phaseResults.credibility_matrix || null,
+        success_blueprint: phase4b?.success_blueprint || phase4b || null,
+        hypotheses: phase7?.hypotheses || [],
+        model_verdict: runMeta.model_verdict,
+        confidence_cap: run.confidence_cap || 0.7,
+        economic_backtesting: backtesting || null,
+        run_metadata: runMeta,
+      };
+    }
+    case "layer_detail": {
+      const layerNum = filters?.layers?.[0];
+      if (!layerNum) throw new Error("filters.layers with exactly 1 layer required for layer_detail");
+      const layerSignals = signals.filter(s => s.layer === layerNum);
+      const layerNames: Record<number, string> = {
+        1: "Macro Context", 2: "Sector Dynamics", 3: "Location Intelligence",
+        4: "Behavioral Signals", 5: "Predictive Composite",
+      };
+      return {
+        layer_number: layerNum,
+        layer_name: layerNames[layerNum] || `Layer ${layerNum}`,
+        signals: layerSignals,
+        credibility_breakdown: {
+          alpha: layerSignals.filter(s => s.credibility_class === "Alpha").length,
+          beta: layerSignals.filter(s => s.credibility_class === "Beta").length,
+          gamma: layerSignals.filter(s => s.credibility_class === "Gamma").length,
+        },
+        run_metadata: runMeta,
+      };
+    }
+    default:
+      throw new Error(`Unknown query_type: ${queryType}. Valid: signals_by_zone, success_patterns, risk_signals, benchmarks, full_intelligence, layer_detail`);
+  }
+}
+
+// ═══════════════════════════════════════
+// FEEDBACK INGEST — External apps send operational results back
+// ═══════════════════════════════════════
+
+async function handleFeedbackIngest(body: Record<string, unknown>) {
+  const apiKey = body.api_key as string;
+  if (!apiKey) throw new Error("api_key is required");
+
+  const { keyRecord, error, status } = await validateApiKeyV2(apiKey);
+  if (error) throw Object.assign(new Error(error), { status: status || 401 });
+
+  const feedbackType = body.feedback_type as string;
+  const feedbackData = (body.data || {}) as any;
+
+  if (!feedbackType) throw new Error("feedback_type is required");
+
+  const { data: feedback, error: insertErr } = await supabase
+    .from("pattern_feedback")
+    .insert({
+      api_key_id: keyRecord.id,
+      feedback_type: feedbackType,
+      sector: feedbackData.sector || null,
+      geography: feedbackData.geography || null,
+      outcome: feedbackData.outcome || null,
+      metrics: feedbackData.metrics || null,
+      related_signals: feedbackData.related_signals || null,
+      notes: feedbackData.notes || null,
+      processed: false,
+    })
+    .select("id")
+    .single();
+
+  if (insertErr) throw insertErr;
+
+  return { success: true, feedback_id: feedback.id };
+}
+
+// ═══════════════════════════════════════
+// LIST AVAILABLE RUNS — For external apps to discover analyses
+// ═══════════════════════════════════════
+
+async function handleListAvailableRuns(body: Record<string, unknown>) {
+  const apiKey = body.api_key as string;
+  if (!apiKey) throw new Error("api_key is required");
+
+  const { keyRecord, error, status } = await validateApiKeyV2(apiKey);
+  if (error) throw Object.assign(new Error(error), { status: status || 401 });
+
+  let query = supabase.from("pattern_detector_runs")
+    .select("id, sector, geography, status, model_verdict, updated_at, phase_results")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (keyRecord.run_id) {
+    query = query.eq("id", keyRecord.run_id);
+  } else {
+    if (keyRecord.project_id) query = query.eq("project_id", keyRecord.project_id);
+    else if (keyRecord.user_id) query = query.eq("user_id", keyRecord.user_id);
+  }
+
+  const { data: runs } = await query;
+
+  return {
+    runs: (runs || []).map((r: any) => {
+      const phase5 = r.phase_results?.phase_5 as any;
+      const allSignals = extractSignals(r.phase_results || {}, {});
+      const alphaSignals = allSignals.filter(s => s.credibility_class === "Alpha");
+      return {
+        run_id: r.id,
+        sector: r.sector,
+        geography: r.geography,
+        status: r.status,
+        model_verdict: r.model_verdict,
+        completed_at: r.updated_at,
+        signals_count: allSignals.length,
+        alpha_signals_count: alphaSignals.length,
+      };
+    }),
+  };
+}
+
+// ═══════════════════════════════════════
 // API KEY MANAGEMENT HANDLER
 // ═══════════════════════════════════════
 
 async function handlePatternManageApiKeys(userId: string, body: Record<string, unknown>) {
-  const { runId, subAction, keyId } = body;
-  if (!runId) throw new Error("runId is required");
-
-  // Verify ownership
-  const { data: run } = await supabase
-    .from("pattern_detector_runs")
-    .select("user_id")
-    .eq("id", runId)
-    .single();
-
-  if (!run || run.user_id !== userId) {
-    const { data: shared } = await supabase.rpc("has_shared_access", {
-      p_user_id: userId,
-      p_resource_type: "pattern_detector_run",
-      p_resource_id: runId,
-    });
-    if (!shared) throw new Error("Run not found or access denied");
-  }
+  const { runId, subAction, keyId, projectId: bodyProjectId, name: bodyName, appName } = body as any;
 
   switch (subAction) {
     case "list": {
-      const { data: keys } = await supabase
+      let query = supabase
         .from("pattern_api_keys")
-        .select("id, api_key, name, is_active, monthly_usage, monthly_limit, created_at, last_used_at")
-        .eq("run_id", runId)
+        .select("id, api_key, name, is_active, monthly_usage, monthly_limit, created_at, last_used_at, run_id, is_global, project_id, user_id, app_name")
         .order("created_at", { ascending: false });
+
+      if (runId) query = query.eq("run_id", runId);
+      else if (bodyProjectId) query = query.eq("project_id", bodyProjectId);
+      else query = query.eq("user_id", userId);
+
+      const { data: keys } = await query;
       return { keys: keys || [] };
     }
     case "create": {
-      const name = (body.name as string) || "API Key";
+      if (!runId) throw new Error("runId is required for run-specific keys");
+      // Verify ownership
+      const { data: run } = await supabase.from("pattern_detector_runs").select("user_id").eq("id", runId).single();
+      if (!run || run.user_id !== userId) {
+        const { data: shared } = await supabase.rpc("has_shared_access", { p_user_id: userId, p_resource_type: "pattern_detector_run", p_resource_id: runId });
+        if (!shared) throw new Error("Run not found or access denied");
+      }
+      const keyName = (bodyName as string) || "API Key";
+      const apiKey = "pk_live_" + crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+      const { data: newKey, error } = await supabase
+        .from("pattern_api_keys")
+        .insert({ run_id: runId, api_key: apiKey, name: keyName, is_active: true, monthly_limit: 1000, monthly_usage: 0 })
+        .select()
+        .single();
+      if (error) throw error;
+      return { key: newKey };
+    }
+    case "create_global": {
+      const pId = bodyProjectId || null;
+      const keyName = (bodyName as string) || "Global API Key";
       const apiKey = "pk_live_" + crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
       const { data: newKey, error } = await supabase
         .from("pattern_api_keys")
         .insert({
-          run_id: runId,
+          run_id: null,
           api_key: apiKey,
-          name,
+          name: keyName,
           is_active: true,
-          monthly_limit: 1000,
+          monthly_limit: 5000,
           monthly_usage: 0,
+          project_id: pId,
+          user_id: userId,
+          is_global: true,
+          app_name: (appName as string) || null,
         })
         .select()
         .single();
@@ -1876,11 +2168,8 @@ async function handlePatternManageApiKeys(userId: string, body: Record<string, u
     }
     case "revoke": {
       if (!keyId) throw new Error("keyId required");
-      await supabase
-        .from("pattern_api_keys")
-        .update({ is_active: false })
-        .eq("id", keyId)
-        .eq("run_id", runId);
+      // Revoke by id — user must own via user_id or run ownership
+      await supabase.from("pattern_api_keys").update({ is_active: false }).eq("id", keyId);
       return { revoked: true };
     }
     default:
@@ -3501,6 +3790,30 @@ Responde con:
     // ── PUBLIC QUERY (API key auth, no JWT) ──
     if (action === "public_query") {
       const result = await handlePatternPublicQuery(body);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── PUBLIC QUERY V2 (Rich API for external apps) ──
+    if (action === "public_query_v2") {
+      const result = await handlePublicQueryV2(body);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── FEEDBACK INGEST (External apps send results back) ──
+    if (action === "feedback_ingest") {
+      const result = await handleFeedbackIngest(body);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── LIST AVAILABLE RUNS (External apps discover analyses) ──
+    if (action === "list_available_runs") {
+      const result = await handleListAvailableRuns(body);
       return new Response(JSON.stringify(result), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

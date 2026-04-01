@@ -10,7 +10,7 @@ import {
   Radar, Database, Shield, Layers, BarChart3, FileSpreadsheet,
   Plus, Loader2, ChevronDown, ExternalLink, AlertTriangle,
   CheckCircle2, XCircle, TrendingUp, TrendingDown, Minus, Info,
-  Award, Eye, Euro, Target, Lightbulb, RefreshCw,
+  Award, Eye, Euro, Target, Lightbulb, RefreshCw, Key,
 } from "lucide-react";
 import { usePatternDetector, Signal, CredibilityData, EconomicBacktest } from "@/hooks/usePatternDetector";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { PatternDetectorSetup } from "./PatternDetectorSetup";
 import { PatternIntentReview, TranslatedIntent } from "./PatternIntentReview";
 import { DatasetsDriveTab } from "./DatasetsDriveTab";
+import { PatternApiTab } from "./PatternApiTab";
 
 const phaseLabels: Record<number, string> = {
   0: "Pendiente", 1: "Dominio", 2: "Fuentes", 3: "Quality Gate",
@@ -193,6 +194,7 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
             <TabsTrigger value="credibility" className="gap-1 text-xs"><Award className="w-3 h-3" /> Credibilidad</TabsTrigger>
             <TabsTrigger value="datasets" className="gap-1 text-xs"><FileSpreadsheet className="w-3 h-3" /> Datasets</TabsTrigger>
             <TabsTrigger value="backtest" className="gap-1 text-xs"><BarChart3 className="w-3 h-3" /> Backtesting</TabsTrigger>
+            <TabsTrigger value="api" className="gap-1 text-xs"><Key className="w-3 h-3" /> API & Integraciones</TabsTrigger>
           </TabsList>
 
           {/* SOURCES */}
@@ -825,6 +827,11 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
                 {isRunning ? "Estimando backtesting..." : "Sin resultados de backtesting"}
               </p>
             )}
+          </TabsContent>
+
+          {/* API & INTEGRACIONES */}
+          <TabsContent value="api" className="mt-4">
+            <PatternApiTab projectId={projectId} currentRunId={currentRun?.id} />
           </TabsContent>
         </Tabs>
       )}

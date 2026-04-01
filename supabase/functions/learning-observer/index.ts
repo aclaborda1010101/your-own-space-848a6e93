@@ -749,6 +749,78 @@ async function calculateLayerValue(projectId: string) {
   return { evaluations_used: feedbackEvents.length, layers: results };
 }
 
+// ─── Action: process_pending_feedback ────────────────────────────────────
+async function processPendingFeedback(projectId: string) {
+  const supabase = getSupabase();
+
+  // Get unprocessed feedback — join via api_key to filter by project
+  const { data: feedbacks } = await supabase
+    .from("pattern_feedback")
+    .select("*, pattern_api_keys!inner(project_id, user_id)")
+    .eq("processed", false)
+    .order("created_at", { ascending: true })
+    .limit(50);
+
+  if (!feedbacks || feedbacks.length === 0) {
+    return { message: "No pending feedback", processed: 0 };
+  }
+
+  const results = [];
+
+  for (const fb of feedbacks) {
+    const relatedSignals = fb.related_signals || [];
+    const outcome = fb.outcome;
+    const wasCorrect = outcome === "success";
+
+    for (const signalName of relatedSignals) {
+      // Get current credibility from signal_credibility_matrix
+      const { data: credEntry } = await supabase
+        .from("signal_credibility_matrix")
+        .select("credibility_class")
+        .eq("signal_name", signalName)
+        .maybeSingle();
+
+      const oldCred = credEntry?.credibility_class || "Gamma";
+      let newCred = oldCred;
+
+      // Simple credibility adjustment
+      const credRank: Record<string, number> = { "Alpha": 3, "Beta": 2, "Gamma": 1 };
+      const credNames = ["Gamma", "Gamma", "Beta", "Alpha"];
+      let rank = credRank[oldCred] || 1;
+
+      if (wasCorrect) {
+        rank = Math.min(3, rank + 1);
+      } else {
+        rank = Math.max(1, rank - 1);
+      }
+      newCred = credNames[rank];
+
+      if (newCred !== oldCred && credEntry) {
+        await supabase
+          .from("signal_credibility_matrix")
+          .update({ credibility_class: newCred })
+          .eq("signal_name", signalName);
+      }
+
+      // Log the adjustment
+      await supabase.from("pattern_learning_log").insert({
+        feedback_id: fb.id,
+        signal_name: signalName,
+        adjustment_type: wasCorrect ? "confirmed" : "contradicted",
+        old_credibility: oldCred,
+        new_credibility: newCred,
+      });
+
+      results.push({ signal: signalName, old: oldCred, new: newCred, outcome });
+    }
+
+    // Mark feedback as processed
+    await supabase.from("pattern_feedback").update({ processed: true }).eq("id", fb.id);
+  }
+
+  return { processed: feedbacks.length, adjustments: results };
+}
+
 // ─── Main handler ────────────────────────────────────────────────────────
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -832,6 +904,10 @@ serve(async (req) => {
 
       case "calculate_layer_value":
         result = await calculateLayerValue(project_id);
+        break;
+
+      case "process_pending":
+        result = await processPendingFeedback(project_id);
         break;
 
       default:

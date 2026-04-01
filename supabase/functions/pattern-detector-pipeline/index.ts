@@ -397,19 +397,30 @@ Responde con JSON:
     }
   ];
 
-  try {
-    const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
-    const parsed = safeParseJson(result) as any;
+  const MAX_RETRIES = 2;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const result = await chat(messages, { model: "gemini-flash", responseFormat: "json", maxTokens: 8192 });
+      console.log(`[Phase 1b] Raw response length: ${result.length}, attempt: ${attempt}`);
+      if (result.length < 100) {
+        console.warn(`[Phase 1b] Suspiciously short response: ${result.substring(0, 200)}`);
+        if (attempt < MAX_RETRIES) continue;
+      }
+      const parsed = safeParseJson(result) as any;
 
-    phaseResults.phase_1b = parsed;
-    await updateRun(runId, { phase_results: phaseResults, status: "phase_1b_complete" });
+      phaseResults.phase_1b = parsed;
+      await updateRun(runId, { phase_results: phaseResults, status: "phase_1b_complete" });
 
-    console.log(`[Phase 1b] Pattern map done: ${parsed.total_patterns || "?"} patterns, ${parsed.total_unique_sources_needed || "?"} sources needed`);
-    return parsed;
-  } catch (err) {
-    console.error("Phase 1b error:", err);
-    await updateRun(runId, { status: "failed", error_log: `Phase 1b failed: ${err}` });
-    throw err;
+      console.log(`[Phase 1b] Pattern map done: ${parsed.total_patterns || "?"} patterns, ${parsed.total_unique_sources_needed || "?"} sources needed`);
+      return parsed;
+    } catch (err) {
+      console.error(`Phase 1b error (attempt ${attempt}/${MAX_RETRIES}):`, err);
+      if (attempt >= MAX_RETRIES) {
+        await updateRun(runId, { status: "failed", error_log: `Phase 1b failed: ${err}` });
+        throw err;
+      }
+      await new Promise(r => setTimeout(r, 2000));
+    }
   }
 }
 

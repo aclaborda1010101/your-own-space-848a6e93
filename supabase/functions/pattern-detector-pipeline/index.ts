@@ -1069,7 +1069,7 @@ FORMATO de patron_id por capa: EVD-001, PRC-001, DLR-001, EXO-001, SIS-001.`
   ];
 
   try {
-    const phase5MaxTokens = sectorKey === "centros_comerciales" ? 12288 : 8192;
+    const phase5MaxTokens = sectorKey === "centros_comerciales" ? 32768 : 16384;
     const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: phase5MaxTokens });
     const parsed = safeParseJson(result);
 

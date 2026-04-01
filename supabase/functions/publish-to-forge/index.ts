@@ -162,7 +162,7 @@ Deno.serve(async (req) => {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-api-key": forgeApiKey },
           body: JSON.stringify({
-            action: "ingest_document",
+            action: "ingest_patterns",
             project_id: forgeProjectId,
             content: doc.content,
             metadata: doc.metadata,

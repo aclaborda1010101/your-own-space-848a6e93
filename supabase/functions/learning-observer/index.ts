@@ -906,6 +906,10 @@ serve(async (req) => {
         result = await calculateLayerValue(project_id);
         break;
 
+      case "process_pending":
+        result = await processPendingFeedback(project_id);
+        break;
+
       default:
         return new Response(
           JSON.stringify({ error: `Unknown action: ${action}` }),

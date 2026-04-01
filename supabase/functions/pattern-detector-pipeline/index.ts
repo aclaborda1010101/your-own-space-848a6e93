@@ -1563,6 +1563,12 @@ async function executePhase7(runId: string, sector: string, objective: string) {
 
   const backtest = backtests?.[0];
 
+  // Include benchmark context if available (Phase 4b)
+  let benchmarkContext = "";
+  if (phaseResults.phase_4b?.success_blueprint) {
+    benchmarkContext = `\nBenchmark de centros exitosos (Phase 4b): ${JSON.stringify(phaseResults.phase_4b.success_blueprint).substring(0, 4000)}`;
+  }
+
   const messages: ChatMessage[] = [
     {
       role: "system",

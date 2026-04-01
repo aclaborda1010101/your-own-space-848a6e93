@@ -35,14 +35,14 @@ export interface ChatOptions {
 
 // Model aliases -> real model names
 const GEMINI_MODEL_ALIASES: Record<string, string> = {
-  "gemini-flash": "gemini-2.5-flash-preview-05-20",
-  "gemini-flash-lite": "gemini-2.0-flash-lite",
-  "gemini-pro": "gemini-2.5-pro-preview-05-06",
-  "gemini-pro-3": "gemini-2.5-pro-preview-05-06",
+  "gemini-flash": "gemini-2.5-flash",
+  "gemini-flash-lite": "gemini-2.5-flash-lite",
+  "gemini-pro": "gemini-2.5-pro",
+  "gemini-pro-3": "gemini-3.1-pro-preview",
   "gemini-pro-legacy": "gemini-1.5-pro",
 };
 
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-preview-05-20";
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
 
 /**

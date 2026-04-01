@@ -2755,7 +2755,7 @@ Responde con:
   "geography": "geografía principal (ej: España, Madrid, Europa, etc.)",
   "objective": "objetivo principal del proyecto en 1-2 frases"
 }` }
-          ], { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 1024 });
+          ], { model: "gemini-flash", responseFormat: "json", maxTokens: 1024 });
           const extracted = safeParseJson(extractionResult) as any;
           if (!sector || sector === "general") sector = extracted.sector || "general";
           if (!geography) geography = extracted.geography || "España";
@@ -2907,7 +2907,7 @@ Responde con JSON:
 }` }
         ];
 
-        const p2Result = await chat(p2Messages, { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 8192 });
+        const p2Result = await chat(p2Messages, { model: "gemini-flash", responseFormat: "json", maxTokens: 8192 });
         const phase2 = safeParseJson(p2Result) as any;
         const allSources = phase2?.sources || [];
         console.log(`[pipeline_run] Phase 2 (Sources) done: ${allSources.length} sources`);
@@ -3604,7 +3604,7 @@ Estima:
 }` }
           ];
 
-          const btResult = await chat(btMessages, { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 8192 });
+          const btResult = await chat(btMessages, { model: "gemini-flash", responseFormat: "json", maxTokens: 8192 });
           backtesting = safeParseJson(btResult) as any;
           console.log(`[pipeline_run] Phase 6 (Backtest) done: win_rate=${backtesting.win_rate_pct}%, uplift=${backtesting.uplift_vs_baseline_pct}%`);
         } catch (btErr) {
@@ -3668,7 +3668,7 @@ Responde con:
 }` }
           ];
 
-          const econResult = await chat(econMessages, { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 8192 });
+          const econResult = await chat(econMessages, { model: "gemini-flash", responseFormat: "json", maxTokens: 8192 });
           economicBacktesting = safeParseJson(econResult) as any;
           console.log(`[pipeline_run] Economic Backtesting done: NEI=${economicBacktesting.net_economic_impact}, ROI=${economicBacktesting.roi_multiplier}x`);
         } catch (econErr) {
@@ -3728,7 +3728,7 @@ Responde con:
 }` }
           ];
 
-          const hypoResult = await chat(hypoMessages, { model: "gemini-flash-lite", responseFormat: "json", maxTokens: 8192 });
+          const hypoResult = await chat(hypoMessages, { model: "gemini-flash", responseFormat: "json", maxTokens: 8192 });
           hypothesesResult = safeParseJson(hypoResult) as any;
           console.log(`[pipeline_run] Phase 7 (Hypotheses) done: verdict=${hypothesesResult.model_verdict}, ${(hypothesesResult.hypotheses || []).length} hypotheses`);
         } catch (hypoErr) {

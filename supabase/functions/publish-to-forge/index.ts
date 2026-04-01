@@ -5,6 +5,22 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function parseForgeError(text: string) {
+  try {
+    const parsed = JSON.parse(text);
+    const availableActions = Array.isArray(parsed?.available_actions)
+      ? parsed.available_actions.filter((action: unknown): action is string => typeof action === "string")
+      : [];
+
+    return {
+      message: typeof parsed?.error === "string" ? parsed.error : text,
+      availableActions,
+    };
+  } catch {
+    return { message: text, availableActions: [] as string[] };
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -134,10 +150,13 @@ Deno.serve(async (req) => {
     // Send each document to Expert Forge
     let successCount = 0;
     const errors: string[] = [];
+    let fatalError: string | null = null;
 
     console.log(`Sending ${documents.length} documents to Expert Forge at ${forgeGatewayUrl}`);
 
     for (const doc of documents) {
+      if (fatalError) break;
+
       try {
         const resp = await fetch(forgeGatewayUrl, {
           method: "POST",
@@ -154,8 +173,15 @@ Deno.serve(async (req) => {
           successCount++;
         } else {
           const errText = await resp.text();
+          const { message, availableActions } = parseForgeError(errText);
+          const compactError = `${doc.metadata.type}: ${resp.status} - ${message}`;
+
           console.error(`Forge error for ${doc.metadata.type}: ${resp.status} - ${errText}`);
-          errors.push(`${doc.metadata.type}: ${resp.status} - ${errText.substring(0, 200)}`);
+          errors.push(compactError.substring(0, 240));
+
+          if (message.includes("Unknown action") && availableActions.length > 0) {
+            fatalError = `Expert Forge no soporta la acción ingest_document en api-gateway. Acciones disponibles: ${availableActions.join(", ")}`;
+          }
         }
       } catch (e) {
         console.error(`Forge fetch error for ${doc.metadata.type}:`, (e as Error).message);
@@ -169,6 +195,7 @@ Deno.serve(async (req) => {
       success: successCount > 0,
       count: successCount,
       total: documents.length,
+      error: fatalError || (successCount === 0 ? errors[0] : undefined),
       errors: errors.length > 0 ? errors : undefined,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

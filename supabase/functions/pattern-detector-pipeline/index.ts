@@ -904,6 +904,22 @@ FORMATO de patron_id por capa: EVD-001, PRC-001, DLR-001, EXO-001, SIS-001.`
             contradicting_evidence: "Los coworkings pueden estar en zonas céntricas que ya tienen alta oferta comercial, no generando nueva demanda sino redistribuyéndola.",
             data_source: "OpenStreetMap + Google Maps (Tier A)"
           },
+          {
+            signal_name: "Ratio Gasto Tarjeta vs Renta Disponible",
+            description: "Proporción del gasto real con tarjeta en retail vs renta media de la zona. >15% indica zona con alta propensión al consumo. Fuente: BBVA Commerce + INE.",
+            confidence: 0.40, p_value_estimate: 0.150, impact: "high", trend: "up",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "El gasto con tarjeta puede estar inflado por turismo o compras puntuales de alto valor que no reflejan consumo recurrente local.",
+            data_source: "BBVA/CaixaBank Commerce + INE (Tier B)"
+          },
+          {
+            signal_name: "Flujo Movilidad Pico Sábado",
+            description: "Volumen de desplazamientos que entran en radio 5km los sábados 10-14h normalizado por población residente. >2.5x indica polo de atracción comercial. Fuente: Telefónica Movilidad.",
+            confidence: 0.35, p_value_estimate: 0.200, impact: "high", trend: "stable",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "El flujo de sábado puede estar dominado por un evento o atracción específica (mercadillo, parque) y no reflejar atracción comercial sostenida.",
+            data_source: "Telefónica/Orange Movilidad (Tier B)"
+          },
         ],
         5: [
           {

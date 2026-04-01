@@ -165,11 +165,20 @@ async function chatWithGemini(
     throw new Error(`Gemini returned no candidates (blockReason: ${blockReason})`);
   }
   
-  let result = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  // Gemini 2.5+ may return thinking parts + text parts. Extract text only.
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  let result = "";
+  for (const part of parts) {
+    // Skip thinking parts (thought=true)
+    if (part.thought) continue;
+    if (part.text) {
+      result += part.text;
+    }
+  }
   
   if (!result) {
     const finishReason = data.candidates?.[0]?.finishReason || "unknown";
-    console.error("Gemini returned empty text. finishReason:", finishReason);
+    console.error("Gemini returned empty text. finishReason:", finishReason, "parts:", JSON.stringify(parts).substring(0, 500));
     throw new Error(`Gemini returned empty response (finishReason: ${finishReason})`);
   }
 

@@ -400,7 +400,7 @@ Responde con JSON:
   const MAX_RETRIES = 2;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const result = await chat(messages, { model: "gemini-flash", responseFormat: "json", maxTokens: 8192 });
+      const result = await chat(messages, { model: "gemini-flash", responseFormat: "json", maxTokens: 32768 });
       console.log(`[Phase 1b] Raw response length: ${result.length}, attempt: ${attempt}`);
       if (result.length < 100) {
         console.warn(`[Phase 1b] Suspiciously short response: ${result.substring(0, 200)}`);

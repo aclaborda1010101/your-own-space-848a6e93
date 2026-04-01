@@ -1461,6 +1461,85 @@ Responde con:
 }
 
 // ═══════════════════════════════════════
+// PHASE 4b: Reference Center Benchmarking (centros_comerciales only)
+// ═══════════════════════════════════════
+
+const REFERENCE_CENTERS = [
+  { name: "Xanadú", city: "Madrid", sba_m2: 154000, operators: 230, anchors: "Inditex, H&M, Primark, SnowZone", year: 2003, owner: "Unibail-Rodamco", occupancy_pct: 96, sales_m2_est: 4200 },
+  { name: "Parquesur", city: "Leganés (Madrid)", sba_m2: 152000, operators: 220, anchors: "El Corte Inglés, Inditex, Carrefour", year: 1989, owner: "Unibail-Rodamco", occupancy_pct: 95, sales_m2_est: 3800 },
+  { name: "La Vaguada", city: "Madrid", sba_m2: 85000, operators: 350, anchors: "Inditex, El Corte Inglés, Carrefour", year: 1983, owner: "CBRE GI", occupancy_pct: 98, sales_m2_est: 5200 },
+  { name: "Diagonal Mar", city: "Barcelona", sba_m2: 87000, operators: 200, anchors: "Inditex, Mango, Apple", year: 2001, owner: "Deutsche Bank", occupancy_pct: 94, sales_m2_est: 4500 },
+  { name: "Marineda City", city: "A Coruña", sba_m2: 170000, operators: 200, anchors: "IKEA, Inditex", year: 2011, owner: "Grupo Castromil/Inversa", occupancy_pct: 90, sales_m2_est: 2800 },
+  { name: "Puerto Venecia", city: "Zaragoza", sba_m2: 120000, operators: 150, anchors: "Inditex, Primark, IKEA", year: 2012, owner: "British Land/Intu", occupancy_pct: 92, sales_m2_est: 3200 },
+  { name: "Nueva Condomina", city: "Murcia", sba_m2: 120000, operators: 180, anchors: "IKEA, El Corte Inglés", year: 2006, owner: "Klépierre", occupancy_pct: 93, sales_m2_est: 3000 },
+  { name: "Bonaire", city: "Valencia", sba_m2: 148000, operators: 200, anchors: "Carrefour, Inditex", year: 2001, owner: "Klépierre", occupancy_pct: 94, sales_m2_est: 3100 },
+  { name: "La Maquinista", city: "Barcelona", sba_m2: 73000, operators: 230, anchors: "Inditex, H&M, MediaMarkt", year: 2000, owner: "Unibail-Rodamco", occupancy_pct: 97, sales_m2_est: 5500 },
+  { name: "Plenilunio", city: "Madrid", sba_m2: 70000, operators: 200, anchors: "Inditex, Cines Kinépolis", year: 2008, owner: "Klépierre", occupancy_pct: 96, sales_m2_est: 4800 },
+];
+
+async function executePhase4b(runId: string, sector: string) {
+  const sectorKey = detectSectorKey(sector);
+  if (sectorKey !== "centros_comerciales") return;
+
+  console.log(`[Phase4b] Starting Reference Center Benchmarking`);
+  const phaseResults = await getRunPhaseResults(runId);
+
+  try {
+    const messages: ChatMessage[] = [
+      { role: "system", content: `Eres un experto en retail y centros comerciales con 20 años de experiencia en el mercado español.
+Analiza patrones de éxito en centros comerciales de referencia. Responde SOLO con JSON válido, en ESPAÑOL.` },
+      { role: "user", content: `Analiza los patrones comunes de los centros comerciales más exitosos de España:
+
+CENTROS DE REFERENCIA:
+${JSON.stringify(REFERENCE_CENTERS, null, 2)}
+
+Identifica qué patrones comparten estos centros exitosos:
+1. Composición sectorial del tenant mix (% restauración, moda, ocio, servicios, gran superficie)
+2. Ratio anchor tenants vs specialty (número y tipo de locomotoras)
+3. Presencia de categorías clave (cuáles son imprescindibles para un centro exitoso)
+4. Densidad de operadores por m² (operadores/1000m² SBA)
+5. Estrategia: destination (centro regional, >100K m²) vs convenience (urbano, <80K m²)
+6. Factores de éxito comunes: accesibilidad, transporte público, parking, mix ocio/comercio
+7. Patrones de renovación y adaptación (cómo han evolucionado los centros maduros vs nuevos)
+
+Responde con:
+{
+  "success_blueprint": {
+    "optimal_tenant_mix": { "restauracion_pct": 0, "moda_pct": 0, "ocio_pct": 0, "servicios_pct": 0, "gran_superficie_pct": 0, "otros_pct": 0 },
+    "anchor_strategy": { "min_anchors": 0, "ideal_anchors": 0, "must_have_categories": ["cat1", "cat2"], "anchor_specialty_ratio": "X:Y" },
+    "density_benchmarks": { "operators_per_1000m2": 0, "min_viable": 0, "optimal": 0 },
+    "strategy_patterns": { "destination_threshold_m2": 100000, "convenience_threshold_m2": 80000, "mixed_characteristics": ["char1"] },
+    "success_factors_ranked": [
+      { "factor": "factor name", "importance": 0.0, "evidence": "evidence from reference centers" }
+    ],
+    "anti_patterns": ["pattern that predicts failure"],
+    "evolution_insights": ["how successful centers adapt over time"]
+  },
+  "center_classifications": [
+    { "name": "center name", "strategy": "destination|convenience|hybrid", "key_differentiator": "what makes it unique", "lesson": "key takeaway" }
+  ],
+  "scoring_criteria": {
+    "criteria": [
+      { "name": "criterion", "weight": 0.0, "benchmark_value": "value", "measurement": "how to measure" }
+    ]
+  }
+}` }
+    ];
+
+    const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+    const parsed = safeParseJson(result);
+
+    phaseResults.phase_4b = parsed;
+    await updateRun(runId, { phase_results: phaseResults });
+    console.log(`[Phase4b] Reference Center Benchmarking done`);
+  } catch (err) {
+    console.error("[Phase4b] Error:", err);
+    phaseResults.phase_4b = { error: String(err) };
+    await updateRun(runId, { phase_results: phaseResults });
+  }
+}
+
+// ═══════════════════════════════════════
 // PHASE 7: Actionable Hypotheses
 // ═══════════════════════════════════════
 

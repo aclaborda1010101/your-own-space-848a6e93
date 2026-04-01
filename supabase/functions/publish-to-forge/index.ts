@@ -129,6 +129,8 @@ Deno.serve(async (req) => {
     let successCount = 0;
     const errors: string[] = [];
 
+    console.log(`Sending ${documents.length} documents to Expert Forge at ${forgeGatewayUrl}`);
+
     for (const doc of documents) {
       try {
         const resp = await fetch(forgeGatewayUrl, {
@@ -146,9 +148,11 @@ Deno.serve(async (req) => {
           successCount++;
         } else {
           const errText = await resp.text();
-          errors.push(`${doc.metadata.type}: ${resp.status} - ${errText.substring(0, 100)}`);
+          console.error(`Forge error for ${doc.metadata.type}: ${resp.status} - ${errText}`);
+          errors.push(`${doc.metadata.type}: ${resp.status} - ${errText.substring(0, 200)}`);
         }
       } catch (e) {
+        console.error(`Forge fetch error for ${doc.metadata.type}:`, (e as Error).message);
         errors.push(`${doc.metadata.type}: ${(e as Error).message}`);
       }
     }

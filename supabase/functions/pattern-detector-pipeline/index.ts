@@ -51,9 +51,14 @@ function cleanJson(text: string): string {
 
 function safeParseJson(text: string): unknown {
   const cleaned = cleanJson(text);
+  
+  // Log first 300 chars for debugging when parsing fails
+  const preview = cleaned.substring(0, 300);
+  
   try {
     return JSON.parse(cleaned);
   } catch (_firstErr) {
+    console.warn(`safeParseJson: direct parse failed. Preview: ${preview}`);
     let repaired = cleaned;
 
     // Strategy 1: Extract first complete top-level JSON object (handles concatenated JSON)
@@ -85,7 +90,7 @@ function safeParseJson(text: string): unknown {
       }
     }
 
-    throw new Error(`safeParseJson: all repair strategies failed for text of length ${cleaned.length}`);
+    throw new Error(`safeParseJson: all repair strategies failed for text of length ${cleaned.length}. Preview: ${preview}`);
   }
 }
 

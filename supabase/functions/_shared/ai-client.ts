@@ -157,7 +157,21 @@ async function chatWithGemini(
   }
 
   const data = await response.json();
+  
+  // Check for blocked/empty responses
+  if (!data.candidates || data.candidates.length === 0) {
+    const blockReason = data.promptFeedback?.blockReason || "unknown";
+    console.error("Gemini returned no candidates. Block reason:", blockReason, "Full response:", JSON.stringify(data).substring(0, 500));
+    throw new Error(`Gemini returned no candidates (blockReason: ${blockReason})`);
+  }
+  
   let result = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+  
+  if (!result) {
+    const finishReason = data.candidates?.[0]?.finishReason || "unknown";
+    console.error("Gemini returned empty text. finishReason:", finishReason);
+    throw new Error(`Gemini returned empty response (finishReason: ${finishReason})`);
+  }
 
   if (options.responseFormat === "json") {
     result = cleanJsonResponse(result);

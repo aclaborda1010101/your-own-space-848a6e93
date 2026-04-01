@@ -120,8 +120,8 @@ Deno.serve(async (req) => {
         signals,
         hypotheses,
         data_sources: dataSources,
-        dashboard_summary: dashboardOutput.executive_summary || dashboardOutput.summary || null,
-        layers_summary: dashboardOutput.layers_summary || null,
+        dashboard_summary: dashboardSummary,
+        layers_summary: layersSummary,
       }],
     };
 

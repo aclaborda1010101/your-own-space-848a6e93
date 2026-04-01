@@ -3795,6 +3795,30 @@ Responde con:
       });
     }
 
+    // ── PUBLIC QUERY V2 (Rich API for external apps) ──
+    if (action === "public_query_v2") {
+      const result = await handlePublicQueryV2(body);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── FEEDBACK INGEST (External apps send results back) ──
+    if (action === "feedback_ingest") {
+      const result = await handleFeedbackIngest(body);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── LIST AVAILABLE RUNS (External apps discover analyses) ──
+    if (action === "list_available_runs") {
+      const result = await handleListAvailableRuns(body);
+      return new Response(JSON.stringify(result), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── MANAGE API KEYS ──
     if (action === "manage_api_keys") {
       const authHeader = req.headers.get("Authorization");

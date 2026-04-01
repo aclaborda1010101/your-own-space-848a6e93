@@ -153,7 +153,7 @@ async function chatWithGemini(
       throw new Error("Invalid GOOGLE_AI_API_KEY. Please check your API key.");
     }
 
-    throw new Error(`Gemini API error: ${response.status}`);
+    throw new Error(`Gemini API error: ${response.status} - ${error.substring(0, 300)}`);
   }
 
   const data = await response.json();

@@ -995,6 +995,7 @@ Baseline: ${(phase1 as any)?.baseline_definition || "N/A"}
 Sectores análogos: ${JSON.stringify((phase1 as any)?.analogous_sectors || [])}
 Fuentes disponibles: ${JSON.stringify(sources || [])}
 ${compositeMetricsBlock}
+${patternMapCrossRef}
 ${datasetContext || ""}
 
 Genera patrones en EXACTAMENTE 5 capas de inteligencia de negocio:

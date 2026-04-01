@@ -861,6 +861,7 @@ FORMATO de patron_id por capa: EVD-001, PRC-001, DLR-001, EXO-001, SIS-001.`
             uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
             contradicting_evidence: "Los ratings de Google están sesgados por volumen de reviews y pueden ser manipulados. Zonas nuevas con pocos reviews dan falsos negativos.",
             data_source: "Google Places API (Tier A)"
+          },
           {
             signal_name: "Rollout de Fibra Óptica como Atractor de Teletrabajadores",
             description: "Zonas con despliegue reciente de fibra óptica atraen teletrabajadores y nuevos residentes tech que transforman patrones de consumo local.",

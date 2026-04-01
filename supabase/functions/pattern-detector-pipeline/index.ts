@@ -733,6 +733,32 @@ Puedes añadir más señales, pero estas son OBLIGATORIAS. Si falta alguna, la r
    → Correlación densidad pet shops + veterinarias con perfil demográfico (familias jóvenes / parejas DINK = alto gasto discrecional). Fuente: OpenStreetMap.
    → contradicting_evidence ejemplo: "La densidad de pet shops puede reflejar tendencia nacional, no poder adquisitivo local."
 
+6. signal_name: "Benchmark Success Score"
+   → Score 0-100 comparando composición de operadores, ocupación y mix sectorial vs los 20 centros más exitosos de España.
+   → contradicting_evidence ejemplo: "Los centros de referencia operan en contextos únicos no replicables."
+
+7. signal_name: "Resilience Index"
+   → Fórmula: (1 - Herfindahl operadores) × Diversidad sectorial × (1 - Dependencia anchor). Mide anti-fragilidad.
+   → contradicting_evidence ejemplo: "Alta diversificación puede indicar falta de identidad comercial clara."
+
+▶ CAPA 3 — Señales adicionales obligatorias:
+5. signal_name: "Índice Rotación Locales Comerciales"
+   → Ratio locales que cambian operador/año en radio 2km. Alta rotación = zona inestable. Fuente: Idealista + Catastro.
+   → contradicting_evidence ejemplo: "Rotación puede deberse a fin de ciclo de contratos, no inestabilidad."
+
+6. signal_name: "Proxy Satisfacción Zona Google"
+   → Rating medio ponderado Google Maps radio 1km. >4.2 = zona con buena experiencia. Fuente: Google Places API.
+   → contradicting_evidence ejemplo: "Ratings sesgados por volumen de reviews."
+
+▶ CAPA 4 — Señales adicionales obligatorias:
+7. signal_name: "Ratio Gasto Tarjeta vs Renta Disponible"
+   → Gasto real con tarjeta en retail vs renta media zona. >15% = alta propensión consumo. Fuente: BBVA Commerce + INE.
+   → contradicting_evidence ejemplo: "Gasto inflado por turismo o compras puntuales."
+
+8. signal_name: "Flujo Movilidad Pico Sábado"
+   → Desplazamientos entrantes radio 5km sábados 10-14h / población residente. >2.5x = polo atracción. Fuente: Telefónica Movilidad.
+   → contradicting_evidence ejemplo: "Flujo dominado por evento específico, no atracción comercial sostenida."
+
 RECORDATORIO FINAL: Genera las señales convencionales normalmente para Capas 1-2. Las señales no convencionales listadas arriba son ADICIONALES y OBLIGATORIAS para Capas 3-5. Cada una DEBE tener contradicting_evidence específica (no genérica). Usa los signal_name EXACTOS indicados.
 `;
   }

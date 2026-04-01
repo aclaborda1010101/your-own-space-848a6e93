@@ -192,12 +192,19 @@ const SECTOR_UNCONVENTIONAL_SOURCES: Record<string, UnconventionalSource[]> = {
     { name: "Ministerio de Educación (Matrícula escolar)", type: "Gov", frequency: "annual", hypothesis: ">5% crecimiento matrícula anual = familias jóvenes llegando = consumo infantil creciente", impact: "medium", integration_cost: "low", tier: "A", status: "available" },
     { name: "INE (Precios vivienda)", type: "Gov", frequency: "quarterly", hypothesis: "Variación precios vivienda: momentum >2%/semestre = zona hot", impact: "medium", integration_cost: "low", tier: "A", status: "available" },
     { name: "Datos abiertos ayuntamientos", type: "Gov", frequency: "varies", hypothesis: "Licencias construcción residencial, licencias actividad económica, aforos tráfico", impact: "high", integration_cost: "medium", tier: "A", status: "available" },
+    { name: "Idealista API / Scraping", type: "Web", frequency: "weekly", hypothesis: "Rotación de locales comerciales en zona como indicador de salud comercial", impact: "high", integration_cost: "medium", tier: "A", status: "available" },
+    { name: "Google Places API (Reviews/Ratings)", type: "API", frequency: "daily", hypothesis: "Rating medio de comercios cercanos como proxy de satisfacción de zona", impact: "high", integration_cost: "low", tier: "A", status: "available" },
+    { name: "DGT - Datos de Tráfico", type: "Gov", frequency: "monthly", hypothesis: "Volumen de tráfico rodado como proxy de accesibilidad y catchment area", impact: "medium", integration_cost: "low", tier: "A", status: "available" },
+    { name: "Catastro - Valoraciones", type: "Gov", frequency: "quarterly", hypothesis: "Evolución del valor catastral como indicador de revalorización de zona", impact: "medium", integration_cost: "low", tier: "A", status: "available" },
     // Tier B — Pending
     { name: "Inside Airbnb", type: "Web", frequency: "monthly", hypothesis: ">20% crecimiento anual listings = gentrificación activa = poder adquisitivo creciente", impact: "medium", integration_cost: "medium", tier: "B", status: "pending" },
     { name: "LinkedIn Jobs API", type: "API", frequency: "weekly", hypothesis: ">500 ofertas empleo últimos 6 meses en <5km = crecimiento empresarial", impact: "medium", integration_cost: "medium", tier: "B", status: "pending" },
     { name: "Google Maps Popular Times", type: "Web", frequency: "weekly", hypothesis: "Tráfico horas muertas (14-16h martes-jueves) = residentes locales = gasto recurrente", impact: "high", integration_cost: "medium", tier: "B", status: "pending" },
     { name: "APIs delivery (Glovo/Uber Eats)", type: "API", frequency: "daily", hypothesis: "Tiempo respuesta >15 min = baja saturación comercial = oportunidad", impact: "medium", integration_cost: "medium", tier: "B", status: "pending" },
     { name: "Movilidad bicicletas/patinetes públicos", type: "API", frequency: "daily", hypothesis: "Alta densidad estaciones y uso = público joven urbano sin coche", impact: "low", integration_cost: "medium", tier: "B", status: "pending" },
+    { name: "BBVA/CaixaBank Commerce Data", type: "Data Provider", frequency: "monthly", hypothesis: "Gasto con tarjeta por categoría y zona como demanda real de consumo", impact: "high", integration_cost: "high", tier: "B", status: "requires_agreement" },
+    { name: "Telefónica/Orange Movilidad", type: "Data Provider", frequency: "weekly", hypothesis: "Flujos de movilidad real (origen-destino) como catchment area real", impact: "high", integration_cost: "high", tier: "B", status: "requires_agreement" },
+    { name: "Censos y Padrones Municipales", type: "Gov", frequency: "annual", hypothesis: "Pirámide poblacional y proyección demográfica a 5-10 años", impact: "medium", integration_cost: "low", tier: "B", status: "pending" },
     // Tier C — Requires agreement
     { name: "Operadores telefonía (movilidad real)", type: "Telco", frequency: "daily", hypothesis: "Movilidad real, dwell time, diferenciación población residencial/laboral/transitoria", impact: "high", integration_cost: "high", tier: "C", status: "requires_agreement" },
     { name: "SafeGraph/equivalente europeo", type: "Data Provider", frequency: "weekly", hypothesis: "Foot traffic real por establecimiento", impact: "high", integration_cost: "high", tier: "C", status: "requires_agreement" },
@@ -726,6 +733,32 @@ Puedes añadir más señales, pero estas son OBLIGATORIAS. Si falta alguna, la r
    → Correlación densidad pet shops + veterinarias con perfil demográfico (familias jóvenes / parejas DINK = alto gasto discrecional). Fuente: OpenStreetMap.
    → contradicting_evidence ejemplo: "La densidad de pet shops puede reflejar tendencia nacional, no poder adquisitivo local."
 
+6. signal_name: "Benchmark Success Score"
+   → Score 0-100 comparando composición de operadores, ocupación y mix sectorial vs los 20 centros más exitosos de España.
+   → contradicting_evidence ejemplo: "Los centros de referencia operan en contextos únicos no replicables."
+
+7. signal_name: "Resilience Index"
+   → Fórmula: (1 - Herfindahl operadores) × Diversidad sectorial × (1 - Dependencia anchor). Mide anti-fragilidad.
+   → contradicting_evidence ejemplo: "Alta diversificación puede indicar falta de identidad comercial clara."
+
+▶ CAPA 3 — Señales adicionales obligatorias:
+5. signal_name: "Índice Rotación Locales Comerciales"
+   → Ratio locales que cambian operador/año en radio 2km. Alta rotación = zona inestable. Fuente: Idealista + Catastro.
+   → contradicting_evidence ejemplo: "Rotación puede deberse a fin de ciclo de contratos, no inestabilidad."
+
+6. signal_name: "Proxy Satisfacción Zona Google"
+   → Rating medio ponderado Google Maps radio 1km. >4.2 = zona con buena experiencia. Fuente: Google Places API.
+   → contradicting_evidence ejemplo: "Ratings sesgados por volumen de reviews."
+
+▶ CAPA 4 — Señales adicionales obligatorias:
+7. signal_name: "Ratio Gasto Tarjeta vs Renta Disponible"
+   → Gasto real con tarjeta en retail vs renta media zona. >15% = alta propensión consumo. Fuente: BBVA Commerce + INE.
+   → contradicting_evidence ejemplo: "Gasto inflado por turismo o compras puntuales."
+
+8. signal_name: "Flujo Movilidad Pico Sábado"
+   → Desplazamientos entrantes radio 5km sábados 10-14h / población residente. >2.5x = polo atracción. Fuente: Telefónica Movilidad.
+   → contradicting_evidence ejemplo: "Flujo dominado por evento específico, no atracción comercial sostenida."
+
 RECORDATORIO FINAL: Genera las señales convencionales normalmente para Capas 1-2. Las señales no convencionales listadas arriba son ADICIONALES y OBLIGATORIAS para Capas 3-5. Cada una DEBE tener contradicting_evidence específica (no genérica). Usa los signal_name EXACTOS indicados.
 `;
   }
@@ -840,6 +873,22 @@ FORMATO de patron_id por capa: EVD-001, PRC-001, DLR-001, EXO-001, SIS-001.`
             data_source: "INE - Estadística de Transmisiones de Derechos de la Propiedad (Tier A)"
           },
           {
+            signal_name: "Índice Rotación Locales Comerciales",
+            description: "Ratio de locales que cambian de operador/año en radio 2km. Alta rotación = zona inestable. Baja rotación = zona madura consolidada. Fuente: Idealista + Catastro.",
+            confidence: 0.50, p_value_estimate: 0.080, impact: "high", trend: "stable",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "La rotación puede deberse a cambios regulatorios (nuevas ordenanzas) o a fin de ciclo de contratos, no necesariamente a inestabilidad comercial.",
+            data_source: "Idealista + Catastro (Tier A)"
+          },
+          {
+            signal_name: "Proxy Satisfacción Zona Google",
+            description: "Rating medio ponderado de comercios en Google Maps radio 1km. Ratings >4.2 = zona con buena experiencia comercial. Fuente: Google Places API.",
+            confidence: 0.45, p_value_estimate: 0.120, impact: "medium", trend: "up",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "Los ratings de Google están sesgados por volumen de reviews y pueden ser manipulados. Zonas nuevas con pocos reviews dan falsos negativos.",
+            data_source: "Google Places API (Tier A)"
+          },
+          {
             signal_name: "Rollout de Fibra Óptica como Atractor de Teletrabajadores",
             description: "Zonas con despliegue reciente de fibra óptica atraen teletrabajadores y nuevos residentes tech que transforman patrones de consumo local.",
             confidence: 0.40, p_value_estimate: 0.150, impact: "low", trend: "up",
@@ -881,6 +930,22 @@ FORMATO de patron_id por capa: EVD-001, PRC-001, DLR-001, EXO-001, SIS-001.`
             contradicting_evidence: "Los coworkings pueden estar en zonas céntricas que ya tienen alta oferta comercial, no generando nueva demanda sino redistribuyéndola.",
             data_source: "OpenStreetMap + Google Maps (Tier A)"
           },
+          {
+            signal_name: "Ratio Gasto Tarjeta vs Renta Disponible",
+            description: "Proporción del gasto real con tarjeta en retail vs renta media de la zona. >15% indica zona con alta propensión al consumo. Fuente: BBVA Commerce + INE.",
+            confidence: 0.40, p_value_estimate: 0.150, impact: "high", trend: "up",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "El gasto con tarjeta puede estar inflado por turismo o compras puntuales de alto valor que no reflejan consumo recurrente local.",
+            data_source: "BBVA/CaixaBank Commerce + INE (Tier B)"
+          },
+          {
+            signal_name: "Flujo Movilidad Pico Sábado",
+            description: "Volumen de desplazamientos que entran en radio 5km los sábados 10-14h normalizado por población residente. >2.5x indica polo de atracción comercial. Fuente: Telefónica Movilidad.",
+            confidence: 0.35, p_value_estimate: 0.200, impact: "high", trend: "stable",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "El flujo de sábado puede estar dominado por un evento o atracción específica (mercadillo, parque) y no reflejar atracción comercial sostenida.",
+            data_source: "Telefónica/Orange Movilidad (Tier B)"
+          },
         ],
         5: [
           {
@@ -906,6 +971,22 @@ FORMATO de patron_id por capa: EVD-001, PRC-001, DLR-001, EXO-001, SIS-001.`
             uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
             contradicting_evidence: "Las tres variables pueden estar todas altas en zonas de burbuja inmobiliaria donde la demanda real de retail no acompaña al crecimiento. El índice compuesto multiplica la incertidumbre de cada componente.",
             data_source: "CNMC + Catastro + LinkedIn + AECC (Tier A/B)"
+          },
+          {
+            signal_name: "Benchmark Success Score (Métrica Compuesta)",
+            description: "Score compuesto que compara composición de operadores, ocupación, y mix sectorial del centro analizado vs los 20 centros más exitosos de España (Xanadú, La Vaguada, Parquesur, centros Unibail/Klépierre/Merlin). Score 0-100. Fuente: AECC + Informes CBRE/JLL + datos propios.",
+            confidence: 0.30, p_value_estimate: 0.250, impact: "high", trend: "up",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "Los centros de referencia operan en contextos únicos (ubicación, antigüedad, propietario) que no son replicables. Copiar su mix puede no funcionar en un contexto diferente.",
+            data_source: "AECC + CBRE/JLL + datos propios"
+          },
+          {
+            signal_name: "Resilience Index (Anti-fragilidad)",
+            description: "(1 - Concentración Herfindahl operadores) × Diversidad sectorial × (1 - Dependencia anchor tenant). Mide capacidad del centro de sobrevivir pérdida de operador principal. Fuente: datos propios + AECC.",
+            confidence: 0.30, p_value_estimate: 0.300, impact: "high", trend: "stable",
+            uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis",
+            contradicting_evidence: "Un alto índice de diversificación puede indicar falta de identidad comercial clara, lo que reduce atracción vs centros especializados.",
+            data_source: "Datos propios + AECC"
           },
         ],
       };
@@ -1406,6 +1487,85 @@ Responde con:
 }
 
 // ═══════════════════════════════════════
+// PHASE 4b: Reference Center Benchmarking (centros_comerciales only)
+// ═══════════════════════════════════════
+
+const REFERENCE_CENTERS = [
+  { name: "Xanadú", city: "Madrid", sba_m2: 154000, operators: 230, anchors: "Inditex, H&M, Primark, SnowZone", year: 2003, owner: "Unibail-Rodamco", occupancy_pct: 96, sales_m2_est: 4200 },
+  { name: "Parquesur", city: "Leganés (Madrid)", sba_m2: 152000, operators: 220, anchors: "El Corte Inglés, Inditex, Carrefour", year: 1989, owner: "Unibail-Rodamco", occupancy_pct: 95, sales_m2_est: 3800 },
+  { name: "La Vaguada", city: "Madrid", sba_m2: 85000, operators: 350, anchors: "Inditex, El Corte Inglés, Carrefour", year: 1983, owner: "CBRE GI", occupancy_pct: 98, sales_m2_est: 5200 },
+  { name: "Diagonal Mar", city: "Barcelona", sba_m2: 87000, operators: 200, anchors: "Inditex, Mango, Apple", year: 2001, owner: "Deutsche Bank", occupancy_pct: 94, sales_m2_est: 4500 },
+  { name: "Marineda City", city: "A Coruña", sba_m2: 170000, operators: 200, anchors: "IKEA, Inditex", year: 2011, owner: "Grupo Castromil/Inversa", occupancy_pct: 90, sales_m2_est: 2800 },
+  { name: "Puerto Venecia", city: "Zaragoza", sba_m2: 120000, operators: 150, anchors: "Inditex, Primark, IKEA", year: 2012, owner: "British Land/Intu", occupancy_pct: 92, sales_m2_est: 3200 },
+  { name: "Nueva Condomina", city: "Murcia", sba_m2: 120000, operators: 180, anchors: "IKEA, El Corte Inglés", year: 2006, owner: "Klépierre", occupancy_pct: 93, sales_m2_est: 3000 },
+  { name: "Bonaire", city: "Valencia", sba_m2: 148000, operators: 200, anchors: "Carrefour, Inditex", year: 2001, owner: "Klépierre", occupancy_pct: 94, sales_m2_est: 3100 },
+  { name: "La Maquinista", city: "Barcelona", sba_m2: 73000, operators: 230, anchors: "Inditex, H&M, MediaMarkt", year: 2000, owner: "Unibail-Rodamco", occupancy_pct: 97, sales_m2_est: 5500 },
+  { name: "Plenilunio", city: "Madrid", sba_m2: 70000, operators: 200, anchors: "Inditex, Cines Kinépolis", year: 2008, owner: "Klépierre", occupancy_pct: 96, sales_m2_est: 4800 },
+];
+
+async function executePhase4b(runId: string, sector: string) {
+  const sectorKey = detectSectorKey(sector);
+  if (sectorKey !== "centros_comerciales") return;
+
+  console.log(`[Phase4b] Starting Reference Center Benchmarking`);
+  const phaseResults = await getRunPhaseResults(runId);
+
+  try {
+    const messages: ChatMessage[] = [
+      { role: "system", content: `Eres un experto en retail y centros comerciales con 20 años de experiencia en el mercado español.
+Analiza patrones de éxito en centros comerciales de referencia. Responde SOLO con JSON válido, en ESPAÑOL.` },
+      { role: "user", content: `Analiza los patrones comunes de los centros comerciales más exitosos de España:
+
+CENTROS DE REFERENCIA:
+${JSON.stringify(REFERENCE_CENTERS, null, 2)}
+
+Identifica qué patrones comparten estos centros exitosos:
+1. Composición sectorial del tenant mix (% restauración, moda, ocio, servicios, gran superficie)
+2. Ratio anchor tenants vs specialty (número y tipo de locomotoras)
+3. Presencia de categorías clave (cuáles son imprescindibles para un centro exitoso)
+4. Densidad de operadores por m² (operadores/1000m² SBA)
+5. Estrategia: destination (centro regional, >100K m²) vs convenience (urbano, <80K m²)
+6. Factores de éxito comunes: accesibilidad, transporte público, parking, mix ocio/comercio
+7. Patrones de renovación y adaptación (cómo han evolucionado los centros maduros vs nuevos)
+
+Responde con:
+{
+  "success_blueprint": {
+    "optimal_tenant_mix": { "restauracion_pct": 0, "moda_pct": 0, "ocio_pct": 0, "servicios_pct": 0, "gran_superficie_pct": 0, "otros_pct": 0 },
+    "anchor_strategy": { "min_anchors": 0, "ideal_anchors": 0, "must_have_categories": ["cat1", "cat2"], "anchor_specialty_ratio": "X:Y" },
+    "density_benchmarks": { "operators_per_1000m2": 0, "min_viable": 0, "optimal": 0 },
+    "strategy_patterns": { "destination_threshold_m2": 100000, "convenience_threshold_m2": 80000, "mixed_characteristics": ["char1"] },
+    "success_factors_ranked": [
+      { "factor": "factor name", "importance": 0.0, "evidence": "evidence from reference centers" }
+    ],
+    "anti_patterns": ["pattern that predicts failure"],
+    "evolution_insights": ["how successful centers adapt over time"]
+  },
+  "center_classifications": [
+    { "name": "center name", "strategy": "destination|convenience|hybrid", "key_differentiator": "what makes it unique", "lesson": "key takeaway" }
+  ],
+  "scoring_criteria": {
+    "criteria": [
+      { "name": "criterion", "weight": 0.0, "benchmark_value": "value", "measurement": "how to measure" }
+    ]
+  }
+}` }
+    ];
+
+    const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+    const parsed = safeParseJson(result);
+
+    phaseResults.phase_4b = parsed;
+    await updateRun(runId, { phase_results: phaseResults });
+    console.log(`[Phase4b] Reference Center Benchmarking done`);
+  } catch (err) {
+    console.error("[Phase4b] Error:", err);
+    phaseResults.phase_4b = { error: String(err) };
+    await updateRun(runId, { phase_results: phaseResults });
+  }
+}
+
+// ═══════════════════════════════════════
 // PHASE 7: Actionable Hypotheses
 // ═══════════════════════════════════════
 
@@ -1429,6 +1589,12 @@ async function executePhase7(runId: string, sector: string, objective: string) {
 
   const backtest = backtests?.[0];
 
+  // Include benchmark context if available (Phase 4b)
+  let benchmarkContext = "";
+  if (phaseResults.phase_4b?.success_blueprint) {
+    benchmarkContext = `\nBenchmark de centros exitosos (Phase 4b): ${JSON.stringify(phaseResults.phase_4b.success_blueprint).substring(0, 4000)}`;
+  }
+
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -1448,6 +1614,7 @@ Señales validadas: ${JSON.stringify((signals || []).slice(0, 15).map(s => ({
 })))}
 Backtest: uplift vs baseline ${backtest?.uplift_vs_baseline_pct || "N/A"}%, win rate ${backtest?.win_rate_pct || "N/A"}%
 Economic backtesting: ${JSON.stringify(phaseResults.economic_backtesting || {})}
+${benchmarkContext}
 
 Responde con:
 {
@@ -1936,10 +2103,20 @@ IMPORTANTE:
           await executePhase3(run_id, run.user_id);
           await executePhase4(run_id);
           await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
+          await executePhase4b(run_id, run.sector);
           await executeCredibilityEngine(run_id, run.user_id);
           await executePhase6(run_id, run.user_id, run.sector);
           await executeEconomicBacktesting(run_id, run.user_id, run.sector);
           await executePhase7(run_id, run.sector, run.business_objective || "");
+          // Fire-and-forget learning-observer
+          try {
+            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            fetch(`${supabaseUrl}/functions/v1/learning-observer`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+              body: JSON.stringify({ action: "evaluate_feedback", runId: run_id, projectId: null }),
+            }).catch(e => console.warn("[run_all] learning-observer fire-and-forget failed:", e));
+          } catch (_) { /* non-blocking */ }
         } catch (err) {
           console.error("run_all error:", err);
           await updateRun(run_id, { status: "failed", error_log: `Pipeline failed: ${err}` });
@@ -1984,6 +2161,7 @@ IMPORTANTE:
           await executePhase3(run_id, run.user_id);
           await executePhase4(run_id);
           await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
+          await executePhase4b(run_id, run.sector);
           await executeCredibilityEngine(run_id, run.user_id);
           await executePhase6(run_id, run.user_id, run.sector);
           await executeEconomicBacktesting(run_id, run.user_id, run.sector);
@@ -2209,6 +2387,8 @@ SEÑALES NO CONVENCIONALES OBLIGATORIAS PARA CENTROS COMERCIALES
 4. "Indicador Teletrabajo Coworkings" → Densidad coworkings radio 5km
 5. "Proxy Poder Adquisitivo Gimnasios" → Ratio gimnasios premium vs low-cost
 6. "Crecimiento Empresarial LinkedIn" → Densidad ofertas empleo radio 5km
+7. "Ratio Gasto Tarjeta vs Renta Disponible" → Gasto real con tarjeta vs renta media zona. >15% = alta propensión consumo
+8. "Flujo Movilidad Pico Sábado" → Desplazamientos entrantes sábado 10-14h / población residente. >2.5x = polo atracción
 
 ▶ CAPA 5 — Edge extremo con fórmulas:
 1. "Latent Demand Score" → (Búsquedas / Oferta) × Crecimiento población. >2.5 = oportunidad
@@ -2216,6 +2396,12 @@ SEÑALES NO CONVENCIONALES OBLIGATORIAS PARA CENTROS COMERCIALES
 3. "Climate Refuge Score" → (Días >32°C + Lluvia >10mm + AQI>150) / 365. >0.25 = refugio climático
 4. "Dead Hours Vitality Index" → Tráfico horas muertas / Tráfico pico sábado. >0.3 = base fuerte
 5. "Correlacion Pet Shops Demografia" → Densidad pet shops + veterinarias como proxy poder adquisitivo
+6. "Benchmark Success Score" → Score 0-100 comparando composición/ocupación/mix vs top 20 centros exitosos España
+7. "Resilience Index" → (1-Herfindahl) × Diversidad × (1-Dependencia anchor). Anti-fragilidad del centro
+
+▶ CAPA 3 — Señales adicionales:
+5. "Índice Rotación Locales Comerciales" → Ratio locales que cambian operador/año radio 2km. Alta rotación = zona inestable
+6. "Proxy Satisfacción Zona Google" → Rating medio Google Maps radio 1km. >4.2 = zona con buena experiencia comercial
 
 RECORDATORIO: Señales convencionales en Capas 1-2, no convencionales en Capas 3-5. Cada señal DEBE tener contradicting_evidence específica.`;
         }
@@ -2509,8 +2695,57 @@ NOTA: Los campos concrete_data_source, variable_extracted, cross_with_internal, 
                 business_decision_enabled: { decision: "Reestructurar tenant mix priorizando categorías con baja penetración ecommerce (restauración, salud, ocio experiencial, servicios)", impossible_without_signal: "Sin ERI, la reestructuración del tenant mix es reactiva a vacantes, no proactiva", value_estimate: "Anticipar reestructuración vs reactiva = evitar 3-5 años de declive gradual de rentas variables" },
                 rag_requirement: { rag_name: "RAG_EXT_ECOMMERCE", hydration_method: "Descarga trimestral CNMC + scraping INE Encuesta de Comercio", estimated_volume: "30 categorías × 4 trimestres × 5 años = 600 registros" }
               },
+              { signal_name: "Benchmark Success Score", description: "Score compuesto que compara composición de operadores, ocupación, y mix sectorial del centro analizado vs los 20 centros más exitosos de España. Score 0-100.", confidence: 0.30, p_value_estimate: 0.25, impact: "high", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "AECC + CBRE/JLL + datos propios", variables_needed: ["composicion_operadores", "ocupacion", "mix_sectorial"], external_data_required: true, contradicting_evidence: "Los centros de referencia operan en contextos únicos no replicables.",
+                concrete_data_source: { name: "AECC Directorio + Informes CBRE/JLL/Cushman", url: "https://www.aedecc.com/", type: "dataset_descargable", format: "PDF informes + Excel datos", update_frequency: "Anual", cost: "Parcialmente gratuito (AECC público, informes de pago)", access_method: "Descarga AECC + suscripción CBRE/JLL" },
+                variable_extracted: { name: "benchmark_success_score", unit: "índice 0-100", granularity: "Por centro comercial analizado vs referencia" },
+                cross_with_internal: { internal_variable: "tenant_mix_actual_pct_por_categoria", cross_logic: "Comparar composición actual vs blueprint de éxito. Gap >15pp en categoría clave = oportunidad de optimización. Score <50 = reestructuración urgente.", lag_time: "Indicador estructural, revisión semestral" },
+                business_decision_enabled: { decision: "Reestructurar tenant mix hacia la composición óptima identificada por el benchmark de centros exitosos", impossible_without_signal: "Sin benchmark, la composición se basa en disponibilidad de operadores, no en composición óptima probada", value_estimate: "Acercar composición al benchmark = +10-20% en rentas variables en 2-3 años" },
+                rag_requirement: { rag_name: "RAG_EXT_BENCHMARK_CC", hydration_method: "Recopilación anual AECC + informes CBRE/JLL + datos propios de centros", estimated_volume: "Top 20 centros × 10 variables × 5 años = 1,000 registros" }
+              },
+              { signal_name: "Resilience Index", description: "(1 - Concentración Herfindahl operadores) × Diversidad sectorial × (1 - Dependencia anchor tenant). Mide capacidad de sobrevivir pérdida de operador principal.", confidence: 0.30, p_value_estimate: 0.30, impact: "high", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Datos propios + AECC", variables_needed: ["herfindahl_operadores", "diversidad_sectorial", "dependencia_anchor"], external_data_required: false, contradicting_evidence: "Alta diversificación puede indicar falta de identidad comercial clara.",
+                concrete_data_source: { name: "Datos internos de gestión + AECC Directorio", url: "https://www.aedecc.com/", type: "dataset_descargable", format: "Excel + cálculo interno", update_frequency: "Trimestral", cost: "Gratuito (datos propios)", access_method: "Cálculo interno sobre datos de gestión" },
+                variable_extracted: { name: "resilience_index", unit: "índice 0-1 (1=máxima resiliencia)", granularity: "Por centro comercial" },
+                cross_with_internal: { internal_variable: "concentracion_rentas_top5_operadores", cross_logic: "Si top 5 operadores representan >40% de rentas, RI será bajo. Objetivo: ningún operador >10% de rentas totales.", lag_time: "Indicador estructural, cambios lentos, revisión semestral" },
+                business_decision_enabled: { decision: "Diversificar base de operadores proactivamente para reducir riesgo de vacancia en cascada si un anchor se va", impossible_without_signal: "Sin RI, la dependencia de anchors se detecta cuando ya es tarde (cierre de anchor)", value_estimate: "Evitar crisis por pérdida de anchor = proteger 15-30% de rentas = €500K-2M/año" },
+                rag_requirement: { rag_name: "RAG_INT_RESILIENCE", hydration_method: "Cálculo trimestral sobre datos de gestión propios", estimated_volume: "100 activos × 4 trimestres = 400 cálculos/año" }
+              },
             ],
           };
+
+          // Also add new signals to capa 3 and capa 4 in the pipeline_run block
+          SECTOR_UNCONVENTIONAL_SIGNALS[3].push(
+            { signal_name: "Índice Rotación Locales Comerciales", description: "Ratio de locales que cambian de operador/año en radio 2km. Alta rotación = zona inestable.", confidence: 0.50, p_value_estimate: 0.08, impact: "high", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Idealista + Catastro", variables_needed: ["rotacion_locales_radio_2km"], external_data_required: true, contradicting_evidence: "La rotación puede deberse a cambios regulatorios, no a inestabilidad comercial.",
+              concrete_data_source: { name: "Idealista API + Sede Electrónica del Catastro", url: "https://www.idealista.com/", type: "scraping_web", format: "JSON via scraping + datos catastrales", update_frequency: "Semanal", cost: "Gratuito (scraping)", access_method: "Scraping Idealista + consulta Catastro" },
+              variable_extracted: { name: "tasa_rotacion_locales_anual_radio_2km", unit: "% locales cambiados/año", granularity: "Por radio 2km del activo" },
+              cross_with_internal: { internal_variable: "vacancy_rate_sba", cross_logic: "Si rotación externa >15% y vacancy propia <5%, zona inestable pero activo resiliente. Si ambos altos, zona problemática.", lag_time: "Rotación externa anticipa problemas de vacancy propia en 6-12 meses" },
+              business_decision_enabled: { decision: "Ajustar estrategia de retención de operadores según salud comercial de la zona", impossible_without_signal: "Sin rotación externa, no se puede anticipar si la zona está decayendo", value_estimate: "Anticipar retención proactiva = evitar 2-3 vacantes = €200-500K/año" },
+              rag_requirement: { rag_name: "RAG_EXT_IDEALISTA", hydration_method: "Scraping semanal Idealista locales comerciales por zona", estimated_volume: "100 activos × 52 semanas = 5,200 muestras/año" }
+            },
+            { signal_name: "Proxy Satisfacción Zona Google", description: "Rating medio ponderado de comercios en Google Maps radio 1km. Ratings >4.2 = zona con buena experiencia comercial.", confidence: 0.45, p_value_estimate: 0.12, impact: "medium", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Google Places API", variables_needed: ["rating_medio_comercios_radio_1km"], external_data_required: true, contradicting_evidence: "Ratings sesgados por volumen de reviews y pueden ser manipulados.",
+              concrete_data_source: { name: "Google Places API — Reviews por establecimiento", url: "https://developers.google.com/maps/documentation/places/web-service", type: "api_privada", format: "JSON Places API", update_frequency: "Mensual (agregado)", cost: "$17/1K requests Google Places API", access_method: "API Key Google Cloud" },
+              variable_extracted: { name: "rating_medio_ponderado_comercios_radio_1km", unit: "rating 0-5", granularity: "Por radio 1km del activo" },
+              cross_with_internal: { internal_variable: "nps_centro_comercial", cross_logic: "Si rating zona >4.2 y NPS centro <50, el centro no captura la satisfacción de la zona. Oportunidad de mejora de experiencia.", lag_time: "Indicador en tiempo real, comparación mensual" },
+              business_decision_enabled: { decision: "Benchmark de experiencia de cliente vs competidores en la zona", impossible_without_signal: "Sin rating de zona, no se puede posicionar el centro en el contexto competitivo de experiencia", value_estimate: "Mejorar experiencia alineada con zona = +5% NPS = +3-5% gasto medio" },
+              rag_requirement: { rag_name: "RAG_EXT_GOOGLE_REVIEWS", hydration_method: "Google Places API mensual para comercios radio 1km", estimated_volume: "100 activos × 50 comercios × 12 meses = 60,000 consultas/año" }
+            }
+          );
+
+          SECTOR_UNCONVENTIONAL_SIGNALS[4].push(
+            { signal_name: "Ratio Gasto Tarjeta vs Renta Disponible", description: "Proporción del gasto real con tarjeta en retail vs renta media de la zona. >15% indica alta propensión al consumo.", confidence: 0.40, p_value_estimate: 0.15, impact: "high", trend: "up", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "BBVA Commerce + INE", variables_needed: ["gasto_tarjeta_retail_zona", "renta_media_zona"], external_data_required: true, contradicting_evidence: "Gasto con tarjeta inflado por turismo o compras puntuales.",
+              concrete_data_source: { name: "BBVA Commerce / CaixaBank Biz — Datos agregados de gasto con tarjeta", url: "https://www.bbvaresearch.com/", type: "api_privada", format: "CSV/API bajo acuerdo comercial", update_frequency: "Mensual", cost: "Requiere acuerdo comercial", access_method: "Acuerdo de datos con BBVA/CaixaBank" },
+              variable_extracted: { name: "ratio_gasto_tarjeta_vs_renta_por_cp", unit: "% gasto/renta", granularity: "Por código postal y categoría de gasto" },
+              cross_with_internal: { internal_variable: "ventas_totales_centro", cross_logic: "Si gasto tarjeta zona >15% renta y ventas centro están flat, el centro no captura la propensión al consumo local. Si gasto tarjeta <10%, zona con bajo potencial.", lag_time: "Gasto tarjeta refleja comportamiento actual, sin lag significativo" },
+              business_decision_enabled: { decision: "Priorizar captación de operadores en zonas con alta propensión al consumo vs invertir en activación en zonas de baja propensión", impossible_without_signal: "Sin datos de gasto real, la estimación de potencial se basa en renta media, que no refleja propensión al consumo", value_estimate: "Ajustar estrategia comercial a propensión real = +5-10% captación de gasto local" },
+              rag_requirement: { rag_name: "RAG_EXT_GASTO_TARJETA", hydration_method: "API bajo acuerdo comercial con BBVA/CaixaBank, datos mensuales", estimated_volume: "200 CPs × 12 meses × 10 categorías = 24,000 registros/año" }
+            },
+            { signal_name: "Flujo Movilidad Pico Sábado", description: "Volumen de desplazamientos entrantes en radio 5km sábados 10-14h normalizado por población. >2.5x indica polo de atracción comercial.", confidence: 0.35, p_value_estimate: 0.20, impact: "high", trend: "stable", uncertainty_type: "epistemic", devil_advocate_result: "moved_to_hypothesis", data_source: "Telefónica Movilidad", variables_needed: ["flujo_movilidad_sabado", "poblacion_residente"], external_data_required: true, contradicting_evidence: "Flujo dominado por evento o atracción específica, no atracción comercial sostenida.",
+              concrete_data_source: { name: "Telefónica LUCA / Orange Flux Vision", url: "https://luca-d3.com/", type: "api_privada", format: "CSV/API bajo acuerdo comercial", update_frequency: "Semanal", cost: "Requiere acuerdo comercial (€10-50K/año)", access_method: "Acuerdo de datos con operador telco" },
+              variable_extracted: { name: "ratio_flujo_sabado_vs_poblacion_residente_radio_5km", unit: "ratio multiplicador", granularity: "Por radio 5km del activo, sábados 10-14h" },
+              cross_with_internal: { internal_variable: "footfall_sabado_centro", cross_logic: "Si ratio flujo zona >2.5x pero footfall centro no proporcional, el centro no captura el flujo de la zona. Oportunidad de marketing y visibilidad.", lag_time: "Flujo de movilidad es indicador en tiempo real, tendencias semanales" },
+              business_decision_enabled: { decision: "Dimensionar catchment area real y orientar marketing a los orígenes de flujo principales", impossible_without_signal: "Sin movilidad real, el catchment se estima por isocronas teóricas que no reflejan comportamiento real", value_estimate: "Ajustar marketing a catchment real = +10-15% eficiencia de inversión publicitaria" },
+              rag_requirement: { rag_name: "RAG_EXT_MOVILIDAD_TELCO", hydration_method: "API bajo acuerdo con Telefónica/Orange, datos semanales", estimated_volume: "100 activos × 52 semanas = 5,200 muestras/año" }
+            }
+          );
 
           for (const [layerId, signals] of Object.entries(SECTOR_UNCONVENTIONAL_SIGNALS)) {
             const lid = parseInt(layerId);
@@ -2570,6 +2805,45 @@ NOTA: Los campos concrete_data_source, variable_extracted, cross_with_internal, 
 
         const totalSignals = layers.reduce((sum: number, l: any) => sum + (l.signals?.length || 0), 0);
         console.log(`[pipeline_run] Phase 5 (Signals) done: ${layers.length} layers, ${totalSignals} signals`);
+
+        // ════════════════════════════════════════════════════════════
+        // PHASE 4b: Reference Center Benchmarking (centros_comerciales only)
+        // ════════════════════════════════════════════════════════════
+        let phase4bResult: any = null;
+        if (sectorKey === "centros_comerciales") {
+          try {
+            const benchMessages: ChatMessage[] = [
+              { role: "system", content: `Eres un experto en retail y centros comerciales con 20 años de experiencia en el mercado español. Responde SOLO con JSON válido, en ESPAÑOL.` },
+              { role: "user", content: `Analiza los patrones comunes de los centros comerciales más exitosos de España:
+
+CENTROS DE REFERENCIA:
+${JSON.stringify(REFERENCE_CENTERS, null, 2)}
+
+Identifica patrones de éxito: composición sectorial, ratio anchor/specialty, categorías clave, densidad operadores/m², estrategia destination vs convenience, factores de éxito comunes.
+
+Responde con:
+{
+  "success_blueprint": {
+    "optimal_tenant_mix": { "restauracion_pct": 0, "moda_pct": 0, "ocio_pct": 0, "servicios_pct": 0, "gran_superficie_pct": 0 },
+    "anchor_strategy": { "min_anchors": 0, "ideal_anchors": 0, "must_have_categories": ["cat1"], "anchor_specialty_ratio": "X:Y" },
+    "density_benchmarks": { "operators_per_1000m2": 0, "optimal": 0 },
+    "success_factors_ranked": [{ "factor": "name", "importance": 0.0, "evidence": "evidence" }],
+    "anti_patterns": ["failure pattern"],
+    "evolution_insights": ["how centers adapt"]
+  },
+  "center_classifications": [{ "name": "center", "strategy": "destination|convenience|hybrid", "lesson": "takeaway" }],
+  "scoring_criteria": { "criteria": [{ "name": "criterion", "weight": 0.0, "benchmark_value": "value" }] }
+}` }
+            ];
+
+            const benchResult = await chat(benchMessages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+            phase4bResult = safeParseJson(benchResult);
+            console.log(`[pipeline_run] Phase 4b (Benchmark) done`);
+          } catch (benchErr) {
+            console.error("[pipeline_run] Phase 4b error (non-blocking):", benchErr);
+            phase4bResult = { error: String(benchErr) };
+          }
+        }
 
         // ════════════════════════════════════════════════════════════
         // CREDIBILITY ENGINE (gemini-pro): 4 dimensions + classification
@@ -2800,6 +3074,7 @@ Backtest: win rate ${backtesting.win_rate_pct || "N/A"}%, uplift ${backtesting.u
 Economic impact: NEI=${economicBacktesting.net_economic_impact || 0} EUR, ROI=${economicBacktesting.roi_multiplier || 0}x
 Credibilidad: ${credibilityEngine.summary ? `Alpha=${credibilityEngine.summary.alpha}, Beta=${credibilityEngine.summary.beta}, Fragile=${credibilityEngine.summary.fragile}, Noise=${credibilityEngine.summary.noise}` : "N/A"}
 Régimen: ${credibilityEngine.regime_detected || "normal"}
+${phase4bResult?.success_blueprint ? `\nBenchmark de centros exitosos: ${JSON.stringify(phase4bResult.success_blueprint).substring(0, 4000)}` : ""}
 
 Responde con:
 {
@@ -2836,6 +3111,16 @@ Responde con:
           console.error("[pipeline_run] Phase 7 error (non-blocking):", hypoErr);
           hypothesesResult = { model_verdict: "NOT_RELIABLE_YET", hypotheses: [], verdict_explanation: String(hypoErr) };
         }
+
+        // Fire-and-forget learning-observer
+        try {
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          fetch(`${supabaseUrl}/functions/v1/learning-observer`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}` },
+            body: JSON.stringify({ action: "evaluate_feedback", runId: "pipeline_run", projectId: body.project_id || null, signals: layers.flatMap((l: any) => (l.signals || []).map((s: any) => s.signal_name)).slice(0, 20), verdict: hypothesesResult.model_verdict }),
+          }).catch(e => console.warn("[pipeline_run] learning-observer fire-and-forget failed:", e));
+        } catch (_) { /* non-blocking */ }
 
         // ════════════════════════════════════════════════════════════
         // BUILD STRUCTURED OUTPUT
@@ -3069,6 +3354,7 @@ Responde con:
             integraciones_externas: integracionesExternas,
           },
           confidence_cap: confidenceCap,
+          reference_benchmark: phase4bResult || null,
         };
 
         console.log(`[pipeline_run] Complete: ${allSignals.length} signals, ${ragsExternos.length} RAGs, QG=${qgVerdict}, verdict=${hypothesesResult.model_verdict}`);

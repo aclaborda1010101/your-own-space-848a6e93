@@ -2549,6 +2549,7 @@ IMPORTANTE:
       const bgPromise = (async () => {
         try {
           await executePhase1(run_id, run.sector, run.geography || "", run.time_horizon || "", run.business_objective || "");
+          await executePhase1b(run_id, run.sector, run.geography || "", run.business_objective || "");
           await executePhase2(run_id, run.user_id, run.sector, run.geography || "", run.business_objective || "");
           await executePhase3(run_id, run.user_id);
           await executePhase4(run_id);

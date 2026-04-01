@@ -42,7 +42,7 @@ const GEMINI_MODEL_ALIASES: Record<string, string> = {
   "gemini-pro-legacy": "gemini-1.5-pro",
 };
 
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+const DEFAULT_GEMINI_MODEL = "gemini-2.0-flash";
 const CLAUDE_MODEL = "claude-sonnet-4-20250514";
 
 /**

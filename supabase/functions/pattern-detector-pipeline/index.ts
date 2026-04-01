@@ -2724,6 +2724,45 @@ NOTA: Los campos concrete_data_source, variable_extracted, cross_with_internal, 
         console.log(`[pipeline_run] Phase 5 (Signals) done: ${layers.length} layers, ${totalSignals} signals`);
 
         // ════════════════════════════════════════════════════════════
+        // PHASE 4b: Reference Center Benchmarking (centros_comerciales only)
+        // ════════════════════════════════════════════════════════════
+        let phase4bResult: any = null;
+        if (sectorKey === "centros_comerciales") {
+          try {
+            const benchMessages: ChatMessage[] = [
+              { role: "system", content: `Eres un experto en retail y centros comerciales con 20 años de experiencia en el mercado español. Responde SOLO con JSON válido, en ESPAÑOL.` },
+              { role: "user", content: `Analiza los patrones comunes de los centros comerciales más exitosos de España:
+
+CENTROS DE REFERENCIA:
+${JSON.stringify(REFERENCE_CENTERS, null, 2)}
+
+Identifica patrones de éxito: composición sectorial, ratio anchor/specialty, categorías clave, densidad operadores/m², estrategia destination vs convenience, factores de éxito comunes.
+
+Responde con:
+{
+  "success_blueprint": {
+    "optimal_tenant_mix": { "restauracion_pct": 0, "moda_pct": 0, "ocio_pct": 0, "servicios_pct": 0, "gran_superficie_pct": 0 },
+    "anchor_strategy": { "min_anchors": 0, "ideal_anchors": 0, "must_have_categories": ["cat1"], "anchor_specialty_ratio": "X:Y" },
+    "density_benchmarks": { "operators_per_1000m2": 0, "optimal": 0 },
+    "success_factors_ranked": [{ "factor": "name", "importance": 0.0, "evidence": "evidence" }],
+    "anti_patterns": ["failure pattern"],
+    "evolution_insights": ["how centers adapt"]
+  },
+  "center_classifications": [{ "name": "center", "strategy": "destination|convenience|hybrid", "lesson": "takeaway" }],
+  "scoring_criteria": { "criteria": [{ "name": "criterion", "weight": 0.0, "benchmark_value": "value" }] }
+}` }
+            ];
+
+            const benchResult = await chat(benchMessages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+            phase4bResult = safeParseJson(benchResult);
+            console.log(`[pipeline_run] Phase 4b (Benchmark) done`);
+          } catch (benchErr) {
+            console.error("[pipeline_run] Phase 4b error (non-blocking):", benchErr);
+            phase4bResult = { error: String(benchErr) };
+          }
+        }
+
+        // ════════════════════════════════════════════════════════════
         // CREDIBILITY ENGINE (gemini-pro): 4 dimensions + classification
         // ════════════════════════════════════════════════════════════
         let credibilityEngine: any = { error: "not_executed" };

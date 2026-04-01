@@ -3723,6 +3723,7 @@ Responde con:
               verdict: hypothesesResult.model_verdict,
               phase_results_summary: {
                 phase_1: { key_variables: (phase1?.key_variables || []).length },
+                phase_1b: { patterns_planned: phase1b?.total_patterns || 0, sources_needed: phase1b?.total_unique_sources_needed || 0 },
                 phase_2: { sources_found: allSources.length },
                 phase_3: { quality_gate: qgVerdict },
                 phase_4b: phase4bResult ? "available" : "skipped",

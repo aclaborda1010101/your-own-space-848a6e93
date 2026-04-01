@@ -793,8 +793,28 @@ async function executePhase5(runId: string, userId: string, sector: string, obje
 
   const phaseResults = await getRunPhaseResults(runId);
   const phase1 = phaseResults.phase_1 as Record<string, unknown> || {};
+  const phase1b = phaseResults.phase_1b as any || {};
   const phase4 = phaseResults.phase_4 as Record<string, unknown> || {};
   const maxCap = (phase4 as any)?.max_confidence_cap || 0.7;
+
+  // Build pattern_map cross-reference block for Phase 5
+  const patternMap = phase1b?.pattern_map || [];
+  let patternMapCrossRef = "";
+  if (patternMap.length > 0) {
+    const patternList = patternMap.flatMap((l: any) => 
+      (l.patterns || []).map((p: any) => `  - [Capa ${l.layer}] ${p.pattern_name}: ${p.what_to_detect} (método: ${p.detection_method})`)
+    ).join("\n");
+    patternMapCrossRef = `
+
+═══ MAPA DE PATRONES PLANIFICADOS (Phase 1b) ═══
+Debes generar señales para TODOS estos patrones. Si un patrón no tiene señal, explica por qué en "uncovered_patterns".
+
+${patternList}
+
+En tu respuesta, incluye el campo "pattern_coverage" con:
+- covered: patrones del mapa que tienen al menos 1 señal
+- uncovered: patrones del mapa SIN señal, con razón (falta_fuente | irrelevante | datos_insuficientes)`;
+  }
 
   // Get sources for context
   const { data: sources } = await supabase

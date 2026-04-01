@@ -557,6 +557,12 @@ async function executePhase3(runId: string, userId: string) {
   const sector = runData?.sector || "";
   const isFarmacia = /farmac|pharma/i.test(sector);
 
+  // Get pattern_map from Phase 1b for coverage evaluation
+  const phaseResultsInit = await getRunPhaseResults(runId);
+  const phase1b = phaseResultsInit.phase_1b as any || {};
+  const patternMap = phase1b?.pattern_map || [];
+  const totalPatternsPlanned = patternMap.reduce((sum: number, l: any) => sum + (l.patterns?.length || 0), 0);
+
   // Autocorrection loop (up to 2 iterations)
   let qualityGate: any = null;
   const maxIterations = isFarmacia ? 2 : 0;
@@ -575,7 +581,14 @@ async function executePhase3(runId: string, userId: string) {
       : 0;
 
     const reliabilityBonus = avgReliability >= 7 ? 10 : 0;
-    const coveragePct = Math.min(100, sourceList.length * 18 + reliabilityBonus);
+    // If pattern_map exists, coverage = % of patterns with at least 1 source
+    let coveragePct: number;
+    if (totalPatternsPlanned > 0) {
+      // More sources relative to patterns = better coverage
+      coveragePct = Math.min(100, Math.round((sourceList.length / totalPatternsPlanned) * 100));
+    } else {
+      coveragePct = Math.min(100, sourceList.length * 18 + reliabilityBonus);
+    }
     const freshnessPct = Math.min(100, sourceList.filter(s => 
       s.update_frequency && ["daily", "weekly", "monthly", "quarterly", "annual", "biannual", "semi-annual", "yearly", "continuous", "real-time", "realtime", "varies", "irregular", "hourly"].includes(s.update_frequency?.toLowerCase?.() || "")
     ).length / Math.max(sourceList.length, 1) * 100);
@@ -589,9 +602,11 @@ async function executePhase3(runId: string, userId: string) {
       self_healing_iterations: iteration,
       blocking: false,
       gap_analysis: [] as string[],
+      patterns_planned: totalPatternsPlanned,
+      sources_found: sourceList.length,
     };
 
-    if (coveragePct < 80) qualityGate.gap_analysis.push("Cobertura de variables < 80%");
+    if (coveragePct < 80) qualityGate.gap_analysis.push(`Cobertura de patrones < 80% (${coveragePct}%)`);
     if (freshnessPct < 70) qualityGate.gap_analysis.push("Frescura de fuentes < 70%");
     if (sourceTypes.size < 3) qualityGate.gap_analysis.push("Menos de 3 tipos de fuente");
     if (avgReliability < 6) qualityGate.gap_analysis.push("Fiabilidad media < 6/10");

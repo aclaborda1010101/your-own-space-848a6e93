@@ -648,6 +648,27 @@ async function executePhase5(runId: string, userId: string, sector: string, obje
     .select("source_name, source_type, data_type, reliability_score")
     .eq("run_id", runId);
 
+  // Fetch relevant datasets for this run (from Drive ingestion)
+  let datasetContext = "";
+  try {
+    const { data: relevantDatasets } = await supabase
+      .from("pattern_detector_datasets")
+      .select("file_name, classification, relevance_reason, extracted_text")
+      .eq("run_id", runId)
+      .eq("status", "relevant")
+      .order("relevance_score", { ascending: false });
+
+    if (relevantDatasets && relevantDatasets.length > 0) {
+      const datasetSummaries = relevantDatasets.map((d: any) => {
+        const textSample = (d.extracted_text || "").slice(0, 2000);
+        return `- ${d.file_name} [${d.classification}]: ${d.relevance_reason}\n  Extracto: ${textSample}`;
+      }).join("\n\n");
+      datasetContext = `\n\n═══ DATOS PROPIOS DEL PROYECTO (Datasets Drive) ═══\nSe han analizado ${relevantDatasets.length} archivos relevantes del proyecto. Usa esta información para fundamentar patrones con datos reales:\n\n${datasetSummaries}`;
+    }
+  } catch (e) {
+    console.log("No dataset context available:", e);
+  }
+
   // Check for sector-specific composite metrics instructions
   const sectorKey = detectSectorKey(sector);
   let compositeMetricsBlock = "";
@@ -800,6 +821,7 @@ Baseline: ${(phase1 as any)?.baseline_definition || "N/A"}
 Sectores análogos: ${JSON.stringify((phase1 as any)?.analogous_sectors || [])}
 Fuentes disponibles: ${JSON.stringify(sources || [])}
 ${compositeMetricsBlock}
+${datasetContext || ""}
 
 Genera patrones en EXACTAMENTE 5 capas de inteligencia de negocio:
 1. EVIDENTES — Lo que el cliente pide explícitamente. Mínimo 3 patrones.
@@ -2360,6 +2382,27 @@ Responde con JSON:
         let unconventionalSystemRule = "";
         let compositeMetricsBlock = "";
 
+        // Fetch relevant datasets for this run (from Drive ingestion)
+        let datasetContextPipeline = "";
+        try {
+          const { data: relevantDatasets } = await supabase
+            .from("pattern_detector_datasets")
+            .select("file_name, classification, relevance_reason, extracted_text")
+            .eq("run_id", runId)
+            .eq("status", "relevant")
+            .order("relevance_score", { ascending: false });
+
+          if (relevantDatasets && relevantDatasets.length > 0) {
+            const datasetSummaries = relevantDatasets.map((d: any) => {
+              const textSample = (d.extracted_text || "").slice(0, 2000);
+              return `- ${d.file_name} [${d.classification}]: ${d.relevance_reason}\n  Extracto: ${textSample}`;
+            }).join("\n\n");
+            datasetContextPipeline = `\n\n═══ DATOS PROPIOS DEL PROYECTO (Datasets Drive) ═══\nSe han analizado ${relevantDatasets.length} archivos relevantes. Usa esta información para fundamentar patrones con datos reales:\n\n${datasetSummaries}`;
+          }
+        } catch (e) {
+          console.log("No dataset context available in pipeline_run:", e);
+        }
+
         if (sectorKey === "centros_comerciales") {
           unconventionalSystemRule = `
 
@@ -2521,6 +2564,7 @@ Estacionalidad: ${JSON.stringify(phase1?.seasonality_patterns || [])}
 Fuentes disponibles: ${JSON.stringify(allSources.map((s: any) => ({ name: s.source_name, type: s.source_type, data: s.data_type })).slice(0, 20))}
 ${componentVinculationBlock}
 ${compositeMetricsBlock}
+${datasetContextPipeline || ""}
 
 Genera patrones en 5 capas:
 1. Obvia - Lo que cualquier analista vería

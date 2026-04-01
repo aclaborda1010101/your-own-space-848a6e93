@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Switch } from "@/components/ui/switch";
 import { PatternDetectorSetup } from "./PatternDetectorSetup";
 import { PatternIntentReview, TranslatedIntent } from "./PatternIntentReview";
+import { DatasetsDriveTab } from "./DatasetsDriveTab";
 
 const phaseLabels: Record<number, string> = {
   0: "Pendiente", 1: "Dominio", 2: "Fuentes", 3: "Quality Gate",
@@ -539,20 +540,7 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
 
           {/* DATASETS */}
           <TabsContent value="datasets" className="mt-4">
-            <Card className="border-border bg-card">
-              <CardContent className="p-8 text-center">
-                <FileSpreadsheet className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-40" />
-                <p className="text-sm text-muted-foreground mb-2">
-                  Sube datasets propios (CSV, Excel, JSON) para mejorar la confianza del análisis.
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Sin datos propios, el cap de confianza máxima es 70%.
-                </p>
-                <Button variant="outline" size="sm" className="mt-4 gap-1" disabled>
-                  <Plus className="w-4 h-4" /> Subir dataset (próximamente)
-                </Button>
-              </CardContent>
-            </Card>
+            <DatasetsDriveTab runId={currentRun.id} sector={currentRun.sector} businessObjective={currentRun.business_objective || ""} />
           </TabsContent>
 
           {/* BACKTESTING */}

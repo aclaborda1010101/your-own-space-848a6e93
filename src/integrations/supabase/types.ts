@@ -5158,6 +5158,68 @@ export type Database = {
           },
         ]
       }
+      pattern_detector_datasets: {
+        Row: {
+          classification: string | null
+          created_at: string
+          drive_file_id: string
+          error_message: string | null
+          extracted_text: string | null
+          file_mime_type: string | null
+          file_name: string
+          file_size_bytes: number | null
+          id: string
+          relevance_reason: string | null
+          relevance_score: number | null
+          run_id: string
+          source_url: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          classification?: string | null
+          created_at?: string
+          drive_file_id: string
+          error_message?: string | null
+          extracted_text?: string | null
+          file_mime_type?: string | null
+          file_name: string
+          file_size_bytes?: number | null
+          id?: string
+          relevance_reason?: string | null
+          relevance_score?: number | null
+          run_id: string
+          source_url: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          classification?: string | null
+          created_at?: string
+          drive_file_id?: string
+          error_message?: string | null
+          extracted_text?: string | null
+          file_mime_type?: string | null
+          file_name?: string
+          file_size_bytes?: number | null
+          id?: string
+          relevance_reason?: string | null
+          relevance_score?: number | null
+          run_id?: string
+          source_url?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pattern_detector_datasets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pattern_detector_runs: {
         Row: {
           baseline_definition: string | null

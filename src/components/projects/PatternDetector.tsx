@@ -10,7 +10,7 @@ import {
   Radar, Database, Shield, Layers, BarChart3, FileSpreadsheet,
   Plus, Loader2, ChevronDown, ExternalLink, AlertTriangle,
   CheckCircle2, XCircle, TrendingUp, TrendingDown, Minus, Info,
-  Award, Eye, Euro, Target, Lightbulb, RefreshCw,
+  Award, Eye, Euro, Target, Lightbulb, RefreshCw, Key,
 } from "lucide-react";
 import { usePatternDetector, Signal, CredibilityData, EconomicBacktest } from "@/hooks/usePatternDetector";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";

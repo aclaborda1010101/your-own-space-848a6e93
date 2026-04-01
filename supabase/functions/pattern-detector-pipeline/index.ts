@@ -2783,7 +2783,47 @@ Responde con este JSON exacto:
         console.log(`[pipeline_run] Phase 1 (Domain) done`);
 
         // ════════════════════════════════════════════════════════════
-        // PHASE 2: Source Discovery (gemini-flash-lite, mechanical)
+        // PHASE 1b: Pattern Design Map (Pattern-First Architecture)
+        // ════════════════════════════════════════════════════════════
+        const p1bMessages: ChatMessage[] = [
+          { role: "system", content: `Eres un arquitecto de inteligencia de negocio. Diseña el mapa de patrones que se buscarán ANTES de buscar fuentes.
+Para cada patrón defines QUÉ datos necesita y DE DÓNDE podrían obtenerse.
+Responde SOLO con JSON válido.` },
+          { role: "user", content: `Diseña el mapa de patrones para:
+
+Sector: ${sector}
+Geografía: ${geography}
+Objetivo: ${objective}
+Variables clave: ${JSON.stringify(phase1?.key_variables || [])}
+Dinámicas sector: ${phase1?.sector_dynamics || phase1?.sector_analysis || "N/A"}
+${solutionCandidates.length > 0 ? `Solution Candidates: ${JSON.stringify(solutionCandidates).substring(0, 3000)}` : ""}
+
+Mínimo 3 patrones por capa (15-25 total). Cada patrón: qué datos necesita, fuentes ideales, método detección, decisión habilitada.
+
+Responde con JSON:
+{
+  "pattern_map": [
+    {
+      "layer": 1, "layer_name": "Evidentes",
+      "patterns": [
+        {"pattern_name": "nombre", "what_to_detect": "qué", "why_matters": "por qué", "data_needed": ["dato1"], "ideal_sources": ["fuente1"], "minimum_frequency": "monthly", "minimum_history": "12 meses", "detection_method": "trend_analysis", "decision_enabled": "qué decisión habilita", "cross_reference": "dato interno"}
+      ]
+    }
+  ],
+  "total_patterns": 20,
+  "total_unique_sources_needed": 18,
+  "coverage_by_layer": {"1": 4, "2": 4, "3": 5, "4": 4, "5": 3},
+  "source_priority_ranking": [{"source": "nombre", "patterns_served": 3, "layers_covered": [1, 3], "priority": "critical|important|nice_to_have"}]
+}` }
+        ];
+
+        const p1bResult = await chat(p1bMessages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+        const phase1b = safeParseJson(p1bResult) as any;
+        const patternMap = phase1b?.pattern_map || [];
+        console.log(`[pipeline_run] Phase 1b (Pattern Map) done: ${phase1b?.total_patterns || patternMap.reduce((s: number, l: any) => s + (l.patterns?.length || 0), 0)} patterns`);
+
+        // ════════════════════════════════════════════════════════════
+        // PHASE 2: Source Discovery DIRECTED by Pattern Map
         // ════════════════════════════════════════════════════════════
         const unconventionalSources = getUnconventionalSources(sector);
         let unconventionalBlock = "";
@@ -2791,8 +2831,24 @@ Responde con este JSON exacto:
           unconventionalBlock = `\nFUENTES NO CONVENCIONALES ESPECÍFICAS DEL SECTOR (INCLUIR OBLIGATORIAMENTE):\n${unconventionalSources.map(s => `- [Tier ${s.tier}] ${s.name} (${s.type}, freq: ${s.frequency}, status: ${s.status})\n  Hipótesis: ${s.hypothesis}\n  Impacto: ${s.impact} | Coste integración: ${s.integration_cost}`).join("\n")}`;
         }
 
+        // Build pattern-map directed discovery block
+        let patternMapDirectedBlock = "";
+        if (patternMap.length > 0) {
+          const allNeededSources: string[] = [];
+          const patternSummaries = patternMap.map((layer: any) => {
+            const patterns = (layer.patterns || []).map((p: any) => {
+              (p.ideal_sources || []).forEach((s: string) => allNeededSources.push(s));
+              return `  - ${p.pattern_name}: necesita [${(p.data_needed || []).join(", ")}] de [${(p.ideal_sources || []).join(", ")}] (freq: ${p.minimum_frequency}, historia: ${p.minimum_history})`;
+            }).join("\n");
+            return `Capa ${layer.layer} (${layer.layer_name}):\n${patterns}`;
+          }).join("\n\n");
+
+          patternMapDirectedBlock = `\n═══ MAPA DE PATRONES (busca fuentes ESPECÍFICAS para cada uno) ═══\n${patternSummaries}\n\nFUENTES IDEALES:\n${[...new Set(allNeededSources)].map(s => `- ${s}`).join("\n")}\n\nMÍNIMO 15 fuentes. Cada fuente debe indicar qué patrones del mapa sirve.`;
+        }
+
         const p2Messages: ChatMessage[] = [
           { role: "system", content: `Eres un investigador de datos experto. Identifica fuentes de datos públicas para análisis sectorial.
+${patternMap.length > 0 ? "IMPORTANTE: Tienes un MAPA DE PATRONES. Busca fuentes ESPECÍFICAS para cada patrón, no genéricas." : ""}
 Responde SOLO con JSON válido.` },
           { role: "user", content: `Identifica las mejores fuentes de datos:
 
@@ -2800,6 +2856,7 @@ Sector: ${sector}
 Geografía: ${geography}
 Objetivo: ${objective}
 Variables clave: ${JSON.stringify(phase1?.key_variables || [])}
+${patternMapDirectedBlock}
 
 ${solutionCandidates.length > 0 ? `CONTEXTO ADICIONAL:\nSolution Candidates: ${JSON.stringify(solutionCandidates).substring(0, 3000)}\nBusca fuentes que ESPECÍFICAMENTE alimenten estos candidatos.` : ""}
 ${archSignals.length > 0 ? `Architecture Signals: ${JSON.stringify(archSignals).substring(0, 2000)}` : ""}
@@ -2814,11 +2871,11 @@ Responde con JSON:
       "coverage_period": "2020-2026",
       "status": "available|pending|requires_agreement",
       "hypothesis": "hipótesis que soporta", "impact": "high|medium|low",
-      "integration_cost": "low|medium|high", "cost": "gratis|freemium|pago"
+      "integration_cost": "low|medium|high", "cost": "gratis|freemium|pago"${patternMap.length > 0 ? ',\n      "patterns_served": ["patrón1"]' : ''}
     }
   ],
   "search_queries": ["query1", "query2", "query3"],
-  "proxy_queries": ["proxy1", "proxy2"]
+  "proxy_queries": ["proxy1", "proxy2"]${patternMap.length > 0 ? ',\n  "pattern_coverage": {"covered_patterns": 18, "total_patterns": 20, "uncovered": []}' : ''}
 }` }
         ];
 

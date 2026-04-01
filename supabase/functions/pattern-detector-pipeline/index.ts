@@ -648,6 +648,27 @@ async function executePhase5(runId: string, userId: string, sector: string, obje
     .select("source_name, source_type, data_type, reliability_score")
     .eq("run_id", runId);
 
+  // Fetch relevant datasets for this run (from Drive ingestion)
+  let datasetContext = "";
+  try {
+    const { data: relevantDatasets } = await supabase
+      .from("pattern_detector_datasets")
+      .select("file_name, classification, relevance_reason, extracted_text")
+      .eq("run_id", runId)
+      .eq("status", "relevant")
+      .order("relevance_score", { ascending: false });
+
+    if (relevantDatasets && relevantDatasets.length > 0) {
+      const datasetSummaries = relevantDatasets.map((d: any) => {
+        const textSample = (d.extracted_text || "").slice(0, 2000);
+        return `- ${d.file_name} [${d.classification}]: ${d.relevance_reason}\n  Extracto: ${textSample}`;
+      }).join("\n\n");
+      datasetContext = `\n\n═══ DATOS PROPIOS DEL PROYECTO (Datasets Drive) ═══\nSe han analizado ${relevantDatasets.length} archivos relevantes del proyecto. Usa esta información para fundamentar patrones con datos reales:\n\n${datasetSummaries}`;
+    }
+  } catch (e) {
+    console.log("No dataset context available:", e);
+  }
+
   // Check for sector-specific composite metrics instructions
   const sectorKey = detectSectorKey(sector);
   let compositeMetricsBlock = "";

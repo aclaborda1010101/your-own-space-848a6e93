@@ -74,6 +74,8 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
   const [reviewIntent, setReviewIntent] = useState<TranslatedIntent | null>(null);
   const [reviewParams, setReviewParams] = useState<{ sector: string; geography?: string; time_horizon?: string; business_objective?: string } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [forgeExporting, setForgeExporting] = useState(false);
+  const [forgeExported, setForgeExported] = useState(false);
 
   const isRunning = polling || currentRun?.status?.startsWith("running_");
   const progress = currentRun ? (currentRun.current_phase / 7) * 100 : 0;

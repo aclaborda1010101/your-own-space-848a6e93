@@ -2135,6 +2135,7 @@ IMPORTANTE:
           await executePhase3(run_id, run.user_id);
           await executePhase4(run_id);
           await executePhase5(run_id, run.user_id, run.sector, run.business_objective || "");
+          await executePhase4b(run_id, run.sector);
           await executeCredibilityEngine(run_id, run.user_id);
           await executePhase6(run_id, run.user_id, run.sector);
           await executeEconomicBacktesting(run_id, run.user_id, run.sector);

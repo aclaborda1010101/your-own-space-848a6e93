@@ -10,8 +10,10 @@ import {
   Radar, Database, Shield, Layers, BarChart3, FileSpreadsheet,
   Plus, Loader2, ChevronDown, ExternalLink, AlertTriangle,
   CheckCircle2, XCircle, TrendingUp, TrendingDown, Minus, Info,
-  Award, Eye, Euro, Target, Lightbulb, RefreshCw, Key,
+  Award, Eye, Euro, Target, Lightbulb, RefreshCw, Key, Upload,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { usePatternDetector, Signal, CredibilityData, EconomicBacktest } from "@/hooks/usePatternDetector";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
@@ -72,6 +74,8 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
   const [reviewIntent, setReviewIntent] = useState<TranslatedIntent | null>(null);
   const [reviewParams, setReviewParams] = useState<{ sector: string; geography?: string; time_horizon?: string; business_objective?: string } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [forgeExporting, setForgeExporting] = useState(false);
+  const [forgeExported, setForgeExported] = useState(false);
 
   const isRunning = polling || currentRun?.status?.startsWith("running_");
   const progress = currentRun ? (currentRun.current_phase / 7) * 100 : 0;
@@ -165,7 +169,7 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
 
       {/* Action buttons */}
       {currentRun && !isRunning && (
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => {
             if (currentRun) {
               createRun({
@@ -181,6 +185,41 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
           <Button variant="outline" size="sm" onClick={() => setSetupOpen(true)} className="gap-1">
             <Plus className="w-4 h-4" /> Nuevo análisis
           </Button>
+          {currentRun.status === "completed" && currentRun.model_verdict === "VALID" && (
+            <Button
+              variant={forgeExported ? "ghost" : "default"}
+              size="sm"
+              disabled={forgeExporting || forgeExported}
+              onClick={async () => {
+                setForgeExporting(true);
+                try {
+                  const { data, error } = await supabase.functions.invoke("publish-to-forge", {
+                    body: { run_id: currentRun.id },
+                  });
+                  if (error) throw error;
+                  if (data?.success) {
+                    toast.success(`${data.count} documentos exportados a Expert Forge`);
+                    setForgeExported(true);
+                  } else {
+                    toast.error(data?.error || "Error al exportar");
+                  }
+                } catch (err: any) {
+                  toast.error(`Error: ${err.message}`);
+                } finally {
+                  setForgeExporting(false);
+                }
+              }}
+              className="gap-1"
+            >
+              {forgeExporting ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Exportando...</>
+              ) : forgeExported ? (
+                <><CheckCircle2 className="w-4 h-4" /> Exportado ✓</>
+              ) : (
+                <><Upload className="w-4 h-4" /> Exportar a Expert Forge</>
+              )}
+            </Button>
+          )}
         </div>
       )}
 

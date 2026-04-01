@@ -5061,36 +5061,48 @@ export type Database = {
       pattern_api_keys: {
         Row: {
           api_key: string
+          app_name: string | null
           created_at: string | null
           id: string
           is_active: boolean | null
+          is_global: boolean | null
           last_used_at: string | null
           monthly_limit: number | null
           monthly_usage: number | null
           name: string | null
-          run_id: string
+          project_id: string | null
+          run_id: string | null
+          user_id: string | null
         }
         Insert: {
           api_key: string
+          app_name?: string | null
           created_at?: string | null
           id?: string
           is_active?: boolean | null
+          is_global?: boolean | null
           last_used_at?: string | null
           monthly_limit?: number | null
           monthly_usage?: number | null
           name?: string | null
-          run_id: string
+          project_id?: string | null
+          run_id?: string | null
+          user_id?: string | null
         }
         Update: {
           api_key?: string
+          app_name?: string | null
           created_at?: string | null
           id?: string
           is_active?: boolean | null
+          is_global?: boolean | null
           last_used_at?: string | null
           monthly_limit?: number | null
           monthly_usage?: number | null
           name?: string | null
-          run_id?: string
+          project_id?: string | null
+          run_id?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -5340,6 +5352,94 @@ export type Database = {
             columns: ["run_id"]
             isOneToOne: false
             referencedRelation: "pattern_detector_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pattern_feedback: {
+        Row: {
+          api_key_id: string | null
+          created_at: string | null
+          feedback_type: string
+          geography: string | null
+          id: string
+          metrics: Json | null
+          notes: string | null
+          outcome: string | null
+          processed: boolean | null
+          related_signals: string[] | null
+          sector: string | null
+        }
+        Insert: {
+          api_key_id?: string | null
+          created_at?: string | null
+          feedback_type: string
+          geography?: string | null
+          id?: string
+          metrics?: Json | null
+          notes?: string | null
+          outcome?: string | null
+          processed?: boolean | null
+          related_signals?: string[] | null
+          sector?: string | null
+        }
+        Update: {
+          api_key_id?: string | null
+          created_at?: string | null
+          feedback_type?: string
+          geography?: string | null
+          id?: string
+          metrics?: Json | null
+          notes?: string | null
+          outcome?: string | null
+          processed?: boolean | null
+          related_signals?: string[] | null
+          sector?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pattern_feedback_api_key_id_fkey"
+            columns: ["api_key_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_api_keys"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pattern_learning_log: {
+        Row: {
+          adjustment_type: string
+          created_at: string | null
+          feedback_id: string | null
+          id: string
+          new_credibility: string | null
+          old_credibility: string | null
+          signal_name: string
+        }
+        Insert: {
+          adjustment_type: string
+          created_at?: string | null
+          feedback_id?: string | null
+          id?: string
+          new_credibility?: string | null
+          old_credibility?: string | null
+          signal_name: string
+        }
+        Update: {
+          adjustment_type?: string
+          created_at?: string | null
+          feedback_id?: string | null
+          id?: string
+          new_credibility?: string | null
+          old_credibility?: string | null
+          signal_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pattern_learning_log_feedback_id_fkey"
+            columns: ["feedback_id"]
+            isOneToOne: false
+            referencedRelation: "pattern_feedback"
             referencedColumns: ["id"]
           },
         ]

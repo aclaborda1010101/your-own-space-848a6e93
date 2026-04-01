@@ -291,6 +291,112 @@ Responde con este JSON exacto:
 }
 
 // ═══════════════════════════════════════
+// PHASE 1b: Pattern Design Map (Pattern-First Architecture)
+// ═══════════════════════════════════════
+
+async function executePhase1b(runId: string, sector: string, geography: string, objective: string) {
+  await updateRun(runId, { status: "running_phase_1b", current_phase: 1 });
+
+  const phaseResults = await getRunPhaseResults(runId);
+  const phase1 = phaseResults.phase_1 as Record<string, unknown> || {};
+
+  const messages: ChatMessage[] = [
+    {
+      role: "system",
+      content: `Eres un arquitecto de inteligencia de negocio senior. Tu tarea es DISEÑAR el mapa de patrones que se buscarán ANTES de buscar fuentes de datos.
+Para cada patrón defines QUÉ datos necesita y DE DÓNDE podrían obtenerse. Esto guía la búsqueda de fuentes posterior.
+Responde SOLO con JSON válido.`
+    },
+    {
+      role: "user",
+      content: `Diseña el mapa completo de patrones a detectar para este análisis:
+
+Sector: ${sector}
+Geografía: ${geography}
+Objetivo: ${objective}
+Análisis sectorial: ${(phase1 as any)?.sector_analysis || "N/A"}
+Variables clave: ${JSON.stringify((phase1 as any)?.key_variables || [])}
+Hipótesis causales: ${JSON.stringify((phase1 as any)?.causal_hypotheses || [])}
+KPIs sectoriales: ${JSON.stringify((phase1 as any)?.sector_specific_kpis || [])}
+Sectores análogos: ${JSON.stringify((phase1 as any)?.analogous_sectors || [])}
+
+Para cada una de las 5 CAPAS DE INTELIGENCIA, define los patrones específicos que se buscarán.
+Mínimo 3 patrones por capa (15-25 total). Cada patrón debe declarar:
+- Qué datos necesita exactamente
+- Qué fuentes ideales proporcionarían esos datos
+- Qué método de detección se usará
+- Qué decisión de negocio habilita
+- Frecuencia mínima del dato y profundidad histórica requerida
+
+Responde con JSON:
+{
+  "pattern_map": [
+    {
+      "layer": 1,
+      "layer_name": "Evidentes",
+      "patterns": [
+        {
+          "pattern_name": "nombre específico del patrón",
+          "what_to_detect": "qué se busca detectar concretamente",
+          "why_matters": "por qué importa para el negocio",
+          "data_needed": ["tipo de dato 1", "tipo de dato 2"],
+          "ideal_sources": ["fuente ideal 1 con URL si posible", "fuente 2"],
+          "minimum_frequency": "daily|weekly|monthly|quarterly",
+          "minimum_history": "meses o años necesarios",
+          "detection_method": "trend_analysis|correlation|anomaly|regression|clustering|causal|formula_composite",
+          "decision_enabled": "qué decisión concreta habilita este patrón",
+          "cross_reference": "con qué dato interno del cliente se cruza"
+        }
+      ]
+    },
+    {
+      "layer": 2,
+      "layer_name": "Proceso / Analítica Avanzada",
+      "patterns": [...]
+    },
+    {
+      "layer": 3,
+      "layer_name": "Dolor / Señales Débiles",
+      "patterns": [...]
+    },
+    {
+      "layer": 4,
+      "layer_name": "Éxito Oculto / Inteligencia Lateral",
+      "patterns": [...]
+    },
+    {
+      "layer": 5,
+      "layer_name": "Sistémico / Edge Extremo",
+      "patterns": [...]
+    }
+  ],
+  "total_patterns": 20,
+  "total_unique_sources_needed": 18,
+  "coverage_by_layer": {"1": 4, "2": 4, "3": 5, "4": 4, "5": 3},
+  "source_priority_ranking": [
+    {"source": "nombre fuente", "patterns_served": 3, "layers_covered": [1, 3, 4], "priority": "critical|important|nice_to_have"}
+  ]
+}`
+    }
+  ];
+
+  try {
+    const result = await chat(messages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+    const parsed = safeParseJson(result) as any;
+
+    phaseResults.phase_1b = parsed;
+    await updateRun(runId, { phase_results: phaseResults, status: "phase_1b_complete" });
+
+    console.log(`[Phase 1b] Pattern map done: ${parsed.total_patterns || "?"} patterns, ${parsed.total_unique_sources_needed || "?"} sources needed`);
+    return parsed;
+  } catch (err) {
+    console.error("Phase 1b error:", err);
+    await updateRun(runId, { status: "failed", error_log: `Phase 1b failed: ${err}` });
+    throw err;
+  }
+}
+
+// ═══════════════════════════════════════
 // PHASE 2: Source Discovery (AI-based, no Firecrawl)
 // ═══════════════════════════════════════
 
@@ -299,6 +405,7 @@ async function executePhase2(runId: string, userId: string, sector: string, geog
 
   const phaseResults = await getRunPhaseResults(runId);
   const phase1 = phaseResults.phase_1 as Record<string, unknown> || {};
+  const phase1b = phaseResults.phase_1b as Record<string, unknown> || {};
 
   // Check for unconventional sources for this sector
   const unconventionalSources = getUnconventionalSources(sector);
@@ -317,10 +424,38 @@ ${unconventionalSources.map(s => `- [Tier ${s.tier}] ${s.name} (${s.type}, freq:
 IMPORTANTE: Incluye TODAS estas fuentes en tu respuesta, manteniendo el tier y status indicados.`;
   }
 
+  // Build pattern-map directed source discovery block
+  let patternMapBlock = "";
+  const patternMap = (phase1b as any)?.pattern_map || [];
+  if (patternMap.length > 0) {
+    const allNeededSources: string[] = [];
+    const patternSummaries = patternMap.map((layer: any) => {
+      const patterns = (layer.patterns || []).map((p: any) => {
+        (p.ideal_sources || []).forEach((s: string) => allNeededSources.push(s));
+        return `  - ${p.pattern_name}: necesita [${(p.data_needed || []).join(", ")}] de [${(p.ideal_sources || []).join(", ")}] (freq: ${p.minimum_frequency}, historia: ${p.minimum_history})`;
+      }).join("\n");
+      return `Capa ${layer.layer} (${layer.layer_name}):\n${patterns}`;
+    }).join("\n\n");
+
+    patternMapBlock = `
+
+═══ MAPA DE PATRONES A SERVIR (OBLIGATORIO) ═══
+Los siguientes patrones han sido diseñados y necesitan fuentes ESPECÍFICAS.
+Tu tarea es encontrar la MEJOR fuente real para CADA patrón. Mínimo 15 fuentes.
+
+${patternSummaries}
+
+FUENTES IDEALES IDENTIFICADAS (busca estas + alternativas):
+${[...new Set(allNeededSources)].map(s => `- ${s}`).join("\n")}
+
+Para cada fuente que incluyas, indica qué patrones del mapa sirve en el campo "patterns_served".`;
+  }
+
   const messages: ChatMessage[] = [
     {
       role: "system",
       content: `Eres un investigador de datos experto. Tu tarea es identificar las mejores fuentes de datos públicas para un análisis sectorial.
+${patternMap.length > 0 ? "IMPORTANTE: Tienes un MAPA DE PATRONES que define exactamente qué fuentes se necesitan. Busca fuentes ESPECÍFICAS para cada patrón, no fuentes genéricas." : ""}
 Responde SOLO con JSON válido.`
     },
     {
@@ -331,6 +466,7 @@ Sector: ${sector}
 Geografía: ${geography}
 Objetivo: ${objective}
 Variables clave: ${JSON.stringify((phase1 as any)?.key_variables || [])}
+${patternMapBlock}
 ${unconventionalBlock}
 
 Para cada fuente, indica:
@@ -345,6 +481,9 @@ Para cada fuente, indica:
 - Hipótesis que soporta (hypothesis)
 - Impacto estimado (impact): high, medium, low
 - Coste de integración (integration_cost): high, medium, low
+${patternMap.length > 0 ? '- patterns_served: lista de nombres de patrones del mapa que esta fuente alimenta' : ''}
+
+${patternMap.length > 0 ? 'MÍNIMO 15 fuentes. Cada patrón del mapa debe tener al menos 1 fuente.' : ''}
 
 Responde con JSON:
 {
@@ -361,11 +500,11 @@ Responde con JSON:
       "status": "available|pending|requires_agreement",
       "hypothesis": "hipótesis que soporta",
       "impact": "high|medium|low",
-      "integration_cost": "low|medium|high"
+      "integration_cost": "low|medium|high"${patternMap.length > 0 ? ',\n      "patterns_served": ["patrón1", "patrón2"]' : ''}
     }
   ],
   "search_queries": ["query1", "query2", "query3", "query4", "query5"],
-  "proxy_queries": ["proxy1", "proxy2", "proxy3"]
+  "proxy_queries": ["proxy1", "proxy2", "proxy3"]${patternMap.length > 0 ? ',\n  "pattern_coverage": {"covered_patterns": 18, "total_patterns": 20, "uncovered": ["patrón sin fuente"]}' : ''}
 }`
     }
   ];
@@ -418,6 +557,12 @@ async function executePhase3(runId: string, userId: string) {
   const sector = runData?.sector || "";
   const isFarmacia = /farmac|pharma/i.test(sector);
 
+  // Get pattern_map from Phase 1b for coverage evaluation
+  const phaseResultsInit = await getRunPhaseResults(runId);
+  const phase1b = phaseResultsInit.phase_1b as any || {};
+  const patternMap = phase1b?.pattern_map || [];
+  const totalPatternsPlanned = patternMap.reduce((sum: number, l: any) => sum + (l.patterns?.length || 0), 0);
+
   // Autocorrection loop (up to 2 iterations)
   let qualityGate: any = null;
   const maxIterations = isFarmacia ? 2 : 0;
@@ -436,7 +581,14 @@ async function executePhase3(runId: string, userId: string) {
       : 0;
 
     const reliabilityBonus = avgReliability >= 7 ? 10 : 0;
-    const coveragePct = Math.min(100, sourceList.length * 18 + reliabilityBonus);
+    // If pattern_map exists, coverage = % of patterns with at least 1 source
+    let coveragePct: number;
+    if (totalPatternsPlanned > 0) {
+      // More sources relative to patterns = better coverage
+      coveragePct = Math.min(100, Math.round((sourceList.length / totalPatternsPlanned) * 100));
+    } else {
+      coveragePct = Math.min(100, sourceList.length * 18 + reliabilityBonus);
+    }
     const freshnessPct = Math.min(100, sourceList.filter(s => 
       s.update_frequency && ["daily", "weekly", "monthly", "quarterly", "annual", "biannual", "semi-annual", "yearly", "continuous", "real-time", "realtime", "varies", "irregular", "hourly"].includes(s.update_frequency?.toLowerCase?.() || "")
     ).length / Math.max(sourceList.length, 1) * 100);
@@ -450,9 +602,11 @@ async function executePhase3(runId: string, userId: string) {
       self_healing_iterations: iteration,
       blocking: false,
       gap_analysis: [] as string[],
+      patterns_planned: totalPatternsPlanned,
+      sources_found: sourceList.length,
     };
 
-    if (coveragePct < 80) qualityGate.gap_analysis.push("Cobertura de variables < 80%");
+    if (coveragePct < 80) qualityGate.gap_analysis.push(`Cobertura de patrones < 80% (${coveragePct}%)`);
     if (freshnessPct < 70) qualityGate.gap_analysis.push("Frescura de fuentes < 70%");
     if (sourceTypes.size < 3) qualityGate.gap_analysis.push("Menos de 3 tipos de fuente");
     if (avgReliability < 6) qualityGate.gap_analysis.push("Fiabilidad media < 6/10");
@@ -639,8 +793,28 @@ async function executePhase5(runId: string, userId: string, sector: string, obje
 
   const phaseResults = await getRunPhaseResults(runId);
   const phase1 = phaseResults.phase_1 as Record<string, unknown> || {};
+  const phase1b = phaseResults.phase_1b as any || {};
   const phase4 = phaseResults.phase_4 as Record<string, unknown> || {};
   const maxCap = (phase4 as any)?.max_confidence_cap || 0.7;
+
+  // Build pattern_map cross-reference block for Phase 5
+  const patternMap = phase1b?.pattern_map || [];
+  let patternMapCrossRef = "";
+  if (patternMap.length > 0) {
+    const patternList = patternMap.flatMap((l: any) => 
+      (l.patterns || []).map((p: any) => `  - [Capa ${l.layer}] ${p.pattern_name}: ${p.what_to_detect} (método: ${p.detection_method})`)
+    ).join("\n");
+    patternMapCrossRef = `
+
+═══ MAPA DE PATRONES PLANIFICADOS (Phase 1b) ═══
+Debes generar señales para TODOS estos patrones. Si un patrón no tiene señal, explica por qué en "uncovered_patterns".
+
+${patternList}
+
+En tu respuesta, incluye el campo "pattern_coverage" con:
+- covered: patrones del mapa que tienen al menos 1 señal
+- uncovered: patrones del mapa SIN señal, con razón (falta_fuente | irrelevante | datos_insuficientes)`;
+  }
 
   // Get sources for context
   const { data: sources } = await supabase
@@ -821,6 +995,7 @@ Baseline: ${(phase1 as any)?.baseline_definition || "N/A"}
 Sectores análogos: ${JSON.stringify((phase1 as any)?.analogous_sectors || [])}
 Fuentes disponibles: ${JSON.stringify(sources || [])}
 ${compositeMetricsBlock}
+${patternMapCrossRef}
 ${datasetContext || ""}
 
 Genera patrones en EXACTAMENTE 5 capas de inteligencia de negocio:
@@ -2410,6 +2585,7 @@ IMPORTANTE:
       const bgPromise = (async () => {
         try {
           await executePhase1(run_id, run.sector, run.geography || "", run.time_horizon || "", run.business_objective || "");
+          await executePhase1b(run_id, run.sector, run.geography || "", run.business_objective || "");
           await executePhase2(run_id, run.user_id, run.sector, run.geography || "", run.business_objective || "");
           await executePhase3(run_id, run.user_id);
           await executePhase4(run_id);
@@ -2607,7 +2783,47 @@ Responde con este JSON exacto:
         console.log(`[pipeline_run] Phase 1 (Domain) done`);
 
         // ════════════════════════════════════════════════════════════
-        // PHASE 2: Source Discovery (gemini-flash-lite, mechanical)
+        // PHASE 1b: Pattern Design Map (Pattern-First Architecture)
+        // ════════════════════════════════════════════════════════════
+        const p1bMessages: ChatMessage[] = [
+          { role: "system", content: `Eres un arquitecto de inteligencia de negocio. Diseña el mapa de patrones que se buscarán ANTES de buscar fuentes.
+Para cada patrón defines QUÉ datos necesita y DE DÓNDE podrían obtenerse.
+Responde SOLO con JSON válido.` },
+          { role: "user", content: `Diseña el mapa de patrones para:
+
+Sector: ${sector}
+Geografía: ${geography}
+Objetivo: ${objective}
+Variables clave: ${JSON.stringify(phase1?.key_variables || [])}
+Dinámicas sector: ${phase1?.sector_dynamics || phase1?.sector_analysis || "N/A"}
+${solutionCandidates.length > 0 ? `Solution Candidates: ${JSON.stringify(solutionCandidates).substring(0, 3000)}` : ""}
+
+Mínimo 3 patrones por capa (15-25 total). Cada patrón: qué datos necesita, fuentes ideales, método detección, decisión habilitada.
+
+Responde con JSON:
+{
+  "pattern_map": [
+    {
+      "layer": 1, "layer_name": "Evidentes",
+      "patterns": [
+        {"pattern_name": "nombre", "what_to_detect": "qué", "why_matters": "por qué", "data_needed": ["dato1"], "ideal_sources": ["fuente1"], "minimum_frequency": "monthly", "minimum_history": "12 meses", "detection_method": "trend_analysis", "decision_enabled": "qué decisión habilita", "cross_reference": "dato interno"}
+      ]
+    }
+  ],
+  "total_patterns": 20,
+  "total_unique_sources_needed": 18,
+  "coverage_by_layer": {"1": 4, "2": 4, "3": 5, "4": 4, "5": 3},
+  "source_priority_ranking": [{"source": "nombre", "patterns_served": 3, "layers_covered": [1, 3], "priority": "critical|important|nice_to_have"}]
+}` }
+        ];
+
+        const p1bResult = await chat(p1bMessages, { model: "gemini-pro", responseFormat: "json", maxTokens: 8192 });
+        const phase1b = safeParseJson(p1bResult) as any;
+        const patternMap = phase1b?.pattern_map || [];
+        console.log(`[pipeline_run] Phase 1b (Pattern Map) done: ${phase1b?.total_patterns || patternMap.reduce((s: number, l: any) => s + (l.patterns?.length || 0), 0)} patterns`);
+
+        // ════════════════════════════════════════════════════════════
+        // PHASE 2: Source Discovery DIRECTED by Pattern Map
         // ════════════════════════════════════════════════════════════
         const unconventionalSources = getUnconventionalSources(sector);
         let unconventionalBlock = "";
@@ -2615,8 +2831,24 @@ Responde con este JSON exacto:
           unconventionalBlock = `\nFUENTES NO CONVENCIONALES ESPECÍFICAS DEL SECTOR (INCLUIR OBLIGATORIAMENTE):\n${unconventionalSources.map(s => `- [Tier ${s.tier}] ${s.name} (${s.type}, freq: ${s.frequency}, status: ${s.status})\n  Hipótesis: ${s.hypothesis}\n  Impacto: ${s.impact} | Coste integración: ${s.integration_cost}`).join("\n")}`;
         }
 
+        // Build pattern-map directed discovery block
+        let patternMapDirectedBlock = "";
+        if (patternMap.length > 0) {
+          const allNeededSources: string[] = [];
+          const patternSummaries = patternMap.map((layer: any) => {
+            const patterns = (layer.patterns || []).map((p: any) => {
+              (p.ideal_sources || []).forEach((s: string) => allNeededSources.push(s));
+              return `  - ${p.pattern_name}: necesita [${(p.data_needed || []).join(", ")}] de [${(p.ideal_sources || []).join(", ")}] (freq: ${p.minimum_frequency}, historia: ${p.minimum_history})`;
+            }).join("\n");
+            return `Capa ${layer.layer} (${layer.layer_name}):\n${patterns}`;
+          }).join("\n\n");
+
+          patternMapDirectedBlock = `\n═══ MAPA DE PATRONES (busca fuentes ESPECÍFICAS para cada uno) ═══\n${patternSummaries}\n\nFUENTES IDEALES:\n${[...new Set(allNeededSources)].map(s => `- ${s}`).join("\n")}\n\nMÍNIMO 15 fuentes. Cada fuente debe indicar qué patrones del mapa sirve.`;
+        }
+
         const p2Messages: ChatMessage[] = [
           { role: "system", content: `Eres un investigador de datos experto. Identifica fuentes de datos públicas para análisis sectorial.
+${patternMap.length > 0 ? "IMPORTANTE: Tienes un MAPA DE PATRONES. Busca fuentes ESPECÍFICAS para cada patrón, no genéricas." : ""}
 Responde SOLO con JSON válido.` },
           { role: "user", content: `Identifica las mejores fuentes de datos:
 
@@ -2624,6 +2856,7 @@ Sector: ${sector}
 Geografía: ${geography}
 Objetivo: ${objective}
 Variables clave: ${JSON.stringify(phase1?.key_variables || [])}
+${patternMapDirectedBlock}
 
 ${solutionCandidates.length > 0 ? `CONTEXTO ADICIONAL:\nSolution Candidates: ${JSON.stringify(solutionCandidates).substring(0, 3000)}\nBusca fuentes que ESPECÍFICAMENTE alimenten estos candidatos.` : ""}
 ${archSignals.length > 0 ? `Architecture Signals: ${JSON.stringify(archSignals).substring(0, 2000)}` : ""}
@@ -2638,11 +2871,11 @@ Responde con JSON:
       "coverage_period": "2020-2026",
       "status": "available|pending|requires_agreement",
       "hypothesis": "hipótesis que soporta", "impact": "high|medium|low",
-      "integration_cost": "low|medium|high", "cost": "gratis|freemium|pago"
+      "integration_cost": "low|medium|high", "cost": "gratis|freemium|pago"${patternMap.length > 0 ? ',\n      "patterns_served": ["patrón1"]' : ''}
     }
   ],
   "search_queries": ["query1", "query2", "query3"],
-  "proxy_queries": ["proxy1", "proxy2"]
+  "proxy_queries": ["proxy1", "proxy2"]${patternMap.length > 0 ? ',\n  "pattern_coverage": {"covered_patterns": 18, "total_patterns": 20, "uncovered": []}' : ''}
 }` }
         ];
 
@@ -2660,7 +2893,10 @@ Responde con JSON:
           : 0;
 
         const reliabilityBonus = avgReliability >= 7 ? 10 : 0;
-        const coveragePct = Math.min(100, allSources.length * 18 + reliabilityBonus);
+        const totalPatternsPlanned = patternMap.reduce((s: number, l: any) => s + (l.patterns?.length || 0), 0);
+        const coveragePct = totalPatternsPlanned > 0
+          ? Math.min(100, Math.round((allSources.length / totalPatternsPlanned) * 100))
+          : Math.min(100, allSources.length * 18 + reliabilityBonus);
 
         let qgVerdict: "PASS" | "PASS_CONDITIONAL" = "PASS";
         let confidenceCap = 1.0;
@@ -2871,6 +3107,15 @@ Estacionalidad: ${JSON.stringify(phase1?.seasonality_patterns || [])}
 Fuentes disponibles: ${JSON.stringify(allSources.map((s: any) => ({ name: s.source_name, type: s.source_type, data: s.data_type })).slice(0, 20))}
 ${componentVinculationBlock}
 ${compositeMetricsBlock}
+${(() => {
+  if (patternMap.length > 0) {
+    const patternList = patternMap.flatMap((l: any) => 
+      (l.patterns || []).map((p: any) => `  - [Capa ${l.layer}] ${p.pattern_name}: ${p.what_to_detect} (método: ${p.detection_method})`)
+    ).join("\n");
+    return `\n═══ MAPA DE PATRONES PLANIFICADOS (Phase 1b) ═══\nGenera señales para TODOS estos patrones. Si alguno no tiene señal, explica por qué.\n\n${patternList}\n\nIncluye "pattern_coverage" en tu respuesta: {covered: [...], uncovered: [{name, reason}]}`;
+  }
+  return "";
+})()}
 ${datasetContextPipeline || ""}
 
 Genera patrones en 5 capas:
@@ -3478,6 +3723,7 @@ Responde con:
               verdict: hypothesesResult.model_verdict,
               phase_results_summary: {
                 phase_1: { key_variables: (phase1?.key_variables || []).length },
+                phase_1b: { patterns_planned: phase1b?.total_patterns || 0, sources_needed: phase1b?.total_unique_sources_needed || 0 },
                 phase_2: { sources_found: allSources.length },
                 phase_3: { quality_gate: qgVerdict },
                 phase_4b: phase4bResult ? "available" : "skipped",
@@ -3676,6 +3922,8 @@ Responde con:
 
         // ── Final output ──
         const detectorOutput = {
+          pattern_design_map: phase1b?.pattern_map || [],
+          pattern_coverage: phase2?.pattern_coverage || null,
           signals_by_layer: signalsByLayer,
           credibility_engine: credibilityEngine,
           backtesting: {

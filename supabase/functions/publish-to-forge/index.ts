@@ -125,6 +125,7 @@ Deno.serve(async (req) => {
       }],
     };
 
+    console.log("Expert Forge payload:", JSON.stringify(payload));
     console.log(`Sending ${totalItems} patterns to Expert Forge (${signals.length} signals, ${hypotheses.length} hypotheses, ${dataSources.length} sources)`);
 
     const resp = await fetch(forgeGatewayUrl, {

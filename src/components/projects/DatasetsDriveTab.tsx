@@ -152,10 +152,28 @@ export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
       .eq("id", fileId);
   };
 
+  const handleResume = async () => {
+    setResuming(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("drive-folder-ingest", {
+        body: { action: "resume", run_id: runId, sector, business_objective: businessObjective },
+      });
+      if (error) throw error;
+      toast.success(`${data?.unpaused || 0} archivos reanudados. Procesamiento reiniciado.`);
+      setPolling(true);
+      setClassifying(true);
+      await fetchStatus();
+    } catch (err) {
+      console.error("Resume error:", err);
+      toast.error("Error al reanudar el procesamiento");
+    } finally {
+      setResuming(false);
+    }
+  };
+
   const isProcessing = listing || classifying;
   const progressPct = stats.total > 0 ? ((stats.relevant + stats.irrelevant + stats.error) / stats.total) * 100 : 0;
-
-  return (
+  const hasPausedFiles = stats.paused > 0;
     <div className="space-y-4">
       {/* Drive URL input */}
       <Card className="border-border bg-card">

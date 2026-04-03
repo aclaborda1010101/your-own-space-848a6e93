@@ -1,7 +1,7 @@
 /**
- * Runtime Freshness Guard v7
- * Preview: nuke SW/caches and force one bypass reload only when an old SW controls the page.
- * Published: one-time reload on build change, with anti-loop protection.
+ * Runtime Freshness Guard v8
+ * Unified cache-busting for preview and published hosts.
+ * Uses `_cb` as the single cache-buster query param everywhere.
  */
 
 declare const __APP_BUILD_ID__: string;
@@ -10,6 +10,9 @@ const BUILD_KEY = "__jarvis_build_id";
 const RELOAD_DONE = "__jarvis_reloaded";
 const PREVIEW_RESET_ATTEMPTS_KEY = "__jarvis_preview_sw_reset_attempts";
 const PREVIEW_RESET_MAX_ATTEMPTS = 2;
+const SLEEP_THRESHOLD_MS = 30_000;
+
+// ── Host detection ──────────────────────────────────────────────
 
 function isPreview(): boolean {
   try {
@@ -35,7 +38,8 @@ function isLovablePublishedHost(): boolean {
   }
 }
 
-/** Nuke all service workers and caches. Fire-and-forget. */
+// ── Helpers ─────────────────────────────────────────────────────
+
 function nukeSwAndCaches(): void {
   try {
     if ("serviceWorker" in navigator) {
@@ -50,9 +54,7 @@ function nukeSwAndCaches(): void {
         .then((k) => k.forEach((key) => caches.delete(key)))
         .catch(() => {});
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
 }
 
 function hasActiveSwController(): boolean {
@@ -63,81 +65,87 @@ function hasActiveSwController(): boolean {
   }
 }
 
-function appendOrReplaceQueryParam(href: string, key: string, value: string): string {
-  const hashIndex = href.indexOf("#");
-  const hash = hashIndex >= 0 ? href.slice(hashIndex) : "";
-  const withoutHash = hashIndex >= 0 ? href.slice(0, hashIndex) : href;
-
-  const queryIndex = withoutHash.indexOf("?");
-  const base = queryIndex >= 0 ? withoutHash.slice(0, queryIndex) : withoutHash;
-  const query = queryIndex >= 0 ? withoutHash.slice(queryIndex + 1) : "";
-
-  const pairs = query
-    ? query
-        .split("&")
-        .filter(Boolean)
-        .filter((pair) => !pair.startsWith(`${key}=`))
-    : [];
-
-  pairs.push(`${key}=${encodeURIComponent(value)}`);
-  return `${base}?${pairs.join("&")}${hash}`;
+/** Replace or append `_cb` param, remove legacy `__jarvis_preview_bust`. */
+function buildFreshUrl(): string {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("_cb", Date.now().toString());
+    url.searchParams.delete("__jarvis_preview_bust");
+    return url.toString();
+  } catch {
+    return window.location.href;
+  }
 }
 
-function reloadWithPreviewBypass(): void {
+function navigateToFreshUrl(): void {
   try {
-    const nextUrl = appendOrReplaceQueryParam(
-      window.location.href,
-      "__jarvis_preview_bust",
-      Date.now().toString(),
-    );
-    window.location.replace(nextUrl);
+    window.location.replace(buildFreshUrl());
   } catch {
     window.location.reload();
   }
 }
 
+function getCurrentBuild(): string {
+  try {
+    return typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Returns true if a reload was scheduled (caller should abort mount). */
+function handleBuildChange(): boolean {
+  const currentBuild = getCurrentBuild();
+  if (!currentBuild) return false;
+
+  const savedBuild = localStorage.getItem(BUILD_KEY);
+  localStorage.setItem(BUILD_KEY, currentBuild);
+
+  if (!savedBuild || savedBuild === currentBuild) return false;
+
+  // Already reloaded for this transition — stop loop
+  if (sessionStorage.getItem(RELOAD_DONE) === currentBuild) {
+    sessionStorage.removeItem(RELOAD_DONE);
+    return false;
+  }
+
+  sessionStorage.setItem(RELOAD_DONE, currentBuild);
+  nukeSwAndCaches();
+  setTimeout(navigateToFreshUrl, 300);
+  return true;
+}
+
+// ── Resume-from-sleep detector ──────────────────────────────────
+
+function installSleepDetector(): void {
+  let lastTick = Date.now();
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      const gap = Date.now() - lastTick;
+      if (gap > SLEEP_THRESHOLD_MS) {
+        nukeSwAndCaches();
+        navigateToFreshUrl();
+      }
+    }
+  });
+
+  setInterval(() => { lastTick = Date.now(); }, 10_000);
+}
+
+// ── Main entry ──────────────────────────────────────────────────
+
 export function ensureRuntimeFreshness(): boolean {
   if (typeof window === "undefined") return false;
 
-  // Note: iframe check removed — cache-busting now runs in Lovable preview too
-
   try {
+    // Published lovable.app
     if (isLovablePublishedHost()) {
-      // Cleanup stale SW/caches on published lovable.app
       nukeSwAndCaches();
-
-      // Also detect build changes and force a cache-busted reload once
-      const currentBuild =
-        typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "";
-      if (currentBuild) {
-        const savedBuild = localStorage.getItem(BUILD_KEY);
-        localStorage.setItem(BUILD_KEY, currentBuild);
-
-        if (savedBuild && savedBuild !== currentBuild) {
-          // Already reloaded for this transition — stop
-          if (sessionStorage.getItem(RELOAD_DONE) === currentBuild) {
-            sessionStorage.removeItem(RELOAD_DONE);
-            return false;
-          }
-          sessionStorage.setItem(RELOAD_DONE, currentBuild);
-          setTimeout(() => {
-            try {
-              const nextUrl = appendOrReplaceQueryParam(
-                window.location.href,
-                "_cb",
-                Date.now().toString(),
-              );
-              window.location.replace(nextUrl);
-            } catch {
-              window.location.reload();
-            }
-          }, 300);
-          return true;
-        }
-      }
-      return false;
+      return handleBuildChange();
     }
 
+    // Preview
     if (isPreview()) {
       const controlledBySw = hasActiveSwController();
       nukeSwAndCaches();
@@ -146,77 +154,21 @@ export function ensureRuntimeFreshness(): boolean {
         const attempts = Number(sessionStorage.getItem(PREVIEW_RESET_ATTEMPTS_KEY) || "0");
         if (attempts < PREVIEW_RESET_MAX_ATTEMPTS) {
           sessionStorage.setItem(PREVIEW_RESET_ATTEMPTS_KEY, String(attempts + 1));
-          setTimeout(reloadWithPreviewBypass, 250);
+          setTimeout(navigateToFreshUrl, 250);
           return true;
         }
       } else {
         sessionStorage.removeItem(PREVIEW_RESET_ATTEMPTS_KEY);
       }
 
-      // Detect build changes in preview — auto-reload on new build
-      const currentBuild =
-        typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "";
-      if (currentBuild) {
-        const savedBuild = localStorage.getItem(BUILD_KEY);
-        localStorage.setItem(BUILD_KEY, currentBuild);
-        if (savedBuild && savedBuild !== currentBuild) {
-          if (sessionStorage.getItem(RELOAD_DONE) === currentBuild) {
-            sessionStorage.removeItem(RELOAD_DONE);
-            return false;
-          }
-          sessionStorage.setItem(RELOAD_DONE, currentBuild);
-          setTimeout(reloadWithPreviewBypass, 250);
-          return true;
-        }
-      }
-
-      return false;
+      return handleBuildChange();
     }
 
-    // Published: check build change
-    const currentBuild =
-      typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "";
-    if (!currentBuild) return false;
-
-    const savedBuild = localStorage.getItem(BUILD_KEY);
-    localStorage.setItem(BUILD_KEY, currentBuild);
-
-    // Same build or first visit — no action
-    if (!savedBuild || savedBuild === currentBuild) return false;
-
-    // Already reloaded for this transition — stop
-    if (sessionStorage.getItem(RELOAD_DONE) === currentBuild) {
-      sessionStorage.removeItem(RELOAD_DONE);
-      return false;
-    }
-
-    // New build detected: nuke caches and reload once
-    sessionStorage.setItem(RELOAD_DONE, currentBuild);
-    nukeSwAndCaches();
-    setTimeout(() => window.location.reload(), 300);
-    return true;
+    // Other published hosts — build change only
+    return handleBuildChange();
   } catch {
     return false;
   } finally {
-    // Resume-from-sleep detector (runs regardless of early returns above)
-    let lastTick = Date.now();
-    const SLEEP_THRESHOLD_MS = 30_000;
-
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") {
-        const gap = Date.now() - lastTick;
-        if (gap > SLEEP_THRESHOLD_MS) {
-          nukeSwAndCaches();
-          const nextUrl = appendOrReplaceQueryParam(
-            window.location.href,
-            "_cb",
-            Date.now().toString(),
-          );
-          window.location.replace(nextUrl);
-        }
-      }
-    });
-
-    setInterval(() => { lastTick = Date.now(); }, 10_000);
+    installSleepDetector();
   }
 }

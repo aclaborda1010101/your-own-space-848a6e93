@@ -2,10 +2,17 @@ import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const JARVIS_STORAGE_KEYS = [
+  "__jarvis_build_id",
+  "__jarvis_reloaded",
+  "__jarvis_preview_sw_reset_attempts",
+  "__jarvis_auto_retry",
+  "__jarvis_chunk_reload",
+];
+
 export const ForceRefreshButton = () => {
   const [loading, setLoading] = useState(false);
 
-  // Only show on preview / lovable.app hosts
   const h = window.location.hostname;
   const show =
     h === "localhost" ||
@@ -18,18 +25,28 @@ export const ForceRefreshButton = () => {
   const handleForceRefresh = async () => {
     setLoading(true);
     try {
+      // Nuke service workers
       if ("serviceWorker" in navigator) {
         const regs = await navigator.serviceWorker.getRegistrations();
         await Promise.all(regs.map((r) => r.unregister()));
       }
+      // Nuke cache storage
       if ("caches" in window) {
         const keys = await caches.keys();
         await Promise.all(keys.map((k) => caches.delete(k)));
       }
     } catch {}
 
+    // Clear all jarvis flags from both storages
+    for (const key of JARVIS_STORAGE_KEYS) {
+      try { localStorage.removeItem(key); } catch {}
+      try { sessionStorage.removeItem(key); } catch {}
+    }
+
+    // Reload with unified cache-buster
     const url = new URL(window.location.href);
     url.searchParams.set("_cb", String(Date.now()));
+    url.searchParams.delete("__jarvis_preview_bust");
     window.location.replace(url.toString());
   };
 

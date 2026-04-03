@@ -66,10 +66,11 @@ function formatBytes(bytes: number | null): string {
 export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
   const [driveUrl, setDriveUrl] = useState("");
   const [files, setFiles] = useState<DatasetFile[]>([]);
-  const [stats, setStats] = useState({ total: 0, pending: 0, processing: 0, relevant: 0, irrelevant: 0, error: 0 });
+  const [stats, setStats] = useState({ total: 0, pending: 0, processing: 0, paused: 0, relevant: 0, irrelevant: 0, error: 0 });
   const [listing, setListing] = useState(false);
   const [classifying, setClassifying] = useState(false);
   const [polling, setPolling] = useState(false);
+  const [resuming, setResuming] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     const { data, error } = await supabase.functions.invoke("drive-folder-ingest", {

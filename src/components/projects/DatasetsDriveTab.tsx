@@ -50,6 +50,7 @@ const classificationLabels: Record<string, string> = {
 const statusConfig: Record<string, { icon: React.ReactNode; label: string; className: string }> = {
   pending: { icon: <Loader2 className="w-3 h-3 animate-spin" />, label: "Pendiente", className: "text-muted-foreground" },
   processing: { icon: <Loader2 className="w-3 h-3 animate-spin" />, label: "Procesando", className: "text-primary" },
+  paused: { icon: <PauseCircle className="w-3 h-3" />, label: "Pausado", className: "text-amber-400" },
   relevant: { icon: <CheckCircle2 className="w-3 h-3" />, label: "Relevante", className: "text-green-400" },
   irrelevant: { icon: <XCircle className="w-3 h-3" />, label: "No relevante", className: "text-muted-foreground" },
   error: { icon: <AlertTriangle className="w-3 h-3" />, label: "Error", className: "text-red-400" },

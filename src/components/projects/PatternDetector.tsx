@@ -191,6 +191,10 @@ export const PatternDetector = ({ projectId }: { projectId?: string }) => {
               size="sm"
               disabled={forgeExporting || forgeExported}
               onClick={async () => {
+                if (!currentRun?.id) {
+                  toast.error("No hay un run activo para exportar");
+                  return;
+                }
                 setForgeExporting(true);
                 try {
                   const { data, error } = await supabase.functions.invoke("publish-to-forge", {

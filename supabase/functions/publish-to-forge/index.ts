@@ -51,7 +51,12 @@ Deno.serve(async (req) => {
     }
 
     // ── Pattern export mode: requires run_id ──
-    if (!run_id) throw new Error("run_id required");
+    if (!run_id || typeof run_id !== "string" || run_id.trim() === "") {
+      return new Response(JSON.stringify({ error: "run_id required (must be a non-empty string)" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Fetch completed run
     const { data: run, error: runError } = await supabase

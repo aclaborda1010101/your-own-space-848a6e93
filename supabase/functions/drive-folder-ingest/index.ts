@@ -321,6 +321,8 @@ serve(async (req) => {
       }
 
       let processed = 0;
+      let authExpired = false;
+
       for (const file of pendingFiles) {
         try {
           // Update status to processing
@@ -345,7 +347,7 @@ serve(async (req) => {
 
           await supabase.from("pattern_detector_datasets")
             .update({
-              extracted_text: text.slice(0, 200000), // Cap stored text
+              extracted_text: text.slice(0, 200000),
               relevance_score: classification.score,
               relevance_reason: classification.reason,
               classification: classification.classification,
@@ -356,10 +358,41 @@ serve(async (req) => {
           processed++;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
+
+          // Detect auth/token expiry errors — pause everything instead of continuing
+          if (err instanceof DriveAuthError || msg.includes("401") || msg.includes("403")) {
+            authExpired = true;
+            console.error(`[drive-folder-ingest] Auth expired during file ${file.file_name}. Pausing all remaining files.`);
+
+            // Mark this file back to paused
+            await supabase.from("pattern_detector_datasets")
+              .update({ status: "paused", error_message: "auth_required: token expirado" })
+              .eq("id", file.id);
+
+            break; // Stop processing this batch
+          }
+
           await supabase.from("pattern_detector_datasets")
             .update({ status: "error", error_message: msg })
             .eq("id", file.id);
         }
+      }
+
+      // If auth expired, pause ALL remaining pending/processing files and stop the chain
+      if (authExpired) {
+        await supabase.from("pattern_detector_datasets")
+          .update({ status: "paused", error_message: "auth_required: token expirado, reconecta Google Drive" })
+          .eq("run_id", run_id)
+          .in("status", ["pending", "processing"]);
+
+        console.error(`[drive-folder-ingest] Run ${run_id}: ALL pending files paused due to auth expiry. No more self-invocations.`);
+
+        return new Response(JSON.stringify({
+          status: "paused",
+          reason: "auth_required",
+          message: "El token de Google Drive ha expirado. Los archivos pendientes se han pausado. Reconecta Google Drive y reanuda el procesamiento.",
+          processed,
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       // Check if there are more pending files - self-invoke if so

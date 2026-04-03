@@ -467,6 +467,47 @@ serve(async (req) => {
       });
     }
 
+    // ---- RESUME (unpause files after reconnecting Drive) ----
+    if (action === "resume") {
+      // Reset paused files back to pending
+      const { count } = await supabase
+        .from("pattern_detector_datasets")
+        .update({ status: "pending", error_message: null })
+        .eq("run_id", run_id)
+        .eq("status", "paused")
+        .select("id", { count: "exact", head: true });
+
+      // Also reset any stuck "processing" files
+      await supabase
+        .from("pattern_detector_datasets")
+        .update({ status: "pending", error_message: null })
+        .eq("run_id", run_id)
+        .eq("status", "processing");
+
+      // Kick off classify_files again
+      if (count && count > 0) {
+        fetch(`${supabaseUrl}/functions/v1/drive-folder-ingest`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({
+            action: "classify_files",
+            run_id,
+            sector,
+            business_objective,
+          }),
+        }).catch(() => {});
+      }
+
+      return new Response(JSON.stringify({
+        status: "resumed",
+        unpaused: count || 0,
+        message: "Archivos pausados reanudados. El procesamiento continuará automáticamente.",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     return new Response(JSON.stringify({ error: "Acción no reconocida" }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }
     });

@@ -5,10 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import {
   FolderSearch, Loader2, FileSpreadsheet, CheckCircle2, XCircle,
   AlertTriangle, RefreshCw, ExternalLink, ToggleLeft, ToggleRight,
+  PauseCircle, PlayCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -48,6 +50,7 @@ const classificationLabels: Record<string, string> = {
 const statusConfig: Record<string, { icon: React.ReactNode; label: string; className: string }> = {
   pending: { icon: <Loader2 className="w-3 h-3 animate-spin" />, label: "Pendiente", className: "text-muted-foreground" },
   processing: { icon: <Loader2 className="w-3 h-3 animate-spin" />, label: "Procesando", className: "text-primary" },
+  paused: { icon: <PauseCircle className="w-3 h-3" />, label: "Pausado", className: "text-amber-400" },
   relevant: { icon: <CheckCircle2 className="w-3 h-3" />, label: "Relevante", className: "text-green-400" },
   irrelevant: { icon: <XCircle className="w-3 h-3" />, label: "No relevante", className: "text-muted-foreground" },
   error: { icon: <AlertTriangle className="w-3 h-3" />, label: "Error", className: "text-red-400" },
@@ -63,10 +66,11 @@ function formatBytes(bytes: number | null): string {
 export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
   const [driveUrl, setDriveUrl] = useState("");
   const [files, setFiles] = useState<DatasetFile[]>([]);
-  const [stats, setStats] = useState({ total: 0, pending: 0, processing: 0, relevant: 0, irrelevant: 0, error: 0 });
+  const [stats, setStats] = useState({ total: 0, pending: 0, processing: 0, paused: 0, relevant: 0, irrelevant: 0, error: 0 });
   const [listing, setListing] = useState(false);
   const [classifying, setClassifying] = useState(false);
   const [polling, setPolling] = useState(false);
+  const [resuming, setResuming] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     const { data, error } = await supabase.functions.invoke("drive-folder-ingest", {
@@ -74,7 +78,7 @@ export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
     });
     if (data && !error) {
       setFiles(data.files || []);
-      setStats(data.stats || { total: 0, pending: 0, processing: 0, relevant: 0, irrelevant: 0, error: 0 });
+      setStats(data.stats || { total: 0, pending: 0, processing: 0, paused: 0, relevant: 0, irrelevant: 0, error: 0 });
       return data.stats;
     }
     return null;
@@ -148,9 +152,27 @@ export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
       .eq("id", fileId);
   };
 
+  const handleResume = async () => {
+    setResuming(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("drive-folder-ingest", {
+        body: { action: "resume", run_id: runId, sector, business_objective: businessObjective },
+      });
+      if (error) throw error;
+      toast.success(`${data?.unpaused || 0} archivos reanudados. Procesamiento reiniciado.`);
+      setPolling(true);
+      setClassifying(true);
+      await fetchStatus();
+    } catch (err) {
+      console.error("Resume error:", err);
+      toast.error("Error al reanudar el procesamiento");
+    } finally {
+      setResuming(false);
+    }
+  };
+
   const isProcessing = listing || classifying;
   const progressPct = stats.total > 0 ? ((stats.relevant + stats.irrelevant + stats.error) / stats.total) * 100 : 0;
-
   return (
     <div className="space-y-4">
       {/* Drive URL input */}
@@ -193,6 +215,12 @@ export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
                 <span className="text-green-400">✓ {stats.relevant} relevantes</span>
                 <span className="text-muted-foreground">✕ {stats.irrelevant} descartados</span>
                 {stats.error > 0 && <span className="text-red-400">⚠ {stats.error} errores</span>}
+                {stats.paused > 0 && (
+                  <span className="text-amber-400 flex items-center gap-1">
+                    <PauseCircle className="w-3 h-3" />
+                    {stats.paused} pausados
+                  </span>
+                )}
                 {(stats.pending > 0 || stats.processing > 0) && (
                   <span className="text-primary flex items-center gap-1">
                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -211,7 +239,29 @@ export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
         </Card>
       )}
 
-      {/* Files table */}
+      {/* Paused alert - auth expired */}
+      {stats.paused > 0 && (
+        <Alert className="border-amber-500/30 bg-amber-500/5">
+          <PauseCircle className="h-4 w-4 text-amber-400" />
+          <AlertTitle className="text-sm">Procesamiento pausado — Token expirado</AlertTitle>
+          <AlertDescription className="text-xs text-muted-foreground space-y-2">
+            <p>
+              {stats.paused} archivos se pausaron porque el token de Google Drive expiró.
+              El sistema usa una cuenta de servicio cuyo token dura 1 hora.
+            </p>
+            <Button
+              onClick={handleResume}
+              disabled={resuming}
+              size="sm"
+              className="gap-1"
+            >
+              {resuming ? <Loader2 className="w-3 h-3 animate-spin" /> : <PlayCircle className="w-3 h-3" />}
+              Reintentar ({stats.paused} archivos)
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {files.length > 0 && (
         <Card className="border-border bg-card">
           <CardContent className="p-0">

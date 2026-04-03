@@ -29,7 +29,28 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await userClient.auth.getUser();
     if (authError || !user) throw new Error("Unauthorized");
 
-    const { run_id } = await req.json();
+    const body = await req.json();
+    const { action, run_id } = body;
+
+    // ── Proxy mode: verify / create_and_architect → forward to Expert Forge gateway ──
+    if (action && action !== "ingest_patterns") {
+      const proxyPayload = { ...body, project_id: body.project_id || forgeProjectId };
+      console.log(`[publish-to-forge] Proxying action="${action}" to Expert Forge`);
+
+      const resp = await fetch(forgeGatewayUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": forgeApiKey },
+        body: JSON.stringify(proxyPayload),
+      });
+
+      const respBody = await resp.text();
+      return new Response(respBody, {
+        status: resp.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Pattern export mode: requires run_id ──
     if (!run_id) throw new Error("run_id required");
 
     // Fetch completed run

@@ -442,6 +442,7 @@ serve(async (req) => {
         total: allFiles?.length || 0,
         pending: allFiles?.filter((f: any) => f.status === "pending").length || 0,
         processing: allFiles?.filter((f: any) => f.status === "processing").length || 0,
+        paused: allFiles?.filter((f: any) => f.status === "paused").length || 0,
         relevant: allFiles?.filter((f: any) => f.status === "relevant").length || 0,
         irrelevant: allFiles?.filter((f: any) => f.status === "irrelevant").length || 0,
         error: allFiles?.filter((f: any) => f.status === "error").length || 0,

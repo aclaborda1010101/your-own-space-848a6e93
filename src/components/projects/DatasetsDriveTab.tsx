@@ -173,7 +173,7 @@ export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
 
   const isProcessing = listing || classifying;
   const progressPct = stats.total > 0 ? ((stats.relevant + stats.irrelevant + stats.error) / stats.total) * 100 : 0;
-  const hasPausedFiles = stats.paused > 0;
+  return (
     <div className="space-y-4">
       {/* Drive URL input */}
       <Card className="border-border bg-card">

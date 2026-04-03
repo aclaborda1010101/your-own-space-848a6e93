@@ -245,6 +245,11 @@ export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
                     {stats.pending + stats.processing} pendientes
                   </span>
                 )}
+                {isStuck && !stats.paused && (
+                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0.5 animate-pulse gap-1">
+                    ⏸ Pausado - Reconectar Drive
+                  </Badge>
+                )}
               </div>
               {!isProcessing && stats.total > 0 && (
                 <Button variant="ghost" size="sm" onClick={fetchStatus} className="gap-1 text-xs h-7">

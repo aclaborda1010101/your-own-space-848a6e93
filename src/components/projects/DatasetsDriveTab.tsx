@@ -71,6 +71,10 @@ export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
   const [classifying, setClassifying] = useState(false);
   const [polling, setPolling] = useState(false);
   const [resuming, setResuming] = useState(false);
+  const [isStuck, setIsStuck] = useState(false);
+  const lastProgressRef = useRef<{ completedCount: number; timestamp: number }>({ completedCount: 0, timestamp: Date.now() });
+
+  const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
   const fetchStatus = useCallback(async () => {
     const { data, error } = await supabase.functions.invoke("drive-folder-ingest", {
@@ -78,8 +82,22 @@ export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
     });
     if (data && !error) {
       setFiles(data.files || []);
-      setStats(data.stats || { total: 0, pending: 0, processing: 0, paused: 0, relevant: 0, irrelevant: 0, error: 0 });
-      return data.stats;
+      const s = data.stats || { total: 0, pending: 0, processing: 0, paused: 0, relevant: 0, irrelevant: 0, error: 0 };
+      setStats(s);
+
+      // Detect stuck jobs: if completed count changed, reset timer
+      const completedNow = s.relevant + s.irrelevant + s.error;
+      if (completedNow !== lastProgressRef.current.completedCount) {
+        lastProgressRef.current = { completedCount: completedNow, timestamp: Date.now() };
+        setIsStuck(false);
+      } else if ((s.pending > 0 || s.processing > 0) && Date.now() - lastProgressRef.current.timestamp > TWO_HOURS_MS) {
+        setIsStuck(true);
+      }
+
+      // Also mark stuck if paused files exist (auth expired)
+      if (s.paused > 0) setIsStuck(true);
+
+      return s;
     }
     return null;
   }, [runId]);

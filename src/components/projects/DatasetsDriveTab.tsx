@@ -239,7 +239,29 @@ export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
         </Card>
       )}
 
-      {/* Files table */}
+      {/* Paused alert - auth expired */}
+      {stats.paused > 0 && (
+        <Alert className="border-amber-500/30 bg-amber-500/5">
+          <PauseCircle className="h-4 w-4 text-amber-400" />
+          <AlertTitle className="text-sm">Procesamiento pausado — Token expirado</AlertTitle>
+          <AlertDescription className="text-xs text-muted-foreground space-y-2">
+            <p>
+              {stats.paused} archivos se pausaron porque el token de Google Drive expiró.
+              El sistema usa una cuenta de servicio cuyo token dura 1 hora.
+            </p>
+            <Button
+              onClick={handleResume}
+              disabled={resuming}
+              size="sm"
+              className="gap-1"
+            >
+              {resuming ? <Loader2 className="w-3 h-3 animate-spin" /> : <PlayCircle className="w-3 h-3" />}
+              Reintentar ({stats.paused} archivos)
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {files.length > 0 && (
         <Card className="border-border bg-card">
           <CardContent className="p-0">

@@ -85,6 +85,9 @@ async function listFolderFiles(folderId: string, token: string): Promise<DriveFi
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) {
       const err = await res.text();
+      if (res.status === 401 || res.status === 403) {
+        throw new DriveAuthError(res.status);
+      }
       throw new Error(`Drive API error: ${res.status} ${err}`);
     }
     const data = await res.json();

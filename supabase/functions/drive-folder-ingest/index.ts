@@ -103,6 +103,13 @@ async function listFolderFiles(folderId: string, token: string): Promise<DriveFi
   return files;
 }
 
+class DriveAuthError extends Error {
+  constructor(status: number) {
+    super(`auth_required: Drive token expired or invalid (${status})`);
+    this.name = "DriveAuthError";
+  }
+}
+
 async function downloadFileContent(fileId: string, mimeType: string, token: string): Promise<string> {
   let url: string;
   let exportMime: string | null = null;
@@ -116,6 +123,9 @@ async function downloadFileContent(fileId: string, mimeType: string, token: stri
   }
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (res.status === 401 || res.status === 403) {
+    throw new DriveAuthError(res.status);
+  }
   if (!res.ok) throw new Error(`Download failed: ${res.status}`);
 
   // For text-based formats, return directly

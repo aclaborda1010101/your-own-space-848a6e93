@@ -78,7 +78,7 @@ export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
     });
     if (data && !error) {
       setFiles(data.files || []);
-      setStats(data.stats || { total: 0, pending: 0, processing: 0, relevant: 0, irrelevant: 0, error: 0 });
+      setStats(data.stats || { total: 0, pending: 0, processing: 0, paused: 0, relevant: 0, irrelevant: 0, error: 0 });
       return data.stats;
     }
     return null;

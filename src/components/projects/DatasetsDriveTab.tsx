@@ -215,6 +215,12 @@ export function DatasetsDriveTab({ runId, sector, businessObjective }: Props) {
                 <span className="text-green-400">✓ {stats.relevant} relevantes</span>
                 <span className="text-muted-foreground">✕ {stats.irrelevant} descartados</span>
                 {stats.error > 0 && <span className="text-red-400">⚠ {stats.error} errores</span>}
+                {stats.paused > 0 && (
+                  <span className="text-amber-400 flex items-center gap-1">
+                    <PauseCircle className="w-3 h-3" />
+                    {stats.paused} pausados
+                  </span>
+                )}
                 {(stats.pending > 0 || stats.processing > 0) && (
                   <span className="text-primary flex items-center gap-1">
                     <Loader2 className="w-3 h-3 animate-spin" />

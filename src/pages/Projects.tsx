@@ -253,10 +253,17 @@ const Projects = () => {
                         </p>
                       )}
                     </div>
-                    <Badge variant="outline" className={`${cfg.bg} text-[11px] font-medium shrink-0`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} mr-1.5`} />
-                      {cfg.label}
-                    </Badge>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {p.is_public ? (
+                        <Globe className="w-3.5 h-3.5 text-green-400" title="Público" />
+                      ) : (
+                        <Lock className="w-3.5 h-3.5 text-muted-foreground/50" title="Privado" />
+                      )}
+                      <Badge variant="outline" className={`${cfg.bg} text-[11px] font-medium`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} mr-1.5`} />
+                        {cfg.label}
+                      </Badge>
+                    </div>
                   </div>
 
                   {/* Progress section */}

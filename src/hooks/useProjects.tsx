@@ -25,6 +25,7 @@ export interface BusinessProject {
   closed_at: string | null;
   close_reason: string | null;
   notes: string | null;
+  is_public: boolean;
   created_at: string;
   updated_at: string;
   sector?: string | null;
@@ -121,6 +122,7 @@ export const useProjects = () => {
     need_summary?: string;
     origin?: string;
     status?: string;
+    is_public?: boolean;
   }) => {
     if (!user) return null;
     try {
@@ -135,6 +137,7 @@ export const useProjects = () => {
           need_summary: data.need_summary || null,
           origin: data.origin || "manual",
           status: data.status || "nuevo",
+          is_public: data.is_public ?? false,
         })
         .select()
         .single();

@@ -14,7 +14,9 @@ import {
   Briefcase, Plus, Loader2, Building2,
   Wand2, ArrowRight, Trash2,
   TrendingUp, FolderOpen, Clock,
+  Globe, Lock,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -28,6 +30,8 @@ interface WizardProject {
   status: string;
   current_step: number | null;
   estimated_value: number | null;
+  is_public: boolean;
+  user_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -83,7 +87,7 @@ const Projects = () => {
       if (!user) return [];
       const { data, error } = await supabase
         .from("business_projects")
-        .select("id, name, company, status, current_step, estimated_value, created_at, updated_at")
+        .select("id, name, company, status, current_step, estimated_value, is_public, user_id, created_at, updated_at")
         .order("updated_at", { ascending: false });
       if (error) throw error;
       return (data || []) as WizardProject[];
@@ -249,10 +253,17 @@ const Projects = () => {
                         </p>
                       )}
                     </div>
-                    <Badge variant="outline" className={`${cfg.bg} text-[11px] font-medium shrink-0`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} mr-1.5`} />
-                      {cfg.label}
-                    </Badge>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {p.is_public ? (
+                        <Globe className="w-3.5 h-3.5 text-green-400" />
+                      ) : (
+                        <Lock className="w-3.5 h-3.5 text-muted-foreground/50" />
+                      )}
+                      <Badge variant="outline" className={`${cfg.bg} text-[11px] font-medium`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} mr-1.5`} />
+                        {cfg.label}
+                      </Badge>
+                    </div>
                   </div>
 
                   {/* Progress section */}
@@ -270,6 +281,26 @@ const Projects = () => {
                       />
                     </div>
                   </div>
+
+                  {/* Visibility toggle */}
+                  {p.user_id === user?.id && (
+                    <div
+                      className="flex items-center justify-between text-xs border-t border-border/30 pt-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="text-muted-foreground">
+                        {p.is_public ? "Público" : "Privado"}
+                      </span>
+                      <Switch
+                        checked={p.is_public}
+                        onCheckedChange={async (checked) => {
+                          await supabase.from("business_projects").update({ is_public: checked }).eq("id", p.id);
+                          queryClient.invalidateQueries({ queryKey: ["business_projects_list"] });
+                          toast.success(checked ? "Proyecto público" : "Proyecto privado");
+                        }}
+                      />
+                    </div>
+                  )}
 
                   {/* Footer */}
                   <div className="flex items-center justify-between pt-1">

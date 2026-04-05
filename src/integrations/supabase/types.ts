@@ -1558,6 +1558,7 @@ export type Database = {
           id: string
           input_content: string | null
           input_type: string | null
+          is_public: boolean
           linked_rag_id: string | null
           name: string
           need_budget: string | null
@@ -1593,6 +1594,7 @@ export type Database = {
           id?: string
           input_content?: string | null
           input_type?: string | null
+          is_public?: boolean
           linked_rag_id?: string | null
           name: string
           need_budget?: string | null
@@ -1628,6 +1630,7 @@ export type Database = {
           id?: string
           input_content?: string | null
           input_type?: string | null
+          is_public?: boolean
           linked_rag_id?: string | null
           name?: string
           need_budget?: string | null

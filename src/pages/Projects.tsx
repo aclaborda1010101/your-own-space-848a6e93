@@ -28,6 +28,8 @@ interface WizardProject {
   status: string;
   current_step: number | null;
   estimated_value: number | null;
+  is_public: boolean;
+  user_id: string;
   created_at: string;
   updated_at: string;
 }

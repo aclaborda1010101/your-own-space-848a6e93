@@ -25,6 +25,7 @@ export interface BusinessProject {
   closed_at: string | null;
   close_reason: string | null;
   notes: string | null;
+  is_public: boolean;
   created_at: string;
   updated_at: string;
   sector?: string | null;

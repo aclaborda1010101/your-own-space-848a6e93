@@ -137,6 +137,7 @@ export const useProjects = () => {
           need_summary: data.need_summary || null,
           origin: data.origin || "manual",
           status: data.status || "nuevo",
+          is_public: data.is_public ?? false,
         })
         .select()
         .single();

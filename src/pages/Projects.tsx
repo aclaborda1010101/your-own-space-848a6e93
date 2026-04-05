@@ -282,6 +282,26 @@ const Projects = () => {
                     </div>
                   </div>
 
+                  {/* Visibility toggle */}
+                  {p.user_id === user?.id && (
+                    <div
+                      className="flex items-center justify-between text-xs border-t border-border/30 pt-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="text-muted-foreground">
+                        {p.is_public ? "Público" : "Privado"}
+                      </span>
+                      <Switch
+                        checked={p.is_public}
+                        onCheckedChange={async (checked) => {
+                          await supabase.from("business_projects").update({ is_public: checked }).eq("id", p.id);
+                          queryClient.invalidateQueries({ queryKey: ["business_projects_list"] });
+                          toast.success(checked ? "Proyecto público" : "Proyecto privado");
+                        }}
+                      />
+                    </div>
+                  )}
+
                   {/* Footer */}
                   <div className="flex items-center justify-between pt-1">
                     <span className="text-[11px] text-muted-foreground/70">

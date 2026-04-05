@@ -122,6 +122,7 @@ export const useProjects = () => {
     need_summary?: string;
     origin?: string;
     status?: string;
+    is_public?: boolean;
   }) => {
     if (!user) return null;
     try {

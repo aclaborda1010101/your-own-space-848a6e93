@@ -87,7 +87,7 @@ const Projects = () => {
       if (!user) return [];
       const { data, error } = await supabase
         .from("business_projects")
-        .select("id, name, company, status, current_step, estimated_value, created_at, updated_at")
+        .select("id, name, company, status, current_step, estimated_value, is_public, user_id, created_at, updated_at")
         .order("updated_at", { ascending: false });
       if (error) throw error;
       return (data || []) as WizardProject[];

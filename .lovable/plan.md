@@ -1,61 +1,68 @@
 
-Objetivo: endurecer la limpieza de caché del preview para que la app cargue siempre la versión más reciente sin depender de recargas manuales agresivas.
 
-Qué he revisado:
-- `src/main.tsx`: la app ya ejecuta `ensureRuntimeFreshness()` antes de montar React.
-- `src/lib/runtimeFreshness.ts`: ya limpia Service Workers y `caches`, detecta preview/publicado y añade query params como `_cb` y `__jarvis_preview_bust`.
-- `public/registerSW.js` y `public/sw.js`: ambos están configurados como “kill-switch” para desregistrar workers antiguos.
-- `src/components/layout/ForceRefreshButton.tsx`: ya existe un botón para forzar limpieza.
-- `src/components/layout/AppLayout.tsx`: el botón ya está montado globalmente.
-- La ruta actual del preview ya lleva `_cb=...`, así que el cache-buster ya está entrando en juego.
+## Plan: Visibilidad de Proyectos (Público/Privado) + Confirmación de Aislamiento de Datos
 
-Plan de implementación:
-1. Reforzar el botón de “Forzar actualización”
-- Mantener la limpieza de Service Workers y Cache Storage.
-- Añadir limpieza de flags locales que pueden impedir una recarga fresca:
-  - `__jarvis_build_id`
-  - `__jarvis_reloaded`
-  - `__jarvis_preview_sw_reset_attempts`
-  - `__jarvis_auto_retry`
-  - `__jarvis_chunk_reload`
-- Recargar con un query param nuevo para evitar reutilizar una URL previa cacheada.
+### Contexto
+Los proyectos de negocio (`business_projects`) actualmente solo son visibles por su creador o mediante `resource_shares`. El usuario quiere añadir la opción de marcar proyectos como "públicos" para que cualquier usuario autenticado pueda verlos. Todo lo demás (tareas, calendario, contactos, WhatsApp, red estratégica) debe permanecer estrictamente aislado por usuario.
 
-2. Endurecer la lógica automática de preview
-- En `runtimeFreshness`, conservar la lógica actual pero hacerla más consistente en preview:
-  - si detecta control de SW antiguo, limpiar y recargar una sola vez;
-  - si vuelve de suspensión/largo tiempo en segundo plano, regenerar cache-buster;
-  - evitar bucles manteniendo el límite de intentos.
+### Cambios
 
-3. Unificar el criterio de “URL fresca”
-- Usar siempre el mismo patrón de query params de invalidación para preview/manual refresh.
-- Evitar que unas rutas usen `_cb` y otras dependan solo de `__jarvis_preview_bust` sin necesidad.
+**1. Migración SQL: columna `is_public` + RLS actualizado**
+- Añadir columna `is_public BOOLEAN DEFAULT false` a `business_projects`
+- Actualizar la política RLS de SELECT para que incluya: `user_id = auth.uid() OR is_public = true OR has_shared_access(...)`
+- Las políticas de UPDATE/DELETE siguen siendo solo para el propietario (o editor compartido)
+- Las tablas auxiliares de proyecto (wizard_steps, documents, costs, timeline, contacts) heredan acceso vía `user_owns_business_project()` que ya incluye shared_access; actualizar esa función para incluir `is_public`
 
-4. Validar que no haya re-registro accidental del SW
-- Revisar que no exista en otro archivo ninguna llamada que vuelva a registrar service workers.
-- Mantener los archivos públicos actuales como mecanismo de desactivación, no como caché offline.
+**2. UI: Toggle público/privado en proyectos**
+- En la página de Projects y en el ProjectWizard, añadir un switch/toggle "Público" junto al proyecto
+- Icono de candado (privado) o globo (público) visible en las tarjetas de proyecto
+- Al cambiar, llamar a `updateProject(id, { is_public: true/false })`
 
-5. QA después del cambio
-- Desktop:
-  - abrir preview normal;
-  - pulsar el botón de refresh;
-  - comprobar que recarga una vez, no entra en loop y sigue navegando bien.
-- Mobile:
-  - repetir en viewport pequeño para asegurar que el botón sigue visible y usable.
-- Confirmar que:
-  - desaparecen versiones antiguas del frontend;
-  - no hay errores por storage bloqueado;
-  - el flujo de exportación sigue igual;
-  - no aparece una pantalla en blanco tras la limpieza.
+**3. Hook `useProjects`: soporte para `is_public`**
+- Añadir `is_public` al tipo `BusinessProject`
+- Incluir el campo en `createProject` y `updateProject`
 
-Archivos a tocar:
-- `src/components/layout/ForceRefreshButton.tsx`
-- `src/lib/runtimeFreshness.ts`
-- Posible ajuste menor en `src/main.tsx` si hace falta coordinar mejor los flags
-- Solo revisión, probablemente sin cambios, en:
-  - `public/registerSW.js`
-  - `public/sw.js`
+**4. Verificación de aislamiento existente**
+- El sistema ya usa `user_id = auth.uid()` en RLS para: tasks, people_contacts, contact_messages, calendar (iCloud por usuario), check_ins, user_settings, conversation_history
+- `resource_shares` permite compartir individualmente proyectos, tareas, contactos, calendar, etc.
+- WhatsApp (Evolution) ya está vinculado por `user_integrations` con `user_id`
+- No se requieren cambios adicionales para el aislamiento; ya está implementado correctamente
 
-Detalles técnicos:
-- La base ya está bien planteada: no hay PWA activa en frontend y ya existe un “kill switch”.
-- El problema más probable no es falta de lógica, sino que quedan marcadores/estados locales que permiten reusar una sesión de preview parcialmente obsoleta.
-- La solución más simple y directa es hacer más agresiva la limpieza del botón manual y más consistente el cache-busting automático, sin tocar el resto del flujo de la app.
+### Detalles técnicos
+
+Migración SQL:
+```sql
+ALTER TABLE public.business_projects 
+  ADD COLUMN is_public BOOLEAN NOT NULL DEFAULT false;
+
+-- Actualizar función que verifica acceso a proyecto
+CREATE OR REPLACE FUNCTION public.user_owns_business_project(p_project_id uuid)
+RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.business_projects
+    WHERE id = p_project_id 
+      AND (user_id = auth.uid() 
+           OR is_public = true
+           OR has_shared_access(auth.uid(), 'business_project', p_project_id))
+  );
+$$;
+
+-- Actualizar política SELECT de business_projects
+DROP POLICY IF EXISTS "..." ON public.business_projects;
+CREATE POLICY "Users can view own, public, or shared projects"
+  ON public.business_projects FOR SELECT TO authenticated
+  USING (
+    user_id = auth.uid() 
+    OR is_public = true 
+    OR has_shared_access(auth.uid(), 'business_project', id)
+  );
+```
+
+Archivos a modificar:
+- `supabase/migrations/` — nueva migración
+- `src/hooks/useProjects.tsx` — añadir `is_public` al tipo y operaciones
+- `src/pages/Projects.tsx` — toggle y badge visual
+- `src/pages/ProjectWizard.tsx` — toggle en edición
+

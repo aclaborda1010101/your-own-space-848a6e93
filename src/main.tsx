@@ -1,3 +1,4 @@
+// cache-bust: 2026-04-05T17:50
 import "./index.css";
 import { initSafeStorage } from "./lib/safeStorage";
 import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";

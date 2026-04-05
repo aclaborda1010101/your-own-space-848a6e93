@@ -14,7 +14,9 @@ import {
   Briefcase, Plus, Loader2, Building2,
   Wand2, ArrowRight, Trash2,
   TrendingUp, FolderOpen, Clock,
+  Globe, Lock,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,

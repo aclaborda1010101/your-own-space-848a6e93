@@ -779,10 +779,14 @@ serve(async (req) => {
         }
 
         try {
+          // Discover the correct CalDAV server and calendar path
+          const discovered = await discoverCalendarUrl(email, password);
+          const effectivePath = calendarPath || discovered.calendarPath;
+
           const result = await createEvent(
             email,
             password,
-            calendarPath || "/calendars/", // Default calendar path
+            effectivePath,
             {
               title,
               start,
@@ -790,7 +794,8 @@ serve(async (req) => {
               location,
               description,
               allDay,
-            }
+            },
+            discovered.baseUrl
           );
 
           return new Response(

@@ -263,12 +263,12 @@ export const ProjectProposalExport = ({
         { body: payload }
       );
       if (error) throw error;
-      await downloadFile(data, `resumen-ejecutivo-${projectName || "proyecto"}.pdf`);
-      toast.success("Resumen ejecutivo descargado");
+      await downloadFile(data, `propuesta-comercial-${projectName || "proyecto"}.pdf`);
+      toast.success("Propuesta comercial descargada");
     } catch (err: any) {
-      console.error("Simple export error:", err);
+      console.error("Commercial proposal export error:", err);
       toast.error(
-        "Error al generar resumen: " + (err.message || "Error desconocido")
+        "Error al generar propuesta: " + (err.message || "Error desconocido")
       );
     } finally {
       setGeneratingSimple(false);

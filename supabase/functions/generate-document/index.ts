@@ -1792,64 +1792,104 @@ serve(async (req: Request) => {
 
       htmlContent = parts.join("\n");
     }
-    // ── Step 101: Simplified Executive Summary (3-5 pages) ──
+    // ── Step 101: Commercial Proposal for Client (up to 10 pages) ──
     else if (stepNumber === 101 && typeof processedContent === "object" && processedContent !== null) {
       const proposal = processedContent as any;
       const parts: string[] = [];
 
-      // Sanitize scope and filter out "Comparativa" / "Alternativas" sections
+      // Sanitize scope for client
       let cleanScope = sanitizeTextForClient(
         typeof proposal.scope === "string" ? proposal.scope : ""
       );
-      // Remove comparativa/alternativas sections from scope
-      cleanScope = cleanScope.replace(/^##\s*(?:.*(?:comparativa|alternativa|comparación|inversión\s+por\s+fase|costes?\s+recurrentes?).*)\n(?:(?!^##\s)[\s\S])*?(?=\n##\s|\n#\s|$)/gim, "");
-
-      // Strip duration from phase headings: "## Fase 0: PoC - 6 semanas" → "## Fase 0: PoC"
+      cleanScope = cleanScope.replace(/^##\s*(?:.*(?:comparativa|alternativa|comparación).*)\n(?:(?!^##\s)[\s\S])*?(?=\n##\s|\n#\s|$)/gim, "");
       cleanScope = cleanScope.replace(
-        /^(##\s+.+?)\s*[-–—]\s*\d+\s*semanas?\s*$/gim,
-        '$1'
+        /^(##\s+.+?)\s*[-–—]\s*\d+\s*semanas?\s*$/gim, '$1'
       );
       cleanScope = cleanScope.replace(
-        /^(##\s+.+?)\s*\(\s*\d+\s*semanas?\s*\)\s*$/gim,
-        '$1'
+        /^(##\s+.+?)\s*\(\s*\d+\s*semanas?\s*\)\s*$/gim, '$1'
       );
 
-      // Strip existing heading numbers (e.g. "## 5.1. Title" → "## Title")
       const stripHeadingNumbers = (text: string): string => {
         return text.replace(/^(##)\s*(?:\d+\.?\d*\.?\s*)+(.+)$/gm, '$1 $2');
       };
 
-      // Post-process HTML to add numbering to <h2> tags in the body (2.1., 2.2., etc.)
-      const numberBodyHeadings = (html: string): string => {
-        let h2Counter = 0;
-        return html.replace(/<h2([^>]*)>(.*?)<\/h2>/gi, (_match, attrs, content) => {
-          h2Counter++;
-          // Strip any existing numbers from content before re-numbering
-          const cleanContent = content.replace(/^\s*\d+\.\d+\.?\s*/, '');
-          return `<h2${attrs}>2.${h2Counter}. ${cleanContent}</h2>`;
-        });
-      };
+      // ══════════════════════════════════════════════════════════════
+      // SECTION 1: Cover context — short intro paragraph
+      // ══════════════════════════════════════════════════════════════
+      parts.push(`<h1>Propuesta Comercial</h1>`);
+      parts.push(`<p style="font-size:10pt;color:#6B7280;margin-bottom:20px;">Documento preparado para <strong>${escHtml(company || projectName || "el cliente")}</strong> — ${new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}</p>`);
 
-      // ── Section 1: Executive Summary (short, 3-5 bullet points) ──
-      parts.push(`<h1>Resumen Ejecutivo</h1>`);
+      // ══════════════════════════════════════════════════════════════
+      // SECTION 2: Executive Summary (1 page max)
+      // ══════════════════════════════════════════════════════════════
+      parts.push(`<h1>1. Resumen Ejecutivo</h1>`);
       if (cleanScope) {
         const scopeLines = cleanScope.split("\n");
         const summaryLines: string[] = [];
         let paraCount = 0;
         for (const sl of scopeLines) {
-          if (paraCount >= 3 && /^##\s/.test(sl)) break;
-          if (sl.trim() === "") { paraCount++; if (paraCount > 4) break; }
+          if (paraCount >= 4 && /^##\s/.test(sl)) break;
+          if (sl.trim() === "") { paraCount++; if (paraCount > 5) break; }
           if (/^#\s/.test(sl)) continue;
           summaryLines.push(sl);
         }
         parts.push(markdownToHtml(summaryLines.join("\n")));
       }
 
-      // ── Section 2: Scope (simplified — key features only) ──
-      parts.push(`<h1>Alcance del Proyecto</h1>`);
+      // ══════════════════════════════════════════════════════════════
+      // SECTION 3: Product / Solution Description (from techSummary)
+      // ══════════════════════════════════════════════════════════════
+      parts.push(`<h1>2. Descripción de la Solución</h1>`);
+      const techSummary = typeof proposal.techSummary === "string" ? proposal.techSummary : "";
+      if (techSummary) {
+        // Extract key sections from simplified PRD
+        const techLines = techSummary.split("\n");
+        const productLines: string[] = [];
+        let inRelevantSection = false;
+        let sectionCount = 0;
+        const relevantPatterns = [
+          /objetivo|problema|solución|contexto|descripción|funcionalidad|módulo|componente|usuario|actor|caso\s*de\s*uso|alcance|característica|feature/i,
+        ];
+        const skipTechPatterns = [
+          /SQL|Edge\s*Function|migration|Blueprint|RLS|PostgreSQL|trigger|schema|Mermaid|Deno|TypeScript|Supabase|API\s*endpoint|catálogo.*variables|hook|useState/i,
+        ];
+
+        for (const line of techLines) {
+          const isHeading = /^#{1,3}\s/.test(line);
+          if (isHeading) {
+            if (skipTechPatterns.some(p => p.test(line))) {
+              inRelevantSection = false;
+              continue;
+            }
+            if (relevantPatterns.some(p => p.test(line)) || sectionCount < 6) {
+              inRelevantSection = true;
+              sectionCount++;
+              productLines.push(line);
+            } else {
+              inRelevantSection = false;
+            }
+          } else if (inRelevantSection) {
+            productLines.push(line);
+          }
+        }
+
+        if (productLines.length > 0) {
+          parts.push(markdownToHtml(stripHeadingNumbers(productLines.join("\n"))));
+        } else {
+          parts.push(`<p>La solución propuesta aborda las necesidades identificadas durante el análisis inicial, proporcionando una plataforma a medida que optimiza los procesos clave del negocio.</p>`);
+        }
+      } else if (cleanScope) {
+        // Fallback: use scope sections as product description
+        parts.push(markdownToHtml(stripHeadingNumbers(cleanScope)));
+      }
+
+      // ══════════════════════════════════════════════════════════════
+      // SECTION 4: Scope — key deliverables
+      // ══════════════════════════════════════════════════════════════
+      parts.push(`<h1>3. Alcance del Proyecto</h1>`);
       if (cleanScope) {
         const scopeLines = cleanScope.split("\n");
-        const simplifiedLines: string[] = [];
+        const scopeSections: string[] = [];
         let inSection = false;
         let sectionContentLines = 0;
 
@@ -1857,30 +1897,30 @@ serve(async (req: Request) => {
           if (/^##\s/.test(sl)) {
             inSection = true;
             sectionContentLines = 0;
-            simplifiedLines.push(sl);
+            scopeSections.push(sl);
           } else if (/^#\s/.test(sl)) {
             inSection = false;
           } else if (inSection) {
             if (/^[-*]\s/.test(sl.trim()) || /^\d+\.\s/.test(sl.trim())) {
-              simplifiedLines.push(sl);
+              scopeSections.push(sl);
               sectionContentLines++;
-            } else if (sl.trim() && sectionContentLines < 3) {
-              simplifiedLines.push(sl);
+            } else if (sl.trim() && sectionContentLines < 4) {
+              scopeSections.push(sl);
               sectionContentLines++;
             }
           }
         }
-        // Strip numbers from headings, convert to HTML, then add correct numbering
-        const scopeHtml = markdownToHtml(stripHeadingNumbers(simplifiedLines.join("\n")));
-        parts.push(numberBodyHeadings(scopeHtml));
+        parts.push(markdownToHtml(stripHeadingNumbers(scopeSections.join("\n"))));
       }
+      parts.push(`<p style="font-size:9pt;color:#9CA3AF;margin-top:8px;"><em>Nota: El alcance detallado se definirá en el documento técnico de especificaciones.</em></p>`);
 
-      // ── Section 3: Timeline ──
+      // ══════════════════════════════════════════════════════════════
+      // SECTION 5: Implementation Phases & Timeline
+      // ══════════════════════════════════════════════════════════════
       if (proposal.budget?.development?.phases?.length) {
-        parts.push(`<h1>Cronograma de Implementación</h1>`);
+        parts.push(`<h1>4. Plan de Implementación</h1>`);
         const phases = proposal.budget.development.phases;
 
-        // Use explicit duration_weeks from phases if available, otherwise compute from hours
         const getPhaseWeeks = (p: any): number => {
           if (p.duration_weeks != null && p.duration_weeks > 0) return p.duration_weeks;
           if (p.weeks != null && p.weeks > 0) return p.weeks;
@@ -1889,15 +1929,23 @@ serve(async (req: Request) => {
 
         const totalWeeks = phases.reduce((s: number, p: any) => s + getPhaseWeeks(p), 0) || 1;
 
-        // Phase table
-        parts.push(`<table><tr><th>Fase</th><th>Descripción</th><th>Duración</th></tr>`);
-        for (const p of phases) {
+        // Phase descriptions
+        for (let pi = 0; pi < phases.length; pi++) {
+          const p = phases[pi];
           const weeks = getPhaseWeeks(p);
-          parts.push(`<tr><td><strong>${escHtml(p.name || "")}</strong></td><td>${escHtml(p.description || "")}</td><td style="text-align:center">${weeks <= 1 ? "1 semana" : `${weeks} semanas`}</td></tr>`);
+          parts.push(`<div class="opp-card" style="margin-bottom:12px;">`);
+          parts.push(`<h4>Fase ${pi}: ${escHtml(p.name || `Fase ${pi}`)}</h4>`);
+          if (p.description) {
+            parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin:4px 0 8px;">${escHtml(p.description)}</p>`);
+          }
+          parts.push(`<div class="opp-metrics">`);
+          parts.push(`<div class="opp-metric"><span class="opp-metric-val">${weeks <= 1 ? "1 semana" : `${weeks} semanas`}</span><span class="opp-metric-label">Duración</span></div>`);
+          parts.push(`</div>`);
+          parts.push(`</div>`);
         }
-        parts.push(`</table>`);
 
-        // Gantt
+        // Gantt chart
+        parts.push(`<h2>Cronograma Visual</h2>`);
         parts.push(`<div style="margin:16px 0;">`);
         let cumulativeWeeks = 0;
         const colors = ["#0D9488", "#0891B2", "#7C3AED", "#DB2777", "#EA580C", "#059669"];
@@ -1907,7 +1955,7 @@ serve(async (req: Request) => {
           const leftPct = (cumulativeWeeks / totalWeeks) * 100;
           const widthPct = Math.max(5, (phaseWeeks / totalWeeks) * 100);
           parts.push(`<div style="display:flex;align-items:center;margin-bottom:8px;">`);
-          parts.push(`<div style="width:140px;flex-shrink:0;font-size:8.5pt;font-weight:600;">${escHtml(p.name || `Fase ${pi + 1}`)}</div>`);
+          parts.push(`<div style="width:140px;flex-shrink:0;font-size:8.5pt;font-weight:600;">${escHtml(p.name || `Fase ${pi}`)}</div>`);
           parts.push(`<div style="flex:1;height:24px;background:var(--bg-light);border-radius:4px;position:relative;border:1px solid var(--border-light);">`);
           parts.push(`<div style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${colors[pi % colors.length]};border-radius:3px;display:flex;align-items:center;justify-content:center;">`);
           parts.push(`<span style="font-size:7pt;color:white;font-weight:600;">${phaseWeeks}sem</span>`);
@@ -1917,16 +1965,53 @@ serve(async (req: Request) => {
         parts.push(`</div>`);
 
         parts.push(`<div class="kpi-row">`);
-        parts.push(`<div class="kpi-box"><div class="kpi-value">${totalWeeks} sem</div><div class="kpi-label">Duración total estimada</div></div>`);
-        parts.push(`<div class="kpi-box"><div class="kpi-value">${phases.length}</div><div class="kpi-label">Fases</div></div>`);
+        parts.push(`<div class="kpi-box"><div class="kpi-value">${totalWeeks} semanas</div><div class="kpi-label">Duración total estimada</div></div>`);
+        parts.push(`<div class="kpi-box"><div class="kpi-value">${phases.length}</div><div class="kpi-label">Fases de implementación</div></div>`);
         parts.push(`</div>`);
       }
 
-      // ── Section 4: Presupuesto (simplified — only prices, no marketing) ──
-      parts.push(`<h1>Presupuesto</h1>`);
+      // ══════════════════════════════════════════════════════════════
+      // SECTION 6: Investment / Budget
+      // ══════════════════════════════════════════════════════════════
+      parts.push(`<h1>5. Inversión</h1>`);
 
-      // Monetization models — ONLY name + setup + monthly, no description/pros/cons/best_for
+      // Development investment summary (without internal costs)
+      if (proposal.budget?.development) {
+        const dev = proposal.budget.development;
+        if (dev.total_development_eur != null) {
+          parts.push(`<div class="roi-box" style="margin-bottom:16px;"><div class="roi-number">€${Number(dev.total_development_eur).toLocaleString("es-ES")}</div><div class="roi-label">Inversión en desarrollo</div></div>`);
+        }
+
+        // Phase breakdown table (no hours, no internal costs)
+        if (dev.phases?.length) {
+          parts.push(`<table><tr><th>Fase</th><th>Descripción</th><th style="text-align:right">Inversión (€)</th></tr>`);
+          for (const p of dev.phases) {
+            parts.push(`<tr><td><strong>${escHtml(p.name || "")}</strong></td><td>${escHtml(p.description || "")}</td><td style="text-align:right">${(p.cost_eur ?? 0).toLocaleString("es-ES")}</td></tr>`);
+          }
+          parts.push(`</table>`);
+        }
+      }
+
+      // Recurring costs summary
+      if (proposal.budget?.recurring_monthly) {
+        const rec = proposal.budget.recurring_monthly;
+        const totalMonthly = rec.total_monthly_eur ?? 0;
+        if (totalMonthly > 0) {
+          parts.push(`<h2>Costes Recurrentes</h2>`);
+          if (rec.items?.length) {
+            parts.push(`<table><tr><th>Concepto</th><th style="text-align:right">Coste (€/mes)</th></tr>`);
+            for (const item of rec.items) {
+              parts.push(`<tr><td>${escHtml(item.name || "")}</td><td style="text-align:right">${(item.cost_eur ?? 0).toLocaleString("es-ES")}</td></tr>`);
+            }
+            parts.push(`</table>`);
+          }
+          parts.push(`<div class="kpi-row"><div class="kpi-box"><div class="kpi-value">€${totalMonthly.toLocaleString("es-ES")}/mes</div><div class="kpi-label">Total costes recurrentes</div></div></div>`);
+        }
+      }
+
+      // Monetization models — commercial presentation
       if (proposal.budget?.monetization_models?.length) {
+        parts.push(`<h2>Opciones Comerciales</h2>`);
         for (const model of proposal.budget.monetization_models) {
           parts.push(`<div class="opp-card">`);
           parts.push(`<h4>${escHtml(model.name)}</h4>`);
@@ -1940,13 +2025,11 @@ serve(async (req: Request) => {
           const setupNum = Number(rawSetup);
           const monthlyNum = Number(rawMonthly);
           const annualNum = Number(rawAnnual);
-          // Setup
           if (!isNaN(setupNum) && setupNum > 0) {
             metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${setupNum.toLocaleString("es-ES")}</span><span class="opp-metric-label">Setup</span></div>`);
           } else if (rawSetup && String(rawSetup).trim()) {
             metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(rawSetup))}</span><span class="opp-metric-label">Setup</span></div>`);
           }
-          // Monthly — detect license model to add "por licencia" suffix
           const isLicenseModel = /licencia/i.test(model.name || "");
           const monthlySuffix = isLicenseModel ? "/mes por licencia" : "/mes";
           const monthlyLabel = isLicenseModel ? "Mensual por licencia" : "Mensual";
@@ -1955,13 +2038,9 @@ serve(async (req: Request) => {
           } else if (rawMonthly && String(rawMonthly).trim()) {
             metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(rawMonthly))}${monthlySuffix}</span><span class="opp-metric-label">${monthlyLabel}</span></div>`);
           }
-          // Annual
           if (!isNaN(annualNum) && annualNum > 0) {
             metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${annualNum.toLocaleString("es-ES")}/año</span><span class="opp-metric-label">Anual</span></div>`);
-          } else if (rawAnnual && String(rawAnnual).trim()) {
-            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(rawAnnual))}/año</span><span class="opp-metric-label">Anual</span></div>`);
           }
-          // Fallback: price_range solo si no hay ningún precio específico
           if (metrics.length === 0 && model.price_range) {
             metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
           }
@@ -1970,14 +2049,25 @@ serve(async (req: Request) => {
         }
       }
 
-      // Recurring costs removed — they only appear in the monetization model prices above
+      // ══════════════════════════════════════════════════════════════
+      // SECTION 7: Conditions & Next Steps
+      // ══════════════════════════════════════════════════════════════
+      parts.push(`<h1>6. Condiciones y Próximos Pasos</h1>`);
+      parts.push(`<h2>Condiciones Generales</h2>`);
+      parts.push(`<ul>`);
+      parts.push(`<li>Los precios indicados no incluyen IVA.</li>`);
+      parts.push(`<li>La propuesta tiene una validez de 30 días naturales.</li>`);
+      parts.push(`<li>Los plazos se cuentan desde la fecha de arranque acordada.</li>`);
+      parts.push(`<li>Se requiere la colaboración activa del cliente para validaciones y feedback en cada fase.</li>`);
+      parts.push(`</ul>`);
 
-      // ── Section 5: Next Steps ──
-      parts.push(`<h1>Próximos Pasos</h1>`);
+      parts.push(`<h2>Próximos Pasos</h2>`);
       parts.push(`<ol>`);
-      parts.push(`<li><strong>Confirmar modelo comercial preferido</strong> y alcance del proyecto.</li>`);
-      parts.push(`<li><strong>Reunión de arranque (Kick-off)</strong> — Definir equipo, accesos y calendario.</li>`);
-      parts.push(`<li><strong>Inicio de Fase 0</strong> — Configuración técnica y primeros prototipos.</li>`);
+      parts.push(`<li><strong>Revisión de la propuesta</strong> — Resolver dudas y ajustar alcance si es necesario.</li>`);
+      parts.push(`<li><strong>Selección del modelo comercial</strong> — Confirmar la opción de inversión preferida.</li>`);
+      parts.push(`<li><strong>Firma del acuerdo</strong> — Formalizar condiciones y calendario.</li>`);
+      parts.push(`<li><strong>Reunión de arranque (Kick-off)</strong> — Definir equipo, accesos y calendario detallado.</li>`);
+      parts.push(`<li><strong>Inicio de Fase 0</strong> — Configuración técnica y primeros entregables.</li>`);
       parts.push(`</ol>`);
 
       htmlContent = parts.join("\n");

@@ -199,7 +199,7 @@ export const ProjectProposalExport = ({
       content: {
         scope,
         aiOpportunities: stepNumber === 100 ? aiOpportunities : undefined,
-        techSummary: stepNumber === 100 ? techSummary : undefined,
+        techSummary,
         budget,
       },
       contentType: "json",
@@ -263,12 +263,12 @@ export const ProjectProposalExport = ({
         { body: payload }
       );
       if (error) throw error;
-      await downloadFile(data, `resumen-ejecutivo-${projectName || "proyecto"}.pdf`);
-      toast.success("Resumen ejecutivo descargado");
+      await downloadFile(data, `propuesta-comercial-${projectName || "proyecto"}.pdf`);
+      toast.success("Propuesta comercial descargada");
     } catch (err: any) {
-      console.error("Simple export error:", err);
+      console.error("Commercial proposal export error:", err);
       toast.error(
-        "Error al generar resumen: " + (err.message || "Error desconocido")
+        "Error al generar propuesta: " + (err.message || "Error desconocido")
       );
     } finally {
       setGeneratingSimple(false);
@@ -292,9 +292,9 @@ export const ProjectProposalExport = ({
     >
       <div className="p-4 space-y-4">
         <p className="text-xs text-muted-foreground">
-          Genera un PDF profesional unificado con el alcance, arquitectura
-          simplificada, plan de implementación y presupuesto para enviar al
-          cliente.
+          Genera documentos PDF profesionales para enviar al cliente: una propuesta comercial
+          completa (hasta 10 páginas) con descripción del producto, alcance, fases, timings y
+          presupuesto, o una propuesta técnica detallada con toda la información.
         </p>
 
         {models.length > 0 && (
@@ -334,12 +334,12 @@ export const ProjectProposalExport = ({
             {generatingSimple ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Generando resumen...
+                Generando propuesta...
               </>
             ) : (
               <>
                 <FileDown className="w-4 h-4" />
-                Resumen Ejecutivo (3-5 págs)
+                Propuesta Comercial (máx 10 págs)
               </>
             )}
           </Button>

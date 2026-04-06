@@ -10122,6 +10122,35 @@ export type Database = {
         }
         Relationships: []
       }
+      whatsapp_instance_owners: {
+        Row: {
+          connected_at: string | null
+          instance_name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          connected_at?: string | null
+          instance_name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          connected_at?: string | null
+          instance_name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_instance_owners_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whoop_data: {
         Row: {
           avg_hr: number | null

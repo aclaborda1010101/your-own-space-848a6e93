@@ -39,9 +39,9 @@ export const WhatsAppConnectionCard = () => {
   const checkOwnership = useCallback(async () => {
     if (!user) return false;
     const { data } = await (supabase
-      .from("user_integrations" as any)
+      .from("whatsapp_instance_owners" as any)
       .select("user_id")
-      .eq("provider", "evolution_whatsapp")
+      .eq("instance_name", INSTANCE_NAME)
       .maybeSingle() as any);
     if (data && data.user_id !== user.id) {
       setOwnedByOther(true);
@@ -53,12 +53,12 @@ export const WhatsAppConnectionCard = () => {
 
   const saveOwnership = useCallback(async () => {
     if (!user) return;
-    await (supabase.from("user_integrations" as any).upsert({
+    await (supabase.from("whatsapp_instance_owners" as any).upsert({
+      instance_name: INSTANCE_NAME,
       user_id: user.id,
-      provider: "evolution_whatsapp",
-      access_token: "connected",
+      connected_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
-    }, { onConflict: "user_id,provider" }) as any);
+    }, { onConflict: "instance_name" }) as any);
   }, [user]);
 
   const checkStatus = useCallback(async () => {

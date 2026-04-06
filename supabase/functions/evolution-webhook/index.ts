@@ -80,14 +80,22 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Resolve user_id
-    const userId = Deno.env.get("EVOLUTION_DEFAULT_USER_ID");
+    // Resolve user_id dynamically from instance owner
+    const instanceName = body.instance || "jarvis-whatsapp";
+    const { data: owner } = await supabase
+      .from("whatsapp_instance_owners")
+      .select("user_id")
+      .eq("instance_name", instanceName)
+      .maybeSingle();
+
+    const userId = owner?.user_id || Deno.env.get("EVOLUTION_DEFAULT_USER_ID");
     if (!userId) {
-      console.error("EVOLUTION_DEFAULT_USER_ID not configured");
+      console.error("No instance owner found and EVOLUTION_DEFAULT_USER_ID not configured");
       return new Response(JSON.stringify({ ok: false, error: "no_user_id" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    console.log(`[evolution-webhook] Resolved userId: ${userId} (from ${owner ? "instance_owner" : "env_fallback"})`);
 
     // Find or create contact
     let contactId: string;

@@ -417,6 +417,113 @@ async function fetchEvents(
 }
 
 /**
+ * Discover the correct CalDAV base URL and first calendar path
+ */
+async function discoverCalendarUrl(
+  email: string,
+  password: string
+): Promise<{ baseUrl: string; calendarPath: string }> {
+  const auth = btoa(`${email}:${password}`);
+
+  // 1. Get principal
+  const principalResponse = await fetch(`${CALDAV_ENDPOINT}/`, {
+    method: "PROPFIND",
+    headers: {
+      "Authorization": `Basic ${auth}`,
+      "Content-Type": "application/xml; charset=utf-8",
+      "Depth": "0",
+    },
+    body: `<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind xmlns:d="DAV:">
+  <d:prop><d:current-user-principal/></d:prop>
+</d:propfind>`,
+  });
+
+  if (!principalResponse.ok) throw new Error(`CalDAV principal error: ${principalResponse.status}`);
+  const principalXml = await principalResponse.text();
+
+  let principalUrl: string | null = null;
+  const p1 = principalXml.match(/<current-user-principal[^>]*>[\s\S]*?<href[^>]*>([^<]+)<\/href>/i);
+  if (p1) principalUrl = p1[1];
+  if (!principalUrl) {
+    const p2 = principalXml.match(/<d:current-user-principal[^>]*>[\s\S]*?<d:href[^>]*>([^<]+)<\/d:href>/i);
+    if (p2) principalUrl = p2[1];
+  }
+  if (!principalUrl) throw new Error("Could not find CalDAV principal URL");
+
+  // 2. Get calendar home
+  const homeResponse = await fetch(`${CALDAV_ENDPOINT}${principalUrl}`, {
+    method: "PROPFIND",
+    headers: {
+      "Authorization": `Basic ${auth}`,
+      "Content-Type": "application/xml; charset=utf-8",
+      "Depth": "0",
+    },
+    body: `<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">
+  <d:prop><c:calendar-home-set/></d:prop>
+</d:propfind>`,
+  });
+
+  if (!homeResponse.ok) throw new Error(`CalDAV home error: ${homeResponse.status}`);
+  const homeXml = await homeResponse.text();
+
+  let calendarHome: string | null = null;
+  const h1 = homeXml.match(/<calendar-home-set[^>]*>[\s\S]*?<href[^>]*>([^<]+)<\/href>/i);
+  if (h1) calendarHome = h1[1];
+  if (!calendarHome) {
+    const h2 = homeXml.match(/<c:calendar-home-set[^>]*>[\s\S]*?<d:href[^>]*>([^<]+)<\/d:href>/i);
+    if (h2) calendarHome = h2[1];
+  }
+  if (!calendarHome) calendarHome = principalUrl;
+
+  let calendarBaseUrl: string;
+  let calendarHomeUrl: string;
+  if (calendarHome.startsWith("http")) {
+    calendarHomeUrl = calendarHome;
+    const parsedUrl = new URL(calendarHome);
+    calendarBaseUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
+  } else {
+    calendarHomeUrl = `${CALDAV_ENDPOINT}${calendarHome}`;
+    calendarBaseUrl = CALDAV_ENDPOINT;
+  }
+
+  // 3. List calendars to find the first valid one
+  const calendarsResponse = await fetch(calendarHomeUrl, {
+    method: "PROPFIND",
+    headers: {
+      "Authorization": `Basic ${auth}`,
+      "Content-Type": "application/xml; charset=utf-8",
+      "Depth": "1",
+    },
+    body: `<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/">
+  <d:prop><d:resourcetype/><d:displayname/></d:prop>
+</d:propfind>`,
+  });
+
+  let firstCalendarPath = calendarHome;
+  if (calendarsResponse.ok) {
+    const calendarsXml = await calendarsResponse.text();
+    const responseBlocks = calendarsXml.split(/<(?:d:)?response[^>]*>/i).slice(1);
+    for (const block of responseBlocks) {
+      const isCalendar = /<(?:c:|cal:)?calendar[^>]*\/>/i.test(block) ||
+                         /<resourcetype[^>]*>[\s\S]*?<(?:c:|cal:)?calendar/i.test(block);
+      if (isCalendar) {
+        const hrefMatch = block.match(/<(?:d:)?href[^>]*>([^<]+)<\/(?:d:)?href>/i);
+        if (hrefMatch && !hrefMatch[1].endsWith('/calendars/')) {
+          firstCalendarPath = hrefMatch[1];
+          break;
+        }
+      }
+    }
+  }
+
+  console.log(`[createEvent] Discovered baseUrl: ${calendarBaseUrl}, calendarPath: ${firstCalendarPath}`);
+  return { baseUrl: calendarBaseUrl, calendarPath: firstCalendarPath };
+}
+
+/**
  * Create a new event in iCloud Calendar
  */
 async function createEvent(
@@ -430,7 +537,8 @@ async function createEvent(
     location?: string;
     description?: string;
     allDay?: boolean;
-  }
+  },
+  baseUrl?: string
 ): Promise<{ success: boolean; uid: string }> {
   const auth = btoa(`${email}:${password}`);
   const uid = crypto.randomUUID();
@@ -453,7 +561,15 @@ ${event.description ? `DESCRIPTION:${event.description}` : ""}
 END:VEVENT
 END:VCALENDAR`;
 
-  const response = await fetch(`${CALDAV_ENDPOINT}${calendarPath}${uid}.ics`, {
+  // Use discovered base URL or fall back to generic endpoint
+  const effectiveBase = baseUrl || CALDAV_ENDPOINT;
+  const eventUrl = calendarPath.startsWith("http")
+    ? `${calendarPath}${uid}.ics`
+    : `${effectiveBase}${calendarPath}${uid}.ics`;
+
+  console.log(`[createEvent] PUT to: ${eventUrl}`);
+
+  const response = await fetch(eventUrl, {
     method: "PUT",
     headers: {
       "Authorization": `Basic ${auth}`,
@@ -468,7 +584,7 @@ END:VCALENDAR`;
       throw new Error("Invalid iCloud credentials. Please check your Apple ID and App-Specific Password.");
     }
     const error = await response.text();
-    console.error("CalDAV create error:", response.status, error);
+    console.error("CalDAV create error:", response.status, error.substring(0, 300));
     throw new Error(`Failed to create event: ${response.status}`);
   }
 

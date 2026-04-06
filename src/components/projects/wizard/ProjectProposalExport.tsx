@@ -334,12 +334,12 @@ export const ProjectProposalExport = ({
             {generatingSimple ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Generando resumen...
+                Generando propuesta...
               </>
             ) : (
               <>
                 <FileDown className="w-4 h-4" />
-                Resumen Ejecutivo (3-5 págs)
+                Propuesta Comercial (máx 10 págs)
               </>
             )}
           </Button>

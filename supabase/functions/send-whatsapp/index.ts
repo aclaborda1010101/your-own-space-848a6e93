@@ -389,7 +389,13 @@ serve(async (req) => {
     }
 
     if (resolvedContactId) {
-      const crmUserId = user_id || Deno.env.get("EVOLUTION_DEFAULT_USER_ID");
+      // Resolve from instance owner table, then fallback
+      const { data: ownerRow } = await supabase
+        .from("whatsapp_instance_owners")
+        .select("user_id")
+        .eq("instance_name", INSTANCE_NAME)
+        .maybeSingle();
+      const crmUserId = user_id || ownerRow?.user_id || Deno.env.get("EVOLUTION_DEFAULT_USER_ID");
       if (crmUserId) {
         const { error: persistErr } = await supabase
           .from("contact_messages")

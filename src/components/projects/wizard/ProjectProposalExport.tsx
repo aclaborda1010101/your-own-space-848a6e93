@@ -199,7 +199,7 @@ export const ProjectProposalExport = ({
       content: {
         scope,
         aiOpportunities: stepNumber === 100 ? aiOpportunities : undefined,
-        techSummary: stepNumber === 100 ? techSummary : undefined,
+        techSummary,
         budget,
       },
       contentType: "json",

@@ -1797,122 +1797,161 @@ serve(async (req: Request) => {
       const proposal = processedContent as any;
       const parts: string[] = [];
 
-      // Sanitize scope for client
-      let cleanScope = sanitizeTextForClient(
-        typeof proposal.scope === "string" ? proposal.scope : ""
-      );
-      cleanScope = cleanScope.replace(/^##\s*(?:.*(?:comparativa|alternativa|comparación).*)\n(?:(?!^##\s)[\s\S])*?(?=\n##\s|\n#\s|$)/gim, "");
-      cleanScope = cleanScope.replace(
-        /^(##\s+.+?)\s*[-–—]\s*\d+\s*semanas?\s*$/gim, '$1'
-      );
-      cleanScope = cleanScope.replace(
-        /^(##\s+.+?)\s*\(\s*\d+\s*semanas?\s*\)\s*$/gim, '$1'
-      );
+      // ── Aggressive scope cleanup: remove ALL technical content ──
+      const rawScope = typeof proposal.scope === "string" ? proposal.scope : "";
+      let cleanScope = sanitizeTextForClient(rawScope);
 
-      const stripHeadingNumbers = (text: string): string => {
-        return text.replace(/^(##)\s*(?:\d+\.?\d*\.?\s*)+(.+)$/gm, '$1 $2');
+      // Technical section patterns to COMPLETELY remove
+      const technicalSectionPatterns = [
+        /comparativa|alternativa|comparación/i,
+        /inversión\s+por\s+fase|costes?\s+recurrentes?/i,
+        /ontolog[ií]a|entidades?\s+principales?/i,
+        /infraestructura|arquitectura\s+t[eé]cnica/i,
+        /edge\s*function|EF-\d+/i,
+        /RLS|row[\s.-]*level|policies?|pol[ií]ticas?\s+de\s+acceso/i,
+        /SQL|PostgreSQL|base\s*de\s*datos|schema|trigger|migration/i,
+        /signal\s*object|processing|convergencia|abstenci[oó]n/i,
+        /variable.*objetivo|variable.*peso|normalizaci[oó]n/i,
+        /f[oó]rmula\s+conceptual/i,
+        /wireframe|componente.*reutilizable|pantalla.*ruta/i,
+        /auth\s*flow|secrets?\s*management/i,
+        /QA\s*checklist|P[012]\s*[—–-]/i,
+        /EU\s*AI\s*Act|clasificaci[oó]n\s*de\s*riesgo/i,
+        /dimensionamiento|on[\s-]*premise|escalado/i,
+        /Mermaid|Deno|TypeScript|Supabase|API\s*endpoint/i,
+        /blueprint|lovable|cat[aá]logo.*variables/i,
+        /hook|useState|useEffect/i,
+        /gobierno|gobernanza|supervisi[oó]n\s+humana/i,
+        /aislamiento|requerimientos?\s+de\s+aislamiento/i,
+        /flujo\s+de\s+señales|acceso\s+por\s+rol/i,
+        /[ií]ndices|vistas?\s+materializadas?/i,
+        /Spec\s+RAG|Spec\s+Detector/i,
+        /stack\b|inbound|orchestrat|classify|advise|zoho|knowledge[\s-]*processor/i,
+        /incertidumbre/i,
+      ];
+
+      // Extract ONLY commercial-friendly sections from scope
+      const extractCommercialSections = (text: string): { summary: string; features: string[] } => {
+        const lines = text.split("\n");
+        let summary = "";
+        const features: string[] = [];
+        let currentSection = "";
+        let skipSection = false;
+        let summaryCollected = false;
+        const summaryLines: string[] = [];
+
+        for (const line of lines) {
+          const isH1 = /^#\s/.test(line);
+          const isH2 = /^##\s/.test(line);
+          const isH3 = /^###\s/.test(line);
+          const isHeading = isH1 || isH2 || isH3;
+
+          if (isHeading) {
+            skipSection = technicalSectionPatterns.some(p => p.test(line));
+            if (!skipSection) currentSection = line.replace(/^#+\s+/, "").replace(/^\d+\.?\d*\.?\s*/, "");
+          }
+
+          if (skipSection) continue;
+
+          // Collect first few paragraphs as summary
+          if (!summaryCollected && !isHeading && line.trim() && !isH2 && !isH3) {
+            if (summaryLines.length < 8) {
+              // Skip lines that look technical
+              if (!/entidad|variable|patr[oó]n|Edge|Function|tabla|cron|endpoint|hook/i.test(line)) {
+                summaryLines.push(line);
+              }
+            } else {
+              summaryCollected = true;
+            }
+          }
+
+          // Collect high-level features (H2 titles only, no content)
+          if (isH2 && !skipSection) {
+            const title = line.replace(/^##\s+/, "").replace(/^\d+\.?\d*\.?\s*/, "").trim();
+            // Only include if it sounds commercial, not technical
+            if (title.length > 3 && title.length < 100 &&
+                !/SQL|Edge|RLS|API|Deno|TypeScript|schema|trigger|hook|variable|signal|auth|QA|spec|blueprint|wireframe|stack|escalado|dimensionamiento|aislamiento|gobierno/i.test(title)) {
+              features.push(title);
+            }
+          }
+        }
+
+        summary = summaryLines.join("\n");
+        return { summary, features };
       };
 
+      const { summary: scopeSummary, features: scopeFeatures } = extractCommercialSections(cleanScope);
+
       // ══════════════════════════════════════════════════════════════
-      // SECTION 1: Cover context — short intro paragraph
+      // SECTION 1: Cover
       // ══════════════════════════════════════════════════════════════
       parts.push(`<h1>Propuesta Comercial</h1>`);
       parts.push(`<p style="font-size:10pt;color:#6B7280;margin-bottom:20px;">Documento preparado para <strong>${escHtml(company || projectName || "el cliente")}</strong> — ${new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}</p>`);
 
       // ══════════════════════════════════════════════════════════════
-      // SECTION 2: Executive Summary (1 page max)
+      // SECTION 2: Executive Summary (half page max)
       // ══════════════════════════════════════════════════════════════
       parts.push(`<h1>1. Resumen Ejecutivo</h1>`);
-      if (cleanScope) {
-        const scopeLines = cleanScope.split("\n");
-        const summaryLines: string[] = [];
-        let paraCount = 0;
-        for (const sl of scopeLines) {
-          if (paraCount >= 4 && /^##\s/.test(sl)) break;
-          if (sl.trim() === "") { paraCount++; if (paraCount > 5) break; }
-          if (/^#\s/.test(sl)) continue;
-          summaryLines.push(sl);
-        }
-        parts.push(markdownToHtml(summaryLines.join("\n")));
+      if (scopeSummary) {
+        parts.push(markdownToHtml(scopeSummary));
       }
 
       // ══════════════════════════════════════════════════════════════
-      // SECTION 3: Product / Solution Description (from techSummary)
+      // SECTION 3: Solution Description — HIGH LEVEL only
       // ══════════════════════════════════════════════════════════════
       parts.push(`<h1>2. Descripción de la Solución</h1>`);
+
+      // Use techSummary but ONLY extract the first meaningful section
       const techSummary = typeof proposal.techSummary === "string" ? proposal.techSummary : "";
       if (techSummary) {
-        // Extract key sections from simplified PRD
         const techLines = techSummary.split("\n");
-        const productLines: string[] = [];
-        let inRelevantSection = false;
-        let sectionCount = 0;
-        const relevantPatterns = [
-          /objetivo|problema|solución|contexto|descripción|funcionalidad|módulo|componente|usuario|actor|caso\s*de\s*uso|alcance|característica|feature/i,
-        ];
-        const skipTechPatterns = [
-          /SQL|Edge\s*Function|migration|Blueprint|RLS|PostgreSQL|trigger|schema|Mermaid|Deno|TypeScript|Supabase|API\s*endpoint|catálogo.*variables|hook|useState/i,
-        ];
+        const descLines: string[] = [];
+        let lineCount = 0;
+        let skip = false;
 
         for (const line of techLines) {
-          const isHeading = /^#{1,3}\s/.test(line);
-          if (isHeading) {
-            if (skipTechPatterns.some(p => p.test(line))) {
-              inRelevantSection = false;
-              continue;
+          if (/^#{1,3}\s/.test(line)) {
+            skip = technicalSectionPatterns.some(p => p.test(line));
+            if (!skip && lineCount < 40) {
+              descLines.push(line);
             }
-            if (relevantPatterns.some(p => p.test(line)) || sectionCount < 6) {
-              inRelevantSection = true;
-              sectionCount++;
-              productLines.push(line);
-            } else {
-              inRelevantSection = false;
+          } else if (!skip && line.trim() && lineCount < 40) {
+            // Skip lines with technical jargon
+            if (!/CREATE\s|SELECT\s|INSERT\s|Edge\s*Function|Supabase|PostgreSQL|Deno|TypeScript|RLS|cron|endpoint|webhook|migration|trigger|schema|hook|useState|lovable/i.test(line)) {
+              descLines.push(line);
+              lineCount++;
             }
-          } else if (inRelevantSection) {
-            productLines.push(line);
           }
         }
 
-        if (productLines.length > 0) {
-          parts.push(markdownToHtml(stripHeadingNumbers(productLines.join("\n"))));
-        } else {
-          parts.push(`<p>La solución propuesta aborda las necesidades identificadas durante el análisis inicial, proporcionando una plataforma a medida que optimiza los procesos clave del negocio.</p>`);
+        if (descLines.length > 3) {
+          parts.push(markdownToHtml(descLines.join("\n")));
         }
-      } else if (cleanScope) {
-        // Fallback: use scope sections as product description
-        parts.push(markdownToHtml(stripHeadingNumbers(cleanScope)));
+      }
+
+      // If no good tech summary, list features as bullets
+      if (scopeFeatures.length > 0) {
+        parts.push(`<h2>Funcionalidades Principales</h2>`);
+        parts.push(`<ul>`);
+        for (const feat of scopeFeatures.slice(0, 12)) {
+          parts.push(`<li>${escHtml(feat)}</li>`);
+        }
+        parts.push(`</ul>`);
       }
 
       // ══════════════════════════════════════════════════════════════
-      // SECTION 4: Scope — key deliverables
+      // SECTION 4: Scope — concise deliverables list
       // ══════════════════════════════════════════════════════════════
       parts.push(`<h1>3. Alcance del Proyecto</h1>`);
-      if (cleanScope) {
-        const scopeLines = cleanScope.split("\n");
-        const scopeSections: string[] = [];
-        let inSection = false;
-        let sectionContentLines = 0;
-
-        for (const sl of scopeLines) {
-          if (/^##\s/.test(sl)) {
-            inSection = true;
-            sectionContentLines = 0;
-            scopeSections.push(sl);
-          } else if (/^#\s/.test(sl)) {
-            inSection = false;
-          } else if (inSection) {
-            if (/^[-*]\s/.test(sl.trim()) || /^\d+\.\s/.test(sl.trim())) {
-              scopeSections.push(sl);
-              sectionContentLines++;
-            } else if (sl.trim() && sectionContentLines < 4) {
-              scopeSections.push(sl);
-              sectionContentLines++;
-            }
-          }
-        }
-        parts.push(markdownToHtml(stripHeadingNumbers(scopeSections.join("\n"))));
+      if (scopeFeatures.length > 0) {
+        parts.push(`<p>El proyecto comprende el diseño, desarrollo e implementación de los siguientes módulos:</p>`);
+        parts.push(`<table><tr><th>#</th><th>Módulo / Entregable</th></tr>`);
+        scopeFeatures.slice(0, 15).forEach((feat, i) => {
+          parts.push(`<tr><td style="text-align:center;width:40px;">${i + 1}</td><td>${escHtml(feat)}</td></tr>`);
+        });
+        parts.push(`</table>`);
       }
-      parts.push(`<p style="font-size:9pt;color:#9CA3AF;margin-top:8px;"><em>Nota: El alcance detallado se definirá en el documento técnico de especificaciones.</em></p>`);
+      parts.push(`<p style="font-size:9pt;color:#9CA3AF;margin-top:8px;"><em>El alcance técnico detallado se definirá en el documento de especificaciones.</em></p>`);
 
       // ══════════════════════════════════════════════════════════════
       // SECTION 5: Implementation Phases & Timeline

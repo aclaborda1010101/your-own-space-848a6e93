@@ -292,9 +292,9 @@ export const ProjectProposalExport = ({
     >
       <div className="p-4 space-y-4">
         <p className="text-xs text-muted-foreground">
-          Genera un PDF profesional unificado con el alcance, arquitectura
-          simplificada, plan de implementación y presupuesto para enviar al
-          cliente.
+          Genera documentos PDF profesionales para enviar al cliente: una propuesta comercial
+          completa (hasta 10 páginas) con descripción del producto, alcance, fases, timings y
+          presupuesto, o una propuesta técnica detallada con toda la información.
         </p>
 
         {models.length > 0 && (

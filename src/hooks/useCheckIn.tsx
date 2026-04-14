@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
 import { getTodayLocal } from "@/lib/dateUtils";
+import { useJarvisWhoopData } from "./useJarvisWhoopData";
+import { mapWhoopToCheckIn } from "@/lib/whoopToCheckIn";
 
 export interface CheckInData {
   energy: number;
@@ -24,13 +26,32 @@ const defaultCheckIn: CheckInData = {
 
 export const useCheckIn = () => {
   const { user } = useAuth();
+  const { data: whoopData, hasData: hasWhoopData } = useJarvisWhoopData();
   const [checkIn, setCheckInState] = useState<CheckInData>(defaultCheckIn);
   const [draftCheckIn, setDraftCheckIn] = useState<CheckInData>(defaultCheckIn);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
+  const [prefilledFromWhoop, setPrefilledFromWhoop] = useState(false);
 
   const today = getTodayLocal();
+
+  // Pre-fill from WHOOP when no check-in exists
+  useEffect(() => {
+    if (!isRegistered && !loading && hasWhoopData && whoopData) {
+      const mapped = mapWhoopToCheckIn(whoopData);
+      const whoopDefaults: CheckInData = {
+        energy: mapped.energy,
+        mood: mapped.mood,
+        focus: mapped.focus,
+        availableTime: mapped.availableTime,
+        interruptionRisk: mapped.interruptionRisk,
+        dayMode: mapped.dayMode,
+      };
+      setDraftCheckIn(whoopDefaults);
+      setPrefilledFromWhoop(true);
+    }
+  }, [isRegistered, loading, hasWhoopData, whoopData]);
 
   useEffect(() => {
     if (user) {
@@ -64,6 +85,7 @@ export const useCheckIn = () => {
         setCheckInState(checkInData);
         setDraftCheckIn(checkInData);
         setIsRegistered(true);
+        setPrefilledFromWhoop(false);
       } else {
         setIsRegistered(false);
       }
@@ -76,6 +98,7 @@ export const useCheckIn = () => {
 
   const updateDraft = useCallback((data: CheckInData) => {
     setDraftCheckIn(data);
+    setPrefilledFromWhoop(false);
   }, []);
 
   const registerCheckIn = async () => {
@@ -102,6 +125,7 @@ export const useCheckIn = () => {
       
       setCheckInState(draftCheckIn);
       setIsRegistered(true);
+      setPrefilledFromWhoop(false);
       toast.success("Check-in registrado correctamente");
     } catch (error: any) {
       console.error("Error saving check-in:", error);
@@ -119,5 +143,6 @@ export const useCheckIn = () => {
     loading,
     saving,
     isRegistered,
+    prefilledFromWhoop,
   };
 };

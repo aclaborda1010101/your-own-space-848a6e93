@@ -168,7 +168,25 @@ REGLAS:
 6. Si detectas que el tema es de otro especialista, menciónalo
 `;
 
-    const systemPrompt = await buildAgentPrompt(agentType, additionalContext, 400, import.meta.url);
+    // Fetch dynamic knowledge from specialist_knowledge table
+    let dynamicKnowledge = "";
+    try {
+      const { data: knowledgeData } = await supabase
+        .from("specialist_knowledge")
+        .select("title, content")
+        .eq("user_id", user_id)
+        .eq("specialist", agentType)
+        .eq("is_active", true)
+        .order("importance", { ascending: false })
+        .limit(5);
+      if (knowledgeData && knowledgeData.length > 0) {
+        dynamicKnowledge = knowledgeData.map((k: { title: string; content: string }) => `### ${k.title}\n${k.content}`).join("\n\n");
+      }
+    } catch (e) {
+      console.warn("[Gateway] Could not fetch dynamic knowledge:", e);
+    }
+
+    const systemPrompt = await buildAgentPrompt(agentType, additionalContext, 400, import.meta.url, dynamicKnowledge);
 
     // Build messages array
     const history = conversation_history || recentHistory.map((h: { role: string; message: string }) => ({

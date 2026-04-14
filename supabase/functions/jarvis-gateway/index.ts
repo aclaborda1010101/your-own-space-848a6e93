@@ -24,24 +24,34 @@ interface Specialist {
 const SPECIALISTS: Specialist[] = [
   {
     name: "coach",
-    triggers: ["productividad", "motivación", "bloqueo", "energía", "estrés", "ansiedad", "objetivos", "foco", "procrastinar", "hábitos", "objetivo", "rendimiento"],
+    triggers: ["productividad", "motivación", "bloqueo", "energía", "estrés", "ansiedad", "objetivos", "foco", "procrastinar", "hábitos", "objetivo", "rendimiento", "miedo", "decisión", "meta", "disciplina"],
     description: "Coach de alto rendimiento - productividad, emociones, decisiones"
   },
   {
     name: "nutrition",
-    triggers: ["comida", "dieta", "proteína", "calorías", "receta", "nutrición", "hambre", "peso", "alimentación", "comer", "desayuno", "almuerzo", "cena", "cocinar", "pollo", "arroz", "verdura", "fruta", "snack", "suplemento", "vitamina"],
+    triggers: ["comida", "dieta", "proteína", "calorías", "receta", "nutrición", "hambre", "peso", "alimentación", "comer", "desayuno", "almuerzo", "cena", "cocinar", "pollo", "arroz", "verdura", "fruta", "snack", "suplemento", "vitamina", "macros", "carbohidratos", "grasa", "ayuno", "creatina"],
     description: "Nutricionista - alimentación, recetas, macros"
   },
   {
     name: "english",
-    triggers: ["inglés", "english", "vocabulario", "gramática", "pronunciación", "speaking", "idioma", "traducir"],
+    triggers: ["inglés", "english", "vocabulario", "gramática", "pronunciación", "speaking", "idioma", "traducir", "phrasal", "chunks", "shadowing", "CEFR"],
     description: "Profesor de inglés - práctica y aprendizaje"
   },
   {
     name: "bosco",
-    triggers: ["bosco", "hijo", "niño", "actividad", "juego", "padre", "paternidad"],
+    triggers: ["bosco", "hijo", "niño", "actividad", "juego", "padre", "paternidad", "rabieta", "crianza", "desarrollo infantil"],
     description: "Actividades y cuidado de Bosco"
-  }
+  },
+  {
+    name: "ia-kids",
+    triggers: ["scratch", "programar niños", "coding kids", "robot niños", "tecnología niños", "enseñar programar", "pensamiento computacional"],
+    description: "Profesor de IA y tecnología para niños"
+  },
+  {
+    name: "secretaria",
+    triggers: ["agenda", "reunión", "calendario", "email", "organizar", "priorizar", "briefing", "seguimiento", "pendientes", "inbox", "cita", "recordatorio"],
+    description: "Secretaria ejecutiva - gestión de agenda, emails y productividad"
+  },
 ];
 
 function detectSpecialist(message: string): string | null {

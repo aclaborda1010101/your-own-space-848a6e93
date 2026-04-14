@@ -667,12 +667,19 @@ const StartDay = () => {
               {/* Step 3: Check-in */}
               {currentStep === 3 && (
                 <div className="space-y-6">
-                  <p className="text-sm text-muted-foreground">
-                    ¿Cómo te encuentras hoy?
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-muted-foreground">
+                      ¿Cómo te encuentras hoy?
+                    </p>
+                    {prefilledFromWhoop && (
+                      <Badge variant="outline" className="text-[10px] bg-success/10 text-success border-success/30">
+                        Pre-rellenado desde WHOOP
+                      </Badge>
+                    )}
                     {checkInRegistered && (
                       <Badge variant="secondary" className="ml-2">Guardado</Badge>
                     )}
-                  </p>
+                  </div>
 
                   <div className="grid gap-6">
                     {/* Energy */}

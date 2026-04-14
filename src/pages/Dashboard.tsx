@@ -49,7 +49,7 @@ import { useNavigate } from "react-router-dom";
 const Dashboard = () => {
   const navigate = useNavigate();
   const { settings: userSettings } = useUserSettings();
-  const { checkIn, setCheckIn, registerCheckIn, loading: checkInLoading, saving, isRegistered } = useCheckIn();
+  const { checkIn, setCheckIn, registerCheckIn, loading: checkInLoading, saving, isRegistered, prefilledFromWhoop } = useCheckIn();
 
   const { 
     tasks, 
@@ -170,7 +170,7 @@ const Dashboard = () => {
         case "morning-briefing":
           return <MorningBriefingCard />;
         case "check-in":
-          return <CheckInCard data={checkIn} onUpdate={setCheckIn} onRegister={registerCheckIn} saving={saving} isRegistered={isRegistered} />;
+          return <CheckInCard data={checkIn} onUpdate={setCheckIn} onRegister={registerCheckIn} saving={saving} isRegistered={isRegistered} prefilledFromWhoop={prefilledFromWhoop} />;
         case "daily-plan":
           return <DailyPlanCard plan={plan} loading={planLoading} onRefresh={handleGeneratePlan} />;
         case "publications":

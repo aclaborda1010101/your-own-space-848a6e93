@@ -23,6 +23,7 @@ interface CheckInCardProps {
   onRegister: () => void;
   saving?: boolean;
   isRegistered?: boolean;
+  prefilledFromWhoop?: boolean;
 }
 
 const getLevelColor = (value: number) => {

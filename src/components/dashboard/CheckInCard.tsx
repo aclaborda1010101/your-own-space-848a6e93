@@ -40,7 +40,7 @@ const getLevelLabel = (value: number) => {
   return "Muy alto";
 };
 
-export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }: CheckInCardProps) => {
+export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered, prefilledFromWhoop }: CheckInCardProps) => {
   const [isOpen, setIsOpen] = useState(true);
   const haptics = useHaptics();
   const sounds = useSoundFeedback();
@@ -190,6 +190,11 @@ export const CheckInCard = ({ data, onUpdate, onRegister, saving, isRegistered }
                 <Zap className="w-4 h-4 text-primary" />
               </div>
               <span className="text-sm sm:text-base font-semibold text-foreground">Check-in Diario</span>
+              {prefilledFromWhoop && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-success/15 text-success border border-success/30">
+                  WHOOP
+                </span>
+              )}
               {saving && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
             </div>
             <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", isOpen && "rotate-180")} />

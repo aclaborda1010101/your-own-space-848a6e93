@@ -87,7 +87,7 @@ const StartDay = () => {
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
   const { preferences: nutritionPrefs, generateMeals } = useNutrition();
   const { user } = useAuth();
-  const { draftCheckIn, setCheckIn, registerCheckIn, isRegistered: checkInRegistered, saving: checkInSaving } = useCheckIn();
+  const { draftCheckIn, setCheckIn, registerCheckIn, isRegistered: checkInRegistered, saving: checkInSaving, prefilledFromWhoop } = useCheckIn();
   const { profile: nutritionProfile } = useNutritionProfile();
   const { addMealToHistory } = useMealHistory();
   const { generateFromRecipes, generating: shoppingListGenerating } = useShoppingList();

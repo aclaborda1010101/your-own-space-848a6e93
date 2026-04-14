@@ -101,3 +101,9 @@ verify_jwt = false
 
 [functions.contact-profiles-refresh]
 verify_jwt = false
+
+[functions.jarvis-secretaria]
+verify_jwt = false
+
+[functions.jarvis-ia-kids]
+verify_jwt = false

@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { Loader2, RefreshCw, Server, Sparkles, Activity, Zap, Info } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, RefreshCw, Server, Sparkles, Activity, Zap, Info, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -9,6 +9,8 @@ import { NodeStatusCard } from "@/components/openclaw/NodeStatusCard";
 import { TasksTab } from "@/components/openclaw/TasksTab";
 import { RecurringTab } from "@/components/openclaw/RecurringTab";
 import { ExecutionsTab } from "@/components/openclaw/ExecutionsTab";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export default function OpenClawHub() {
   const {

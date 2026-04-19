@@ -559,6 +559,20 @@ export const useGoogleCalendar = () => {
   };
 
   const reconnectGoogle = async () => {
+    // Clear old tokens before reconnecting
+    clearStoredTokens();
+
+    // Native (Capacitor): in-app browser + deep link
+    try {
+      const { isNative, signInWithGoogleNative } = await import("@/lib/nativeAuth");
+      if (isNative()) {
+        await signInWithGoogleNative();
+        return;
+      }
+    } catch {
+      // fall through to web flow
+    }
+
     const inIframe = (() => {
       try {
         return window.self !== window.top;
@@ -566,9 +580,6 @@ export const useGoogleCalendar = () => {
         return true;
       }
     })();
-
-    // Clear old tokens before reconnecting
-    clearStoredTokens();
 
     if (inIframe) {
       window.open(`${window.location.origin}/oauth/google`, "_blank");

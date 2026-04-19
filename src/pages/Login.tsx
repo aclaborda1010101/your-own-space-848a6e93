@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Eye, EyeOff, Zap, Shield, Brain } from "lucide-react";
 import { isInIframe, getSafeRedirectTarget, persistRedirectTarget } from "@/lib/oauth";
+import { signInWithGoogleNative, isNative } from "@/lib/nativeAuth";
 import AISpectrum from "@/components/ui/AISpectrum";
 
 const GOOGLE_SCOPES =
@@ -75,6 +76,17 @@ const Login = () => {
   const handleGoogleLogin = async () => {
     // Persist target so the OAuth callback (which loses location.state) can resume it.
     persistRedirectTarget(redirectTarget);
+
+    // Native (Capacitor): usar in-app browser + deep link
+    if (isNative()) {
+      setLoading(true);
+      try {
+        await signInWithGoogleNative();
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     if (isInIframe()) {
       try {

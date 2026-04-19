@@ -8,6 +8,9 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import OAuthMessageBridge from "@/components/auth/OAuthMessageBridge";
+import { registerNativeAuthDeepLink } from "@/lib/nativeAuth";
+
+registerNativeAuthDeepLink();
 import Login from "./pages/Login";
 import OAuthGoogle from "./pages/OAuthGoogle";
 import OAuthGoogleCallback from "./pages/OAuthGoogleCallback";

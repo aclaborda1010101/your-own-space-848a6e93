@@ -52,12 +52,12 @@ export function useNativeSpeech(): UseNativeSpeechAPI {
   // Listener for partial / final results
   useEffect(() => {
     if (!isNative) return;
-    const sub = SpeechRecognition.addListener("partialResults", (data: { matches?: string[] }) => {
+    const subPromise = SpeechRecognition.addListener("partialResults", (data: { matches?: string[] }) => {
       const text = data?.matches?.[0] ?? "";
       setPartial(text);
     });
     return () => {
-      void sub.remove();
+      void subPromise.then((s) => s.remove()).catch(() => undefined);
     };
   }, [isNative]);
 

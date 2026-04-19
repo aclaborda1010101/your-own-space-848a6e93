@@ -300,6 +300,58 @@ serve(async (req) => {
         }).catch((err) => console.error("contact-analysis fire error:", err));
       }
 
+      // ============================
+      // VOLUME TRIGGER ≥30 NEW MESSAGES SINCE LAST PROFILE UPDATE
+      // Independent of the 100-msg bio refresh below; this one fires
+      // whenever ≥30 messages accumulated since people_contacts.updated_at.
+      // Only for contacts in the strategic network or favorites.
+      // ============================
+      try {
+        const { data: contactRow } = await supabase
+          .from("people_contacts")
+          .select("updated_at, is_favorite, in_strategic_network")
+          .eq("id", contactId)
+          .maybeSingle();
+
+        const isTracked = contactRow?.is_favorite || contactRow?.in_strategic_network;
+        if (isTracked && contactRow?.updated_at) {
+          const { count: newSince } = await supabase
+            .from("contact_messages")
+            .select("id", { count: "exact", head: true })
+            .eq("contact_id", contactId)
+            .eq("user_id", userId)
+            .gt("created_at", contactRow.updated_at);
+
+          if ((newSince || 0) >= 30) {
+            // Throttle: avoid double-firing within 30 minutes
+            const updatedAtMs = new Date(contactRow.updated_at).getTime();
+            const sinceUpdate = Date.now() - updatedAtMs;
+            if (sinceUpdate > 30 * 60 * 1000) {
+              console.log(`[volume-trigger] Firing contact-analysis for ${contactId} (${newSince} new msgs since ${contactRow.updated_at})`);
+              await supabase
+                .from("people_contacts")
+                .update({ updated_at: new Date().toISOString() })
+                .eq("id", contactId);
+              fetch(`${supabaseUrl}/functions/v1/contact-analysis`, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${supabaseKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  contact_id: contactId,
+                  user_id: userId,
+                  scopes: ["profesional", "personal", "familiar"],
+                  include_historical: false,
+                }),
+              }).catch((err) => console.error("[volume-trigger] error:", err));
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[volume-trigger] error:", e);
+      }
+
       if (contactIsFavorite) {
         fetch(`${supabaseUrl}/functions/v1/generate-response-draft`, {
           method: "POST",

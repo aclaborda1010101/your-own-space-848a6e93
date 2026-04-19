@@ -2,11 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Menu, Bell, BellOff, Search, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ModeSelector } from "@/components/dashboard/ModeSelector";
 
 interface TopBarProps {
@@ -16,14 +12,12 @@ interface TopBarProps {
 
 export const TopBar = ({ onMenuClick, showModeSelector = false }: TopBarProps) => {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
-  
+
   const now = new Date();
   const greeting = now.getHours() < 12 ? "Buenos días" : now.getHours() < 20 ? "Buenas tardes" : "Buenas noches";
 
   useEffect(() => {
-    if ("Notification" in window) {
-      setNotificationPermission(Notification.permission);
-    }
+    if ("Notification" in window) setNotificationPermission(Notification.permission);
   }, []);
 
   const handleRequestNotifications = async () => {
@@ -34,76 +28,81 @@ export const TopBar = ({ onMenuClick, showModeSelector = false }: TopBarProps) =
   };
 
   return (
-    <header className="safe-top border-b border-border bg-card backdrop-blur-none sticky top-0 z-30">
-      <div className="h-14 md:h-16 flex items-center justify-between px-3 lg:px-6">
+    <header className="safe-top sticky top-0 z-30 border-b border-border/60 bg-background/75 backdrop-blur-2xl">
+      {/* Thin holo accent line */}
+      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
+
+      <div className="h-14 md:h-16 flex items-center justify-between px-3 lg:px-6 relative">
         {/* Left */}
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={onMenuClick}
-            className="lg:hidden p-2 rounded-lg hover:bg-secondary text-muted-foreground"
+            className="lg:hidden p-2 rounded-xl hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
+            aria-label="Abrir menú"
           >
             <Menu className="w-5 h-5" />
           </button>
-          
-          {/* Hide greeting and date on mobile */}
-          <div className="hidden md:block">
-            <p className="text-sm text-muted-foreground">{greeting}</p>
-            <h2 className="text-lg font-semibold text-foreground">
+
+          <div className="hidden md:block leading-tight">
+            <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+              {greeting}
+            </p>
+            <h2 className="font-display text-lg font-semibold text-foreground capitalize">
               {now.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" })}
             </h2>
           </div>
         </div>
 
         {/* Right */}
-        <div className="flex items-center gap-2">
-          {/* Mode Selector - compact version */}
-          {showModeSelector && (
-            <ModeSelector compact />
-          )}
+        <div className="flex items-center gap-1.5">
+          {showModeSelector && <ModeSelector compact />}
 
-          <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10"
+          >
             <Search className="w-5 h-5" />
           </Button>
-          
-          {/* Notification indicator */}
+
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="relative text-muted-foreground hover:text-foreground"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10"
                 onClick={handleRequestNotifications}
               >
                 {notificationPermission === "granted" ? (
                   <>
                     <Bell className="w-5 h-5 text-success" />
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-success rounded-full" />
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-success rounded-full shadow-[0_0_8px_hsl(var(--success)/0.7)]" />
                   </>
                 ) : notificationPermission === "denied" ? (
                   <BellOff className="w-5 h-5 text-destructive" />
                 ) : (
                   <>
                     <Bell className="w-5 h-5" />
-                    <span className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full animate-pulse" />
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-warning rounded-full animate-pulse" />
                   </>
                 )}
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              {notificationPermission === "granted" 
-                ? "Notificaciones habilitadas" 
+              {notificationPermission === "granted"
+                ? "Notificaciones habilitadas"
                 : notificationPermission === "denied"
-                ? "Notificaciones bloqueadas"
-                : "Haz clic para habilitar notificaciones"}
+                  ? "Notificaciones bloqueadas"
+                  : "Haz clic para habilitar notificaciones"}
             </TooltipContent>
           </Tooltip>
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="text-muted-foreground hover:text-foreground"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10"
                 asChild
               >
                 <Link to="/settings">

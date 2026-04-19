@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { PageHero } from "@/components/ui/PageHero";
 import { useOpenClawHub } from "@/hooks/useOpenClawHub";
 import { NewTaskDialog } from "@/components/openclaw/NewTaskDialog";
+import { TokensSparkline } from "@/components/openclaw/TokensSparkline";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -17,12 +18,33 @@ const STATUS_STYLES: Record<string, { dot: string; badge: string; label: string 
   failed:  { dot: "bg-destructive", badge: "bg-destructive/15 text-destructive border-destructive/30", label: "failed" },
 };
 
-const ONLINE_WINDOW_MS = 30 * 60 * 1000; // 30 min
+type LiveState = "online" | "idle" | "offline" | "unknown";
 
-function isLive(lastSeen: string | null) {
-  if (!lastSeen) return false;
-  return Date.now() - new Date(lastSeen).getTime() < ONLINE_WINDOW_MS;
+function liveState(lastSeen: string | null, nowMs: number): LiveState {
+  if (!lastSeen) return "unknown";
+  const ageMs = nowMs - new Date(lastSeen).getTime();
+  if (ageMs < 2 * 60 * 1000) return "online";
+  if (ageMs < 10 * 60 * 1000) return "idle";
+  return "offline";
 }
+
+function ageLabel(lastSeen: string | null, nowMs: number): string {
+  if (!lastSeen) return "sin contacto";
+  const sec = Math.max(0, Math.floor((nowMs - new Date(lastSeen).getTime()) / 1000));
+  if (sec < 60) return `hace ${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `hace ${min}m`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h}h`;
+  return `hace ${Math.floor(h / 24)}d`;
+}
+
+const LIVE_STYLES: Record<LiveState, { dot: string; text: string; label: string; icon: "wifi" | "off" }> = {
+  online:  { dot: "bg-emerald-400", text: "text-emerald-400", label: "online", icon: "wifi" },
+  idle:    { dot: "bg-amber-400",   text: "text-amber-400",   label: "idle",   icon: "wifi" },
+  offline: { dot: "bg-destructive", text: "text-destructive", label: "offline", icon: "off" },
+  unknown: { dot: "bg-muted-foreground/40", text: "text-muted-foreground", label: "sin datos", icon: "off" },
+};
 
 export default function OpenClawHub() {
   const { nodes, tasks, loading, refetch, createTask } = useOpenClawHub();

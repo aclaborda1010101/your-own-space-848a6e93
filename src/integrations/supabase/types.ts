@@ -5213,6 +5213,8 @@ export type Database = {
           model: string | null
           name: string
           status: string
+          tokens_today: number
+          tokens_today_date: string
           tokens_total: number
           updated_at: string
           user_id: string
@@ -5227,6 +5229,8 @@ export type Database = {
           model?: string | null
           name: string
           status?: string
+          tokens_today?: number
+          tokens_today_date?: string
           tokens_total?: number
           updated_at?: string
           user_id: string
@@ -5241,11 +5245,148 @@ export type Database = {
           model?: string | null
           name?: string
           status?: string
+          tokens_today?: number
+          tokens_today_date?: string
           tokens_total?: number
           updated_at?: string
           user_id?: string
         }
         Relationships: []
+      }
+      openclaw_recurring_tasks: {
+        Row: {
+          created_at: string
+          description: string | null
+          enabled: boolean
+          id: string
+          last_run_at: string | null
+          next_run_at: string | null
+          node_id: string
+          priority: string
+          run_count: number
+          schedule_cron: string | null
+          schedule_label: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          next_run_at?: string | null
+          node_id: string
+          priority?: string
+          run_count?: number
+          schedule_cron?: string | null
+          schedule_label: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          id?: string
+          last_run_at?: string | null
+          next_run_at?: string | null
+          node_id?: string
+          priority?: string
+          run_count?: number
+          schedule_cron?: string | null
+          schedule_label?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "openclaw_recurring_tasks_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "openclaw_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      openclaw_task_executions: {
+        Row: {
+          duration_ms: number | null
+          error: string | null
+          finished_at: string | null
+          id: string
+          model_used: string | null
+          node_id: string
+          node_name: string | null
+          output: string | null
+          recurring_task_id: string | null
+          source: string
+          started_at: string
+          status: string
+          task_id: string | null
+          tokens_used: number
+          user_id: string
+        }
+        Insert: {
+          duration_ms?: number | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          model_used?: string | null
+          node_id: string
+          node_name?: string | null
+          output?: string | null
+          recurring_task_id?: string | null
+          source?: string
+          started_at?: string
+          status?: string
+          task_id?: string | null
+          tokens_used?: number
+          user_id: string
+        }
+        Update: {
+          duration_ms?: number | null
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          model_used?: string | null
+          node_id?: string
+          node_name?: string | null
+          output?: string | null
+          recurring_task_id?: string | null
+          source?: string
+          started_at?: string
+          status?: string
+          task_id?: string | null
+          tokens_used?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "openclaw_task_executions_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "openclaw_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "openclaw_task_executions_recurring_task_id_fkey"
+            columns: ["recurring_task_id"]
+            isOneToOne: false
+            referencedRelation: "openclaw_recurring_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "openclaw_task_executions_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "openclaw_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       openclaw_task_logs: {
         Row: {

@@ -179,6 +179,14 @@ export default function ContactDetail() {
       .slice(0, 4);
   }, [messages]);
 
+  if (loading || !contact) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   const healthScore = contact.scores?.health ?? 5;
   const sentimentColor =
     contact.sentiment === "positive" ? "success" :

@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ContactCard } from "@/components/contact/ContactCard";
+import { AddToNetworkDialog } from "@/components/contact/AddToNetworkDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ import {
   AlertTriangle,
   Sparkles,
   RefreshCw,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -114,6 +116,34 @@ export default function RedEstrategica() {
   const [activity, setActivity] = useState<ActivityFilter>("all");
   const [hasPodcast, setHasPodcast] = useState<"all" | "yes" | "no">("all");
   const [refreshing, setRefreshing] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+
+  async function removeFromNetwork(contactId: string, name: string) {
+    try {
+      const { error } = await supabase
+        .from("people_contacts")
+        .update({ in_strategic_network: false })
+        .eq("id", contactId);
+      if (error) throw error;
+      setRows((r) => r.filter((x) => x.id !== contactId));
+      toast.success(`${name} quitado de tu red`, {
+        action: {
+          label: "Deshacer",
+          onClick: async () => {
+            await supabase
+              .from("people_contacts")
+              .update({ in_strategic_network: true })
+              .eq("id", contactId);
+            void load();
+          },
+        },
+      });
+    } catch (e) {
+      toast.error("No se pudo quitar", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
 
   async function refreshHeadlines() {
     if (refreshing) return;
@@ -169,6 +199,7 @@ export default function RedEstrategica() {
             "id,name,category,last_contact,is_favorite,wa_message_count,scores,context,in_strategic_network",
           )
           .eq("user_id", user!.id)
+          .eq("in_strategic_network", true)
           .order("name", { ascending: true })
           .range(from, from + STEP - 1);
         if (error) throw error;
@@ -302,7 +333,7 @@ export default function RedEstrategica() {
           <Kpi
             label="Contactos"
             value={kpis.total}
-            hint="en tu red"
+            hint="vigilados"
             icon={<Users className="w-4 h-4" />}
             tone="primary"
           />
@@ -360,11 +391,20 @@ export default function RedEstrategica() {
           </div>
           <Button
             size="sm"
+            variant="default"
+            onClick={() => setAddOpen(true)}
+            className="h-11 rounded-full gap-2 px-4"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Añadir contacto</span>
+          </Button>
+          <Button
+            size="sm"
             variant="outline"
             onClick={refreshHeadlines}
-            disabled={refreshing}
+            disabled={refreshing || rows.length === 0}
             className="h-11 rounded-full gap-2 px-4"
-            title="Regenera el análisis de IA (salud, pendientes, temas) de tus contactos favoritos / estratégicos"
+            title="Regenera el análisis de IA (salud, pendientes, temas) de los contactos de tu red"
           >
             <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
             <span className="hidden sm:inline">
@@ -428,13 +468,34 @@ export default function RedEstrategica() {
         ) : view === "cards" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {cards.map((c) => (
-              <ContactCard key={c.id} contact={c} onClick={() => navigate(`/red-estrategica/${c.id}`)} />
+              <ContactCard
+                key={c.id}
+                contact={c}
+                onClick={() => navigate(`/red-estrategica/${c.id}`)}
+                onRemove={() => removeFromNetwork(c.id, c.name)}
+              />
             ))}
             {cards.length === 0 && (
               <div className="col-span-full">
-                <GlassCard className="p-12 text-center">
-                  <Network className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-                  <p className="text-muted-foreground">Sin resultados con esos filtros.</p>
+                <GlassCard className="p-12 text-center space-y-4">
+                  <Network className="w-10 h-10 mx-auto text-muted-foreground/40" />
+                  {rows.length === 0 ? (
+                    <>
+                      <div>
+                        <p className="font-display text-lg">Tu red estratégica está vacía</p>
+                        <p className="text-muted-foreground text-sm mt-1">
+                          Añade los contactos que quieres vigilar de cerca. Solo estos
+                          aparecerán aquí y se actualizarán al pulsar "Actualizar novedades".
+                        </p>
+                      </div>
+                      <Button onClick={() => setAddOpen(true)} className="gap-2">
+                        <Plus className="w-4 h-4" />
+                        Añadir primer contacto
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">Sin resultados con esos filtros.</p>
+                  )}
                 </GlassCard>
               </div>
             )}
@@ -473,6 +534,13 @@ export default function RedEstrategica() {
           </GlassCard>
         )}
       </div>
+
+      <AddToNetworkDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        excludeIds={rows.map((r) => r.id)}
+        onAdded={() => void load()}
+      />
     </div>
   );
 }

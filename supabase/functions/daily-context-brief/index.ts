@@ -73,8 +73,8 @@ Deno.serve(async (req) => {
       sb.from("tasks").select("title, priority, type, completed, created_at")
         .eq("user_id", user.id).eq("completed", false)
         .in("priority", ["P0", "P1"]).order("created_at", { ascending: false }).limit(10),
-      sb.from("meal_logs").select("meal_type, foods, calories, proteins, carbs, fats, eaten_at")
-        .eq("user_id", user.id).order("eaten_at", { ascending: false }).limit(20),
+      sb.from("meal_history").select("meal_type, meal_name, recipe_data, was_completed, energy_after, date")
+        .eq("user_id", user.id).order("date", { ascending: false }).limit(20),
       sb.from("nutrition_preferences").select("diet_type, goals, calories_target, proteins_target, carbs_target, fats_target, restrictions, allergies")
         .eq("user_id", user.id).maybeSingle(),
     ]);
@@ -104,7 +104,7 @@ Deno.serve(async (req) => {
       : "Sin tareas críticas pendientes";
 
     const mealsBlock = meals.length > 0
-      ? `Últimas ${meals.length} comidas: ${meals.slice(0, 8).map(m => `${m.meal_type || "comida"}: ${(Array.isArray(m.foods) ? m.foods.join(", ") : m.foods) || "—"} (${m.calories || 0}kcal, P:${m.proteins || 0}g)`).join(" | ")}`
+      ? `Últimas ${meals.length} comidas: ${meals.slice(0, 10).map(m => `${m.date} ${m.meal_type || ""}: ${m.meal_name || "—"}${m.was_completed === false ? " (no completada)" : ""}${m.energy_after != null ? ` [energía ${m.energy_after}/5]` : ""}`).join(" | ")}`
       : "Sin registros de comida recientes";
 
     const prefsBlock = prefs

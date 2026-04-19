@@ -132,11 +132,48 @@ serve(async (req) => {
 
     console.log(`Voice data: ${contactExamples.length} contact + ${globalExamples.length} global examples, avg length: ${avgLength}chars (substantive only)`);
 
-    // Build conversation history with more context
-    const conversationHistory = recentMessages
-      .reverse()
-      .map(m => `[${m.direction === "incoming" ? m.sender || contact.name : "Yo"}]: ${m.content}`)
+    // ===== TEMPORAL ANCHORING =====
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    const formatRelative = (dateStr: string): string => {
+      const d = new Date(dateStr);
+      const diffMs = now.getTime() - d.getTime();
+      const diffMin = Math.floor(diffMs / 60000);
+      const diffH = Math.floor(diffMs / 3600000);
+      const diffD = Math.floor(diffMs / 86400000);
+      if (diffMin < 60) return `hace ${diffMin}min`;
+      if (diffH < 24) return `hace ${diffH}h`;
+      if (diffD === 1) return `ayer`;
+      if (diffD < 7) return `hace ${diffD} días`;
+      if (diffD < 30) return `hace ${Math.floor(diffD / 7)} sem`;
+      if (diffD < 365) return `hace ${Math.floor(diffD / 30)} meses`;
+      return `hace ${Math.floor(diffD / 365)} años`;
+    };
+
+    // Build conversation history with relative dates per message (chronological asc)
+    const orderedMessages = [...recentMessages].reverse();
+    const conversationHistory = orderedMessages
+      .map(m => `[${formatRelative(m.message_date)} · ${m.direction === "incoming" ? m.sender || contact.name : "Yo"}]: ${m.content}`)
       .join("\n");
+
+    // Detect last incoming message and conversation freshness
+    const lastIncoming = [...orderedMessages].reverse().find(m => m.direction === "incoming");
+    const daysSinceLastIncoming = lastIncoming
+      ? Math.floor((now.getTime() - new Date(lastIncoming.message_date).getTime()) / 86400000)
+      : null;
+
+    let temporalContextDirective = "";
+    if (lastIncoming && daysSinceLastIncoming !== null) {
+      if (daysSinceLastIncoming <= 2) {
+        temporalContextDirective = `\n🎯 ÚLTIMO MENSAJE DEL CONTACTO (${formatRelative(lastIncoming.message_date)}): "${lastIncoming.content}"
+Las sugerencias DEBEN responder DIRECTAMENTE a ESTE mensaje. No traigas temas viejos del historial.`;
+      } else if (daysSinceLastIncoming <= 7) {
+        temporalContextDirective = `\n⏰ El último mensaje del contacto fue hace ${daysSinceLastIncoming} días: "${lastIncoming.content}". La conversación está enfriándose pero aún viva. Puedes retomar ese hilo.`;
+      } else {
+        temporalContextDirective = `\n❄️ CONVERSACIÓN FRÍA: el último mensaje del contacto fue hace ${daysSinceLastIncoming} días. Las sugerencias deben REABRIR el contacto desde cero, NO continuar temas antiguos. Pregunta cómo está, retoma con algo nuevo, o referencia algo concreto del contexto actual del usuario — nunca asumas que un tema viejo sigue activo.`;
+      }
+    }
 
     // Extract profile info
     const profile = contact.personality_profile as Record<string, any> | null;
@@ -170,6 +207,8 @@ ${fewShotExamples.map((msg, i) => `  ${i + 1}. "${msg}"`).join("\n")}
 
     const systemPrompt = `Eres un clon de escritura. Tu ÚNICO trabajo es generar 3 respuestas de WhatsApp que suenen IDÉNTICAS a como escribe el usuario real. NO eres un asistente amable. Eres una copia exacta de su voz.
 
+📅 FECHA ACTUAL: Hoy es ${todayStr}. Usa SIEMPRE esta fecha como anclaje temporal absoluto.
+
 🔑 REGLAS ABSOLUTAS:
 1. LONGITUD: El usuario escribe mensajes de longitud ${lengthBucket} (media ~${avgLength} caracteres). Tus respuestas DEBEN tener longitud similar. Cada sugerencia debe tener al MENOS 2-3 frases que aporten valor y contexto real sobre la conversación. NUNCA respondas con menos de 20 palabras por sugerencia.
 2. EMOJIS: ${usesEmojis ? "El usuario USA emojis. Puedes usarlos." : "El usuario NO usa emojis. NO pongas ningún emoji."}
@@ -187,6 +226,13 @@ ${fewShotExamples.map((msg, i) => `  ${i + 1}. "${msg}"`).join("\n")}
    NUNCA digas "tu madre" o "tu padre" si el perfil indica que es "tu hermana" o viceversa.
    USA EL NOMBRE PROPIO de la persona afectada cuando esté disponible en el perfil.
 9. CONTEXTO CONVERSACIONAL: Lee TODO el historial de conversación proporcionado. Entiende el tema actual, qué se ha discutido, y genera respuestas que continúen NATURALMENTE la conversación en curso. NO ignores el contexto ni cambies de tema.
+10. ⚠️ REGLA TEMPORAL CRÍTICA — LEE LAS FECHAS DE CADA MENSAJE:
+    Cada mensaje del historial lleva su fecha relativa en formato [hace X días · Persona]. ÚSALA.
+    - Si un evento (viaje, vuelo, reunión, cita, partido, cena) aparece mencionado en mensajes de hace MÁS DE 3 DÍAS y NO se vuelve a mencionar en mensajes recientes, ese evento YA OCURRIÓ. Está cerrado.
+    - PROHIBIDO proponer acciones logísticas sobre eventos pasados (ej: "pedir el check-in", "confirmar la reserva", "a qué hora quedamos") si el evento ya pasó.
+    - Si quieres retomar un evento pasado, hazlo SIEMPRE como recuerdo en pretérito: "qué tal fue Venecia", "cómo acabó la reunión con X", "qué tal el finde". NUNCA como acción futura.
+    - Si en mensajes recientes (últimos 2 días) hay un tema NUEVO, prioriza ESE tema sobre cualquier hilo viejo.
+    - Antes de redactar cada sugerencia, pregúntate: "¿este tema sigue vivo HOY o ya pasó hace semanas?". Si ya pasó, NO lo uses como acción.
 
 ${fewShotBlock}
 ${familiarDirective}
@@ -195,8 +241,9 @@ CATEGORÍA: ${contact.category || "pendiente"}
 PERFIL: ${profileSummary}
 ${stressDirective}
 ${businessDirective}
+${temporalContextDirective}
 
-HISTORIAL RECIENTE (${recentMessages.length} mensajes):
+HISTORIAL RECIENTE (${recentMessages.length} mensajes, orden cronológico — el último es el más reciente):
 ${conversationHistory}
 
 Genera EXACTAMENTE 3 opciones en JSON:

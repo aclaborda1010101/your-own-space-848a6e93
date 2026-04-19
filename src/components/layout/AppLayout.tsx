@@ -39,7 +39,11 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
         "transition-all duration-300",
         !isWizardPage && (sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")
       )}>
-        {!isWizardPage && <TopBar onMenuClick={openSidebar} />}
+        {!isWizardPage && (
+          <div className="hidden md:block">
+            <TopBar onMenuClick={openSidebar} />
+          </div>
+        )}
         
         <main className={cn(
           !isWizardPage && "pb-20 lg:pb-0"

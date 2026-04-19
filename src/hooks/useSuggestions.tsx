@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
+import { recordFeedback } from "@/lib/jarvisFeedback";
 
 export interface Suggestion {
   id: string;
@@ -177,6 +178,39 @@ export const useSuggestions = () => {
         .update({ status: "accepted" })
         .eq("id", suggestion.id);
 
+      // Feedback loop: registrar aceptación
+      if (user) {
+        const c = suggestion.content as Record<string, any>;
+        const originalProjectId = c.project_id;
+        const wasCorrected =
+          suggestion.suggestion_type === "classification_from_plaud" &&
+          overrideProjectId &&
+          overrideProjectId !== originalProjectId;
+
+        await recordFeedback({
+          userId: user.id,
+          feedbackType: "suggestion_accept",
+          suggestionType: suggestion.suggestion_type,
+          sourceId: suggestion.id,
+          initialConfidence: suggestion.confidence ?? c.project_confidence ?? null,
+          initialValue: { project_id: originalProjectId },
+          context: { excerpt: c.excerpt || c.summary_one_line || c.description },
+        });
+
+        if (wasCorrected) {
+          await recordFeedback({
+            userId: user.id,
+            feedbackType: "classification_correct",
+            suggestionType: suggestion.suggestion_type,
+            sourceId: suggestion.id,
+            initialConfidence: suggestion.confidence ?? c.project_confidence ?? null,
+            initialValue: { project_id: originalProjectId },
+            correctedValue: { project_id: overrideProjectId },
+            context: { excerpt: c.excerpt || c.summary_one_line || c.description },
+          });
+        }
+      }
+
       setSuggestions((prev) => prev.filter((s) => s.id !== suggestion.id));
       toast.success("Sugerencia aceptada");
     } catch (e: any) {
@@ -187,10 +221,27 @@ export const useSuggestions = () => {
 
   const reject = async (id: string) => {
     try {
+      const target = suggestions.find((s) => s.id === id);
       await supabase
         .from("suggestions")
         .update({ status: "rejected" })
         .eq("id", id);
+
+      if (user && target) {
+        await recordFeedback({
+          userId: user.id,
+          feedbackType: "suggestion_reject",
+          suggestionType: target.suggestion_type,
+          sourceId: target.id,
+          initialConfidence: target.confidence ?? (target.content as any)?.project_confidence ?? null,
+          context: {
+            excerpt:
+              (target.content as any)?.excerpt ||
+              (target.content as any)?.summary_one_line ||
+              (target.content as any)?.description,
+          },
+        });
+      }
 
       setSuggestions((prev) => prev.filter((s) => s.id !== id));
       toast.success("Sugerencia descartada");

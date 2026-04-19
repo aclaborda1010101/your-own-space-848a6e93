@@ -161,6 +161,7 @@ const App = () => (
                   <Route path="/jarvis" element={<Navigate to="/chat" replace />} />
                   <Route path="/communications" element={<ProtectedPage><Communications /></ProtectedPage>} />
                   <Route path="/openclaw" element={<ProtectedPage><OpenClaw /></ProtectedPage>} />
+                  <Route path="/openclaw/hub" element={<ProtectedPage><OpenClawHub /></ProtectedPage>} />
                   <Route path="/openclaw-preview" element={<Suspense fallback={<PageLoader />}><OpenClawPreview /></Suspense>} />
                   <Route path="/strategic-network" element={<ProtectedPage><StrategicNetwork /></ProtectedPage>} />
                   <Route path="/brains-dashboard" element={<ProtectedPage><BrainsDashboard /></ProtectedPage>} />

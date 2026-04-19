@@ -206,6 +206,37 @@ serve(async (req) => {
     }
 
     // ============================
+    // AUTO-CORRECT GARBAGE NAMES
+    // If contact name looks like junk (= waId, numeric, or = owner name "Agustín"),
+    // and incoming pushName is a real human name, fix it.
+    // ============================
+    if (contactId && direction === "incoming" && pushName && pushName.trim()) {
+      const cleanPush = pushName.trim();
+      const hasLetters = /\p{L}/u.test(cleanPush);
+      const isPushNumeric = /^[0-9+\s-]+$/.test(cleanPush);
+      if (hasLetters && !isPushNumeric && cleanPush !== waId) {
+        const { data: cur } = await supabase
+          .from("people_contacts")
+          .select("name")
+          .eq("id", contactId)
+          .maybeSingle();
+        const curName = (cur?.name || "").trim();
+        const isGarbage =
+          !curName ||
+          curName === waId ||
+          /^[0-9+\s-]+$/.test(curName) ||
+          ["agustín", "agustin"].includes(curName.toLowerCase());
+        if (isGarbage && curName !== cleanPush) {
+          await supabase
+            .from("people_contacts")
+            .update({ name: cleanPush })
+            .eq("id", contactId);
+          console.log(`[contact] Auto-renamed ${contactId}: "${curName}" -> "${cleanPush}"`);
+        }
+      }
+    }
+
+    // ============================
     // PERSIST MESSAGE (with external_id)
     // ============================
     const insertPayload: Record<string, unknown> = {

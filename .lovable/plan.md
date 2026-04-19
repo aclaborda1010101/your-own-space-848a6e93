@@ -1,54 +1,39 @@
 
 
-## El problema (confirmado en código)
+## Lo que vamos a hacer
 
-Mirando `supabase/functions/generate-response-draft/index.ts`:
+### 1. El "5" del avatar — explicación + arreglo
 
-1. **El prompt NO incluye fechas de los mensajes**. Línea 138: `[${m.direction === "incoming" ? m.sender : "Yo"}]: ${m.content}` — sólo dirección y contenido.
-2. **No hay anclaje temporal**: el LLM no sabe qué día es hoy ni cuándo se dijo cada mensaje.
-3. **No se distingue eventos pasados de pendientes**: si hace 2 semanas hablasteis del check-in de Venecia, el LLM lo ve como tema "reciente" y lo propone como acción a hacer ahora.
-4. Encima los últimos 50 mensajes pueden mezclar conversaciones de meses distintos sin que el modelo lo sepa.
+Ese número es un componente `<HealthMeter>` puesto **encima** del cuadrado AM (esquina inferior izquierda). Sale del campo `contact.scores.health` y, cuando el contacto **no tiene score calculado todavía**, cae en el fallback `?? 5` (línea 193 de `ContactDetail.tsx`). Por eso ves un "5" sin base lógica: literalmente es el default que se mete cuando no hay datos.
 
-Por eso te sugiere "Pedirle el check-in del vuelo a Venecia" cuando ese viaje **ya ocurrió hace 2 semanas** y hay evidencias en el chat.
+Tienes razón en dos cosas:
+- **Pegado encima como parche**: visualmente parece un sticker.
+- **Sin base**: si el sistema no ha calculado salud todavía, no debería mostrar nada — y mucho menos un "5" que parece real.
 
-## La solución
+**Propuesta (elijo la opción que mejor cuadra con tu queja, no te pregunto porque ya lo dejaste claro):**
 
-Refactor de `generate-response-draft` con tres cambios concretos:
+- **Quitar el badge de HealthMeter sobreimpreso** del avatar (las líneas 226-228).
+- En el centro del cuadrado AM se mantienen las **iniciales** ("AM"), que es lo que tú llamas "ese cuadro de la ecuación".
+- La salud relación ya se ve **2 veces más abajo** sin necesidad del badge: en la tarjeta "JARVIS Sugiere" (`Amistad íntima — salud relacional 9/10 (Fuerte)`) y en el KPI Strip ("Salud relación · 9 · score /10"). Así que no perdemos información, sólo dejamos de duplicarla con un parche.
+- Bonus: en el KPI Strip cambio el comportamiento para que **si el score es el fallback (no calculado real)** muestre `—` en vez de inventarse un 5.
 
-### 1. Anclar temporalmente cada mensaje en el prompt
-Cambiar la serialización del historial para incluir fecha relativa:
-```
-[hace 14 días · Alicia]: oye, qué hora es el vuelo?
-[hace 14 días · Yo]: 11:40, hago el check-in mañana
-[hace 13 días · Yo]: ya en Venecia ✈️
-[ayer · Alicia]: el aceite que recomendaste...
-```
-Así el LLM ve qué es presente y qué es pasado.
+### 2. Botón flotante de actualizar — fuera
 
-### 2. Añadir "HOY ES" al system prompt
-Inyectar `Hoy: ${new Date().toLocaleDateString('es-ES', {...})}` y la regla:
-> "REGLA TEMPORAL: Si en el historial aparecen eventos con fecha pasada (viajes, citas, vuelos, reuniones ya celebradas), NO los propongas como acción pendiente. Esos temas ya están cerrados — sólo se pueden retomar como recuerdo (`¿qué tal fue X?`), nunca como acción a coordinar."
+El círculo con la flecha curva ↻ que ves abajo a la derecha del expediente es el `<ForceRefreshButton>`, montado globalmente en `AppLayout.tsx`. Es un botón de utilidad para limpiar caché del preview/PWA — útil en desarrollo, pero **se ve en toda la app y choca**.
 
-### 3. Detectar el "último tema realmente activo"
-Antes de llamar al LLM, calcular `daysSinceLastMessage` del último mensaje incoming. Si el último mensaje del contacto es de hace >3 días, marcar en el prompt:
-> "ÚLTIMO MENSAJE recibido hace X días. La conversación está fría. Las sugerencias deben REABRIR el contacto, no continuar un tema que ya murió."
+- **Lo quito del AppLayout** completamente. Si en algún momento quieres recuperarlo para debugging, lo dejaremos sólo accesible desde Ajustes.
 
-Y si el último mensaje incoming **es reciente (<48h)**, anclar las sugerencias a ESE mensaje específico, no a la conversación general.
+### Archivos a tocar (3, edición mínima)
 
-### Archivos a tocar
-Solo uno: `supabase/functions/generate-response-draft/index.ts`.
-- Cambiar `conversationHistory` para incluir fecha relativa por mensaje
-- Añadir `today` y la regla temporal al `systemPrompt`
-- Calcular y exponer `daysSinceLastIncoming` y `lastIncomingMessage` al prompt
+1. `src/pages/ContactDetail.tsx` — eliminar el bloque del HealthMeter sobreimpreso en el avatar (líneas 226-228) y limpiar el wrapper relativo si queda vacío.
+2. `src/components/contact/ContactKpiStrip.tsx` (o el call-site en `ContactDetail.tsx`) — si `contact.scores?.health` no existe de verdad, mostrar `—` en vez de `5`.
+3. `src/components/layout/AppLayout.tsx` — quitar el render `<ForceRefreshButton />` (línea 67) y su import.
 
-### Cómo lo verificas
-1. Borrar las sugerencias actuales de Alicia (`update suggested_responses set status='rejected' where contact_id=...`).
-2. Forzar regeneración (cualquier mensaje nuevo o llamada manual a la function).
-3. Las nuevas sugerencias deben:
-   - Hablar de **temas actuales** de los últimos 1-3 días
-   - **No** mencionar "check-in del vuelo a Venecia" ni eventos ya pasados
-   - Si procede, decir "qué tal fue Venecia" (recuerdo) en vez de "pídele el check-in" (acción pasada)
+### Lo que verás después
 
-### Sin cambios de schema, sin migraciones
-Sólo lógica del prompt en una edge function.
+- Avatar de Alicia limpio: sólo el cuadrado verde con "AM" centrado, sin burbuja con número pegada.
+- La salud sigue visible en JARVIS Sugiere ("9/10 Fuerte") y en el KPI Strip — donde sí tiene contexto.
+- Sin botón flotante de refresh en ninguna pantalla.
+
+Sin migraciones, sin edge functions, sólo frontend.
 

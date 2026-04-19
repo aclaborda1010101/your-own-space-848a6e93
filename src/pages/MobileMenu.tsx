@@ -34,7 +34,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { JarvisCommandPalette } from "@/components/menu/JarvisCommandPalette";
-import { Helmet } from "react-helmet-async";
+
 
 type Item = {
   icon: LucideIcon;
@@ -61,45 +61,68 @@ export default function MobileMenu() {
     aiCostsMonth: number | null;
   }>({ tasksPending: 0, tasksDone: 0, contacts: 0, whoopRecovery: null, aiCostsMonth: null });
 
+  // SEO title
+  useEffect(() => {
+    document.title = "JARVIS · Menú";
+  }, []);
+
   // Fetch live metadata for cards
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
+    const uid = user.id;
     (async () => {
       const today = new Date();
       const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+
+      const pendingP: any = supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", uid)
+        .eq("completed", false);
+      const doneP: any = supabase
+        .from("tasks")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", uid)
+        .eq("completed", true)
+        .gte("updated_at", startOfDay);
+      const contactsP: any = supabase
+        .from("people_contacts")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", uid);
+      const whoopP: any = supabase
+        .from("jarvis_whoop_data")
+        .select("recovery_score, data_date")
+        .eq("user_id", uid)
+        .order("data_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const costsP: any = supabase
+        .from("project_costs")
+        .select("cost_usd")
+        .eq("user_id", uid)
+        .gte("created_at", startOfMonth);
 
       const [pending, done, contacts, whoop, costs] = await Promise.all([
-        supabase.from("tasks").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("completed", false),
-        supabase
-          .from("tasks")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .eq("completed", true)
-          .gte("updated_at", new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()),
-        supabase.from("people_contacts").select("id", { count: "exact", head: true }).eq("user_id", user.id),
-        supabase
-          .from("jarvis_whoop_data")
-          .select("recovery_score, data_date")
-          .eq("user_id", user.id)
-          .order("data_date", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-        supabase
-          .from("ai_usage_logs")
-          .select("cost_usd")
-          .eq("user_id", user.id)
-          .gte("created_at", startOfMonth),
+        pendingP,
+        doneP,
+        contactsP,
+        whoopP,
+        costsP,
       ]);
 
       if (cancelled) return;
-      const totalCost = (costs.data ?? []).reduce((s: number, r: any) => s + Number(r.cost_usd ?? 0), 0);
+      const totalCost = (costs.data ?? []).reduce(
+        (s: number, r: any) => s + Number(r.cost_usd ?? 0),
+        0,
+      );
 
       setCounts({
         tasksPending: pending.count ?? 0,
         tasksDone: done.count ?? 0,
         contacts: contacts.count ?? 0,
-        whoopRecovery: (whoop.data as any)?.recovery_score ?? null,
+        whoopRecovery: whoop.data?.recovery_score ?? null,
         aiCostsMonth: totalCost > 0 ? totalCost : null,
       });
     })();

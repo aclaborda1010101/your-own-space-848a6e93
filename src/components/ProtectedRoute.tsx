@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Loader2 } from "lucide-react";
 
@@ -8,6 +8,7 @@ interface ProtectedRouteProps {
 
 export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -21,7 +22,9 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    const requestedPath = `${location.pathname}${location.search}${location.hash}`;
+    const redirectParam = encodeURIComponent(requestedPath === "/login" ? "/dashboard" : requestedPath);
+    return <Navigate to={`/login?redirectTo=${redirectParam}`} replace state={{ from: location }} />;
   }
 
   return <>{children}</>;

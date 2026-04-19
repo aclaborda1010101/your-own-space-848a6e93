@@ -59,8 +59,8 @@ function ClassificationItem({
 
   const confidence = Math.round((c.project_confidence || 0) * 100);
   const confColor =
-    confidence >= 80 ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30" :
-    confidence >= 50 ? "bg-amber-500/15 text-amber-600 border-amber-500/30" :
+    confidence >= 80 ? "bg-success/15 text-success border-success/30" :
+    confidence >= 50 ? "bg-warning/15 text-warning border-warning/30" :
     "bg-muted text-muted-foreground border-border";
 
   const handleConfirm = async () => {
@@ -90,7 +90,7 @@ function ClassificationItem({
               {confidence}% confianza
             </Badge>
             {c.auto_linked_project && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-success/10 text-success border-success/30">
                 Auto-asignado
               </Badge>
             )}
@@ -141,7 +141,7 @@ function ClassificationItem({
                 <Badge
                   key={i}
                   variant="outline"
-                  className={`text-[10px] px-1.5 py-0 ${p.id ? "border-emerald-500/30 text-emerald-600 bg-emerald-500/5" : "border-amber-500/30 text-amber-600 bg-amber-500/5"}`}
+                  className={`text-[10px] px-1.5 py-0 ${p.id ? "border-success/30 text-success bg-success/5" : "border-warning/30 text-warning bg-warning/5"}`}
                 >
                   {p.resolved || p.name}
                   {p.id ? " ✓" : " ?"}

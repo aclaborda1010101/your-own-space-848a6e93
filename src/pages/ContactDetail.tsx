@@ -248,7 +248,7 @@ export default function ContactDetail() {
                   </span>
                 )}
                 {contact.sentiment && (
-                  <span className={`px-2.5 py-1 rounded-full bg-${sentimentColor}/10 border border-${sentimentColor}/30 text-${sentimentColor} text-[11px] font-medium capitalize`}>
+                  <span className={`px-2.5 py-1 rounded-full border text-[11px] font-medium capitalize ${sentimentCls}`}>
                     {contact.sentiment}
                   </span>
                 )}

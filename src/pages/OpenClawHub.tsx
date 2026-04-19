@@ -47,11 +47,18 @@ const LIVE_STYLES: Record<LiveState, { dot: string; text: string; label: string;
 };
 
 export default function OpenClawHub() {
-  const { nodes, tasks, loading, refetch, createTask } = useOpenClawHub();
+  const { nodes, tasks, executions, loading, refetch, createTask } = useOpenClawHub();
   const [refreshing, setRefreshing] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     document.title = "OpenClaw Hub | JARVIS";
+  }, []);
+
+  // Tick cada segundo para que "hace Xs" se actualice en vivo.
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
   }, []);
 
   const handleRefresh = async () => {
@@ -62,8 +69,8 @@ export default function OpenClawHub() {
 
   const today = new Date().toISOString().slice(0, 10);
   const onlineCount = useMemo(
-    () => nodes.filter((n) => isLive(n.last_seen_at)).length,
-    [nodes]
+    () => nodes.filter((n) => liveState(n.last_seen_at, nowMs) === "online").length,
+    [nodes, nowMs]
   );
 
   if (loading) {
@@ -110,18 +117,20 @@ export default function OpenClawHub() {
       {/* Cards de nodos */}
       <div className="grid gap-4 md:grid-cols-2">
         {nodes.map((n) => {
-          const live = isLive(n.last_seen_at);
+          const ls = liveState(n.last_seen_at, nowMs);
+          const lsStyle = LIVE_STYLES[ls];
           const tokensToday = n.tokens_today_date === today ? n.tokens_today : 0;
+          const isOnlineLike = ls === "online" || ls === "idle";
           return (
             <Card key={n.id} className="p-5 space-y-4 border-border/60">
               <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
+                <div className="space-y-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="text-lg font-bold tracking-tight">{n.name}</h3>
                     <Badge variant="outline" className="text-[10px] uppercase tracking-wider font-mono">
                       {(n as any).role ?? "—"}
                     </Badge>
-                    {!live && (
+                    {!isOnlineLike && (
                       <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
                         Simulado
                       </Badge>
@@ -137,18 +146,19 @@ export default function OpenClawHub() {
                     <span className="text-xs font-mono text-foreground/80">{n.model ?? "—"}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  {live ? (
-                    <>
-                      <Wifi className="h-4 w-4 text-emerald-400" />
-                      <span className="text-xs font-medium text-emerald-400">online</span>
-                    </>
-                  ) : (
-                    <>
-                      <WifiOff className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-xs font-medium text-muted-foreground">offline</span>
-                    </>
-                  )}
+                <div className="flex flex-col items-end gap-0.5 shrink-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`h-2 w-2 rounded-full ${lsStyle.dot}`} />
+                    {lsStyle.icon === "wifi" ? (
+                      <Wifi className={`h-4 w-4 ${lsStyle.text}`} />
+                    ) : (
+                      <WifiOff className={`h-4 w-4 ${lsStyle.text}`} />
+                    )}
+                    <span className={`text-xs font-medium ${lsStyle.text}`}>{lsStyle.label}</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    Actualizado {ageLabel(n.last_seen_at, nowMs)}
+                  </span>
                 </div>
               </div>
 
@@ -165,6 +175,20 @@ export default function OpenClawHub() {
                   <p className="text-muted-foreground uppercase tracking-wider text-[10px]">Tokens hoy</p>
                   <p className="font-mono">{tokensToday > 0 ? tokensToday.toLocaleString() : "—"}</p>
                 </div>
+              </div>
+
+              {/* Sparkline 24h */}
+              <div className="space-y-1 pt-1 border-t border-border/40">
+                <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <span>Tokens · 24h</span>
+                  <span className="font-mono normal-case">
+                    {executions
+                      .filter((e: any) => e.node_id === n.id && Date.now() - new Date(e.started_at).getTime() < 24 * 3600 * 1000)
+                      .reduce((a: number, b: any) => a + (b.tokens_used || 0), 0)
+                      .toLocaleString()}
+                  </span>
+                </div>
+                <TokensSparkline executions={executions as any} nodeId={n.id} />
               </div>
 
               <div className="space-y-1.5 pt-1 border-t border-border/40">
@@ -186,6 +210,7 @@ export default function OpenClawHub() {
           );
         })}
       </div>
+
 
       {/* Tareas recientes */}
       <Card className="p-5">

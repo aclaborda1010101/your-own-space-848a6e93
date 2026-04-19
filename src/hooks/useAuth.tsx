@@ -19,45 +19,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let mounted = true;
 
-    const applySession = async (event: string, currentSession: Session | null) => {
-      if (!mounted) return;
-      console.log("[JARVIS Auth] Event:", event);
-
-      switch (event) {
-        case "SIGNED_IN":
-        case "TOKEN_REFRESHED":
-        case "INITIAL_SESSION":
-          setSession(currentSession);
-          setUser(currentSession?.user ?? null);
-          if (currentSession?.provider_token) {
-            try {
-              await supabase.from("user_integrations").upsert({
-                user_id: currentSession.user.id,
-                provider: "google",
-                access_token: currentSession.provider_token,
-                refresh_token: currentSession.provider_refresh_token || null,
-                updated_at: new Date().toISOString()
-              }, { onConflict: "user_id,provider" });
-            } catch (e) {
-              console.warn("[JARVIS Auth] Could not save provider token:", e);
-            }
-          }
-          break;
-        case "SIGNED_OUT":
-          setSession(null);
-          setUser(null);
-          break;
-        default:
-          setSession(currentSession);
-          setUser(currentSession?.user ?? null);
-      }
-      setLoading(false);
-    };
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
-      void applySession(event, currentSession);
-    });
-
     const initAuth = async () => {
       try {
         const { data, error } = await supabase.auth.getSession();
@@ -65,16 +26,55 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           console.warn("[JARVIS Auth] Session recovery failed, clearing stale tokens:", error.message);
           await supabase.auth.signOut();
           if (mounted) { setUser(null); setSession(null); }
-          return;
+        } else if (mounted) {
+          setSession(data.session);
+          setUser(data.session?.user ?? null);
         }
-        await applySession("INITIAL_SESSION", data.session);
       } catch (err) {
         console.error("[JARVIS Auth] Init error:", err);
-        if (mounted) { setUser(null); setSession(null); setLoading(false); }
+        if (mounted) { setUser(null); setSession(null); }
+      } finally {
+        if (mounted) { setLoading(false); }
       }
     };
 
-    void initAuth();
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, currentSession) => {
+        if (!mounted) return;
+        console.log("[JARVIS Auth] Event:", event);
+
+        switch (event) {
+          case "SIGNED_IN":
+          case "TOKEN_REFRESHED":
+            setSession(currentSession);
+            setUser(currentSession?.user ?? null);
+            if (currentSession?.provider_token) {
+              try {
+                await supabase.from("user_integrations").upsert({
+                  user_id: currentSession.user.id,
+                  provider: "google",
+                  access_token: currentSession.provider_token,
+                  refresh_token: currentSession.provider_refresh_token || null,
+                  updated_at: new Date().toISOString()
+                }, { onConflict: "user_id,provider" });
+              } catch (e) {
+                console.warn("[JARVIS Auth] Could not save provider token:", e);
+              }
+            }
+            break;
+          case "SIGNED_OUT":
+            setSession(null);
+            setUser(null);
+            break;
+          default:
+            setSession(currentSession);
+            setUser(currentSession?.user ?? null);
+        }
+        setLoading(false);
+      }
+    );
 
     return () => {
       mounted = false;

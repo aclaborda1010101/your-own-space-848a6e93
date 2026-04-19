@@ -1,12 +1,12 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Eye, EyeOff, Zap, Shield, Brain } from "lucide-react";
-import { isInIframe } from "@/lib/oauth";
+import { isInIframe, getSafeRedirectTarget, persistRedirectTarget } from "@/lib/oauth";
 import AISpectrum from "@/components/ui/AISpectrum";
 
 const GOOGLE_SCOPES =
@@ -14,33 +14,39 @@ const GOOGLE_SCOPES =
 
 const Login = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Honor ?redirectTo=/openclaw/hub etc., falling back to /dashboard.
+  const redirectTarget = useMemo(
+    () => getSafeRedirectTarget(searchParams.get("redirectTo"), "/dashboard"),
+    [searchParams],
+  );
+
   useEffect(() => {
     let navigated = false;
-    const goDashboard = () => {
+    const goNext = () => {
       if (navigated) return;
       navigated = true;
-      // Replace para que el botón "atrás" no devuelva a /login
-      navigate("/dashboard", { replace: true });
+      navigate(redirectTarget, { replace: true });
     };
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) goDashboard();
+      if (session?.user) goNext();
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) goDashboard();
+      if (session?.user) goNext();
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, redirectTarget]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,7 +60,7 @@ const Login = () => {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: `${window.location.origin}/dashboard` },
+          options: { emailRedirectTo: `${window.location.origin}${redirectTarget}` },
         });
         if (error) throw error;
         toast.success("Cuenta creada correctamente");
@@ -67,20 +73,22 @@ const Login = () => {
   };
 
   const handleGoogleLogin = async () => {
-    // Si estamos en iframe (preview de Lovable), forzamos navegación top-level
-    // para evitar el bloqueo de cookies de terceros y el problema de postMessage
-    // cross-origin entre la pestaña popup y el iframe original.
+    // Persist target so the OAuth callback (which loses location.state) can resume it.
+    persistRedirectTarget(redirectTarget);
+
     if (isInIframe()) {
       try {
-        // window.top puede ser cross-origin; envolvemos en try/catch
         if (window.top) {
-          window.top.location.href = `${window.location.origin}/oauth/google`;
+          window.top.location.href = `${window.location.origin}/oauth/google?redirectTo=${encodeURIComponent(redirectTarget)}`;
           return;
         }
       } catch {
-        // fallback: abrir en nueva pestaña
+        // cross-origin: fall through
       }
-      window.open(`${window.location.origin}/oauth/google`, "_blank");
+      window.open(
+        `${window.location.origin}/oauth/google?redirectTo=${encodeURIComponent(redirectTarget)}`,
+        "_blank",
+      );
       toast.info("Se abrió una pestaña para iniciar sesión con Google.");
       return;
     }
@@ -89,7 +97,7 @@ const Login = () => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/oauth/google/callback`,
+          redirectTo: `${window.location.origin}/oauth/google/callback?redirectTo=${encodeURIComponent(redirectTarget)}`,
           scopes: GOOGLE_SCOPES,
           queryParams: {
             access_type: "offline",

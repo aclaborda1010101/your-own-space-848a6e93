@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, RefreshCw } from "lucide-react";
+import { consumeRedirectTarget, getSafeRedirectTarget } from "@/lib/oauth";
 
 export default function OAuthGoogleCallback() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<"loading" | "done" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
 
@@ -14,9 +16,10 @@ export default function OAuthGoogleCallback() {
     document.title = "Finalizando Google | JARVIS";
 
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const queryTarget = getSafeRedirectTarget(searchParams.get("redirectTo"), "");
+    const target = queryTarget || consumeRedirectTarget("/dashboard");
 
     const run = async () => {
-      // Damos tiempo al cliente de Supabase a procesar la URL y persistir la sesión.
       for (let i = 0; i < 20; i++) {
         const { data, error } = await supabase.auth.getSession();
         if (error) {
@@ -25,7 +28,6 @@ export default function OAuthGoogleCallback() {
 
         const session = data?.session;
         if (session?.access_token) {
-          // Si venimos de un popup con opener válido (mismo origen), notificamos.
           try {
             if (window.opener && !window.opener.closed) {
               window.opener.postMessage(
@@ -35,6 +37,7 @@ export default function OAuthGoogleCallback() {
                   refresh_token: session.refresh_token,
                   provider_token: session.provider_token,
                   provider_refresh_token: session.provider_refresh_token,
+                  redirectTo: target,
                 },
                 window.location.origin
               );
@@ -43,12 +46,11 @@ export default function OAuthGoogleCallback() {
               return;
             }
           } catch {
-            // cross-origin opener: caer al navigate normal
+            // cross-origin opener
           }
 
-          // Top-level redirect: ir directo al dashboard
           setStatus("done");
-          navigate("/dashboard", { replace: true });
+          navigate(target, { replace: true });
           return;
         }
 
@@ -60,7 +62,7 @@ export default function OAuthGoogleCallback() {
     };
 
     run();
-  }, [navigate]);
+  }, [navigate, searchParams]);
 
   const retry = () => {
     window.location.assign(`${window.location.origin}/oauth/google`);

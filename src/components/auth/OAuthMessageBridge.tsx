@@ -1,12 +1,15 @@
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { consumeRedirectTarget, getSafeRedirectTarget } from "@/lib/oauth";
 
 /**
  * Receives OAuth session tokens from the top-level popup/tab (postMessage)
  * and stores them in this window's auth storage (needed for iframe previews).
  */
 export default function OAuthMessageBridge() {
+  const navigate = useNavigate();
   useEffect(() => {
     const onMessage = async (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
@@ -66,11 +69,14 @@ export default function OAuthMessageBridge() {
       }
 
       toast.success("Conectado con Google");
+
+      const target = getSafeRedirectTarget(data.redirectTo, "") || consumeRedirectTarget("/dashboard");
+      navigate(target, { replace: true });
     };
 
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+  }, [navigate]);
 
   return null;
 }

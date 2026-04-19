@@ -85,12 +85,15 @@ export default function ContactDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId, user?.id]);
 
+  const [plaudRecordings, setPlaudRecordings] = useState<any[]>([]);
+  const [plaudThreads, setPlaudThreads] = useState<any[]>([]);
+
   async function load() {
     setLoading(true);
     try {
       const { data: c } = await supabase
         .from("people_contacts")
-        .select("id,name,category,wa_id,phone_numbers,last_contact,context")
+        .select("id,name,category,categories,wa_id,phone_numbers,last_contact,context,role,company,brain,relationship,email,personality_profile,metadata,ai_tags,scores,sentiment")
         .eq("id", contactId!)
         .maybeSingle();
       setContact((c as Contact) || null);
@@ -111,6 +114,27 @@ export default function ContactDetail() {
         .order("message_date", { ascending: false })
         .limit(150);
       setMessages(((msgs as MsgRow[]) || []).reverse());
+
+      // Plaud data (recordings + threads linked to this contact)
+      try {
+        const { data: recs } = await (supabase as any)
+          .from("plaud_recordings")
+          .select("id, title, received_at, agent_type, summary, audio_url")
+          .contains("linked_contact_ids", [contactId!])
+          .order("received_at", { ascending: false })
+          .limit(50);
+        setPlaudRecordings(recs || []);
+      } catch { /* table may not exist for some users */ }
+
+      try {
+        const { data: thr } = await (supabase as any)
+          .from("plaud_threads")
+          .select("id, event_title, event_date, recording_ids, speakers, agent_type")
+          .contains("linked_contact_ids", [contactId!])
+          .order("event_date", { ascending: false })
+          .limit(50);
+        setPlaudThreads(thr || []);
+      } catch { /* ignore */ }
     } finally {
       setLoading(false);
     }

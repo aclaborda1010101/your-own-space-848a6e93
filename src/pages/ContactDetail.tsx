@@ -33,7 +33,6 @@ interface Contact {
   wa_id: string | null;
   phone_numbers: string[] | null;
   last_contact: string | null;
-  notes: string | null;
   context: string | null;
 }
 
@@ -71,11 +70,11 @@ export default function ContactDetail() {
     try {
       const { data: c } = await supabase
         .from("people_contacts")
-        .select("id,name,category,wa_id,phone_numbers,last_contact,notes,context")
+        .select("id,name,category,wa_id,phone_numbers,last_contact,context")
         .eq("id", contactId!)
         .maybeSingle();
       setContact((c as Contact) || null);
-      setNotes((c as Contact)?.notes || "");
+      setNotes((c as Contact)?.context || "");
 
       const { count } = await supabase
         .from("contact_messages")
@@ -114,7 +113,7 @@ export default function ContactDetail() {
     try {
       const { error } = await supabase
         .from("people_contacts")
-        .update({ notes })
+        .update({ context: notes })
         .eq("id", contactId);
       if (error) throw error;
       toast.success("Notas guardadas");

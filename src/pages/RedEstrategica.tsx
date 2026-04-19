@@ -116,6 +116,34 @@ export default function RedEstrategica() {
   const [activity, setActivity] = useState<ActivityFilter>("all");
   const [hasPodcast, setHasPodcast] = useState<"all" | "yes" | "no">("all");
   const [refreshing, setRefreshing] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+
+  async function removeFromNetwork(contactId: string, name: string) {
+    try {
+      const { error } = await supabase
+        .from("people_contacts")
+        .update({ in_strategic_network: false })
+        .eq("id", contactId);
+      if (error) throw error;
+      setRows((r) => r.filter((x) => x.id !== contactId));
+      toast.success(`${name} quitado de tu red`, {
+        action: {
+          label: "Deshacer",
+          onClick: async () => {
+            await supabase
+              .from("people_contacts")
+              .update({ in_strategic_network: true })
+              .eq("id", contactId);
+            void load();
+          },
+        },
+      });
+    } catch (e) {
+      toast.error("No se pudo quitar", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
 
   async function refreshHeadlines() {
     if (refreshing) return;

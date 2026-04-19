@@ -1,8 +1,10 @@
 import { useCallback } from "react";
+import { Capacitor } from "@capacitor/core";
+import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 
 type HapticPattern = "light" | "medium" | "heavy" | "success" | "warning" | "error" | "selection";
 
-const HAPTIC_PATTERNS: Record<HapticPattern, number | number[]> = {
+const WEB_PATTERNS: Record<HapticPattern, number | number[]> = {
   light: 10,
   medium: 25,
   heavy: 50,
@@ -12,19 +14,62 @@ const HAPTIC_PATTERNS: Record<HapticPattern, number | number[]> = {
   selection: 5,
 };
 
+const isNative = (() => {
+  try {
+    return Capacitor.isNativePlatform();
+  } catch {
+    return false;
+  }
+})();
+
+async function nativeHaptic(pattern: HapticPattern) {
+  try {
+    switch (pattern) {
+      case "light":
+        await Haptics.impact({ style: ImpactStyle.Light });
+        break;
+      case "medium":
+        await Haptics.impact({ style: ImpactStyle.Medium });
+        break;
+      case "heavy":
+        await Haptics.impact({ style: ImpactStyle.Heavy });
+        break;
+      case "success":
+        await Haptics.notification({ type: NotificationType.Success });
+        break;
+      case "warning":
+        await Haptics.notification({ type: NotificationType.Warning });
+        break;
+      case "error":
+        await Haptics.notification({ type: NotificationType.Error });
+        break;
+      case "selection":
+        await Haptics.selectionStart();
+        await Haptics.selectionChanged();
+        await Haptics.selectionEnd();
+        break;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const useHaptics = () => {
-  const isSupported = typeof navigator !== "undefined" && "vibrate" in navigator;
+  const webSupported = typeof navigator !== "undefined" && "vibrate" in navigator;
 
   const vibrate = useCallback((pattern: HapticPattern = "light") => {
-    if (!isSupported) return false;
-    
+    if (isNative) {
+      void nativeHaptic(pattern);
+      return true;
+    }
+    if (!webSupported) return false;
     try {
-      const vibrationPattern = HAPTIC_PATTERNS[pattern];
-      return navigator.vibrate(vibrationPattern);
+      return navigator.vibrate(WEB_PATTERNS[pattern]);
     } catch {
       return false;
     }
-  }, [isSupported]);
+  }, [webSupported]);
 
   const lightTap = useCallback(() => vibrate("light"), [vibrate]);
   const mediumTap = useCallback(() => vibrate("medium"), [vibrate]);
@@ -35,13 +80,12 @@ export const useHaptics = () => {
   const selection = useCallback(() => vibrate("selection"), [vibrate]);
 
   const stop = useCallback(() => {
-    if (isSupported) {
-      navigator.vibrate(0);
-    }
-  }, [isSupported]);
+    if (!isNative && webSupported) navigator.vibrate(0);
+  }, [webSupported]);
 
   return {
-    isSupported,
+    isSupported: isNative || webSupported,
+    isNative,
     vibrate,
     lightTap,
     mediumTap,

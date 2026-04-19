@@ -1,44 +1,35 @@
 
-Pauso lote estético. Ejecuto **OpenClaw Hub funcional** ahora.
+User wants:
+1. Remove the manual daily check-in card (energía/ánimo/foco) from dashboard — it should auto-fill from health data.
+2. Fix CommandCenterCard showing "sin datos de WHOOP" on dashboard when /health does load data (with a delay).
 
-## Diagnóstico rápido
-Ya existen tablas reales: `cloudbot_nodes`, `cloudbot_tasks_log`, hook `useOpenClawData`, edge `openclaw-ops`. Falta: tareas recurrentes, logs por ejecución, crear tarea manual desde UI, tokens por nodo, seed POTUS/TITAN, página `/openclaw/hub` viva.
+Investigation needed: CommandCenterCard uses `useJarvisWhoopData` (queries `jarvis_whoop_data`). Health page uses `useWhoop` (queries `whoop_data`). Different tables — likely the bug. POTUS syncs into `jarvis_whoop_data`, but if last sync is stale or empty, the dashboard shows "sin datos" while `/health` reads `whoop_data` directly.
 
-## Plan de ejecución
+## Plan
 
-### 1. Migración DB (nueva tabla + columnas)
-- `cloudbot_recurring_tasks` (id, user_id, title, description, target_node, schedule_cron, schedule_label, priority, enabled, last_run_at, next_run_at, created_at).
-- `cloudbot_task_executions` (id, task_id, node_id, started_at, finished_at, status, output, tokens_used, model_used, error).
-- Añadir columna `tokens_total` y `tokens_today` a `cloudbot_nodes` (jsonb `usage_stats`).
-- RLS: lectura abierta autenticados, escritura solo owner (recurring) / service_role (executions).
-- Seed: upsert POTUS y TITAN con metadata real.
+**1. Hide manual check-in card from dashboard**
+- In `useDashboardLayout.tsx`: change default `visible: true` → `false` for `check-in` card so new/reset profiles don't show it.
+- In `Dashboard.tsx` / `DEFAULT_LAYOUT`: remove `check-in` from default `leftColumn`/`rightColumn` so it doesn't render by default.
+- Keep the card available in settings (user can re-enable manually if they want override).
+- The auto-derivation from WHOOP already exists in `useCheckIn` (`mapWhoopToCheckIn`) — check-in still gets registered silently in background when WHOOP data is present.
 
-### 2. Hook nuevo `useOpenClawHub`
-- Carga nodos (filtrados a POTUS+TITAN), tareas activas, tareas recurrentes, ejecuciones recientes.
-- Realtime en las 4 tablas.
-- Acciones: `createTask`, `createRecurringTask`, `toggleRecurring`, `deleteRecurring`, `executeNow`.
+**2. Fix "salud sin datos" on dashboard CommandCenterCard**
+- Root cause: `CommandCenterCard` reads from `jarvis_whoop_data` only. If POTUS hasn't mirrored recent data there but `whoop_data` has it (Health page source), card shows empty.
+- Fix: make `useJarvisWhoopData` fall back to `whoop_data` table when `jarvis_whoop_data` is empty or stale (>24h old). Single source-of-truth resolution: try `jarvis_whoop_data` first, then `whoop_data`, return whichever has the most recent `data_date`.
+- Also surface a tiny loading skeleton instead of premature "sin datos" while `isLoading` is true (verify `CommandCenterCard` respects `isLoading`).
 
-### 3. Página `/openclaw/hub` (rebuild)
-Sustituye el panel mock actual por:
-- **Header**: 2 nodos (POTUS · TITAN) como cards con: status dot online/offline, last seen, modelo activo, tokens hoy/total, queue.
-- **Tab "Tareas"**: lista cloudbot_tasks_log filtrable + botón "Nueva tarea" → modal (título, nodo destino, prioridad, descripción).
-- **Tab "Recurrentes"**: lista de recurring_tasks con toggle on/off, badge schedule, botón "Ejecutar ahora", crear nueva.
-- **Tab "Logs"**: stream de cloudbot_task_executions más recientes (timestamp, nodo, task, status, tokens, modelo).
-- Banner honesto: "Bridge live: pendiente. Tareas se persisten y agendan; ejecución real se conectará con potus-bridge."
+**3. Fix `/health` "pensando y luego carga" delay**
+- Likely `useWhoop` runs `checkConnection` → `loadAvailableDates` → `loadDateData` sequentially on mount, each awaiting Supabase round-trip.
+- Optimization: parallelize initial `loadDateData(today)` and `loadAvailableDates()` with `Promise.all`, and render whatever data exists in `whoop_data` immediately without waiting for `checkConnection`.
 
-### 4. Edge function `openclaw-task-create` (mínima)
-- Recibe `{title, node, priority, description, recurring?}`.
-- Inserta en cloudbot_tasks_log (status=queued) o en cloudbot_recurring_tasks.
-- Crea registro inicial en task_executions cuando se dispara.
+## Files to change
+- `src/hooks/useDashboardLayout.tsx` — default visibility/columns for `check-in`.
+- `src/hooks/useJarvisWhoopData.tsx` — fallback to `whoop_data` table.
+- `src/components/dashboard/CommandCenterCard.tsx` — confirm loading state handled before "sin datos".
+- `src/hooks/useWhoop.tsx` — parallelize initial load to remove perceived delay.
 
-### 5. Ruta
-- Confirmar que `/openclaw/hub` existe en App.tsx, si no añadirla.
-- Eliminar/reemplazar componente mock actual.
+## Out of scope this turn
+- Executive summary card (next turn, block 1 continuation).
+- Auto check-in registration writing to DB on dashboard load (block 5).
 
-## Lo que NO toco
-- Lote estético móvil pendiente (lo retomo después).
-- potus-core, jarvis-gateway, lógica WHOOP.
-- Bridge físico POTUS (queda como adapter listo).
-
-## Entregable final
-Resumen estructurado: operativo / seeded / pendiente live.
+No schema changes. No model changes. JARVIS stays the only visible identity.

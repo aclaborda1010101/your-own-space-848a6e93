@@ -103,29 +103,26 @@ export function NodeStatusCard({ node, tasks }: NodeStatusCardProps) {
         <div className="grid grid-cols-2 gap-3 text-xs">
           <div className="space-y-0.5">
             <p className="text-muted-foreground uppercase tracking-wider text-[10px]">Modelo</p>
-            <p className="font-medium text-foreground truncate">{node.model ?? "—"}</p>
+            <p className="font-medium text-foreground truncate">{modelLabel}</p>
           </div>
           <div className="space-y-0.5">
             <p className="text-muted-foreground uppercase tracking-wider text-[10px] flex items-center gap-1">
               <Clock className="h-3 w-3" /> Last seen
             </p>
-            <p className="font-medium text-foreground">
-              {node.last_seen_at
-                ? formatDistanceToNow(new Date(node.last_seen_at), { addSuffix: true, locale: es })
-                : "Nunca"}
-            </p>
+            <p className="font-medium text-foreground">{lastSeenLabel}</p>
           </div>
           <div className="space-y-0.5">
             <p className="text-muted-foreground uppercase tracking-wider text-[10px] flex items-center gap-1">
               <Zap className="h-3 w-3" /> Tokens hoy
+              {dataMode !== "live" && (
+                <span className="text-[9px] text-amber-300/80 normal-case">· {dataMode}</span>
+              )}
             </p>
-            <p className="font-medium text-foreground tabular-nums">{tokensToday.toLocaleString()}</p>
+            <p className="font-medium text-foreground tabular-nums">{tokensLabel}</p>
           </div>
           <div className="space-y-0.5">
             <p className="text-muted-foreground uppercase tracking-wider text-[10px]">Tokens total</p>
-            <p className="font-medium text-foreground tabular-nums">
-              {(node.tokens_total || 0).toLocaleString()}
-            </p>
+            <p className="font-medium text-foreground tabular-nums">{tokensTotalLabel}</p>
           </div>
           <div className="col-span-2 flex items-center justify-between pt-2 border-t border-border/40">
             <span className="text-muted-foreground uppercase tracking-wider text-[10px] flex items-center gap-1">

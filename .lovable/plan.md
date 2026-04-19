@@ -1,40 +1,41 @@
 
-El usuario:
-1. Quiere que termine la integración pendiente de `ContactDetail.tsx` (tabs con WhatsAppTab/EmailTab/PlaudTab/ProfileKnownData/SuggestedResponses + perfil ProfileByScope) — eso quedó a medias.
-2. Ha subido `Jarvis.zip` con un nuevo `index.css` y `tailwind.config.ts` rediseñados que quiere reemplazar enteros.
+El usuario quiere rediseño completo de Red Estratégica:
 
-Necesito explorar el zip antes de hacer nada.
+1. **Listado** (`/red-estrategica`): grid/lista de contactos con estilo Holo Neon nuevo.
+2. **Ficha de contacto** (`/red-estrategica/:contactId` o ruta propia): página dedicada con:
+   - Arriba: resúmenes + titulares (HeadlineCards) destacados.
+   - Podcast (que desapareció — recuperarlo).
+   - Debajo: el resto de info (tabs WhatsApp/Email/Plaud/Perfil/Resumen).
+
+Necesito investigar el estado actual primero: ¿qué rutas existen, qué componentes están en uso, y qué pasó con el podcast?
 
 ## Plan
 
-### Fase 1 — Aplicar nuevo diseño visual
-1. Descomprimir `user-uploads://Jarvis.zip` en `/tmp/jarvis-design/`.
-2. Identificar `index.css` y `tailwind.config.ts` dentro del zip.
-3. **Reemplazar completamente** `src/index.css` con el del zip.
-4. **Reemplazar completamente** `tailwind.config.ts` con el del zip.
-5. Si el zip incluye otros assets (fuentes, imágenes), copiarlos a `src/assets/` o `public/` según corresponda.
-6. Cache-bust en `src/main.tsx` para forzar recompilado.
+### Fase 1 — Auditoría
+1. Leer `src/pages/StrategicNetwork.tsx` (listado actual).
+2. Leer `src/pages/ContactDetail.tsx` actual (ver si tiene podcast o se rompió).
+3. Verificar rutas en `src/App.tsx` para confirmar la URL de la ficha.
+4. Confirmar que `PodcastPlayer.tsx`, `HeadlineCard.tsx`, `useContactPodcast.ts` siguen existiendo.
 
-### Fase 2 — Terminar `ContactDetail.tsx`
-7. Cargar contacto + threads Plaud + recordings Plaud (queries existentes en la página vieja).
-8. Estructurar layout final:
-   - **Header glass**: avatar grande, nombre serif, badges, botones acción (WhatsApp/Llamar/Recordatorio).
-   - **3 HeadlineCard** arriba (ya están).
-   - **PodcastPlayer** (ya está, con 3 formatos: informativo / narrativo / diálogo).
-   - **Tabs principales** con todo el detalle:
-     - "Resumen" → ProfileByScope + ConversationTimeline + notas.
-     - "WhatsApp" → WhatsAppTab + SuggestedResponses.
-     - "Email" → EmailTab.
-     - "Plaud" → PlaudTab.
-     - "Datos conocidos" → ProfileKnownData.
-9. Mantener estilo glassmorphism nuevo en toda la página.
+### Fase 2 — Rediseño del listado
+5. **`StrategicNetwork.tsx`** rediseño Holo:
+   - Hero header (titular grande Space Grotesk + KPIs: total contactos, activos hoy, urgentes).
+   - Filtros como pills HUD.
+   - Grid responsivo de tarjetas glass con: avatar, nombre serif, sentiment dot, score, último contacto, badge urgencia.
+   - Click → navega a la ficha.
 
-### Fase 3 — Verificación
-10. Typecheck mental: imports, props correctos para cada componente legacy.
-11. Confirmar al usuario archivos modificados.
+### Fase 3 — Rediseño de la ficha
+6. **`ContactDetail.tsx`** estructura:
+   - **Header glass grande**: avatar 96px, nombre serif XL, company, badges (sentiment + tags), botones CTA (WhatsApp/Llamar/Recordatorio).
+   - **Strip de 3 HeadlineCards** (titulares de IA: relación, oportunidades, riesgos).
+   - **PodcastPlayer** restaurado y bien visible (con selector de formato: informativo/narrador/diálogo).
+   - **ProfileByScope** (perfil personalidad/pipeline).
+   - **Tabs principales** debajo: Resumen · WhatsApp · Email · Plaud · Datos.
+
+### Fase 4 — Verificación
+7. Confirmar imports/rutas; sin romper otras pantallas.
 
 ### Lo que NO se toca
-- Lógica de podcast (ya correcta).
-- Edge functions backend (ya correctas).
-- Página `RedEstrategica.tsx` (al usuario le gusta).
-- Otros módulos de la app.
+- Edge functions del podcast.
+- Lógica de contactos/threads/recordings.
+- Otros módulos.

@@ -28,7 +28,7 @@ export interface PodcastSegment {
 
 export function useContactPodcast(contactId: string | null) {
   const [podcast, setPodcast] = useState<PodcastRow | null>(null);
-  const [segments, setSegments] = useState<PodcastSegment[]>([]);
+  const [segment, setSegment] = useState<PodcastSegment | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const pollRef = useRef<number | null>(null);
@@ -50,23 +50,25 @@ export function useContactPodcast(contactId: string | null) {
       setPodcast((pod as PodcastRow) || null);
 
       if (pod) {
+        // Single audio: pick the latest segment (segment_number=1 by design)
         const { data: segs } = await supabase
           .from("contact_podcast_segments")
           .select("*")
           .eq("podcast_id", pod.id)
-          .order("segment_number", { ascending: true });
+          .order("segment_number", { ascending: false })
+          .limit(1);
 
-        // Sign URLs
-        const signed: PodcastSegment[] = [];
-        for (const s of (segs || []) as PodcastSegment[]) {
+        const s = (segs as PodcastSegment[] | null)?.[0];
+        if (s) {
           const { data: signedRes } = await supabase.storage
             .from("contact-podcasts")
             .createSignedUrl(s.audio_storage_path, 3600);
-          signed.push({ ...s, signedUrl: signedRes?.signedUrl });
+          setSegment({ ...s, signedUrl: signedRes?.signedUrl });
+        } else {
+          setSegment(null);
         }
-        setSegments(signed);
       } else {
-        setSegments([]);
+        setSegment(null);
       }
     } finally {
       setLoading(false);
@@ -96,7 +98,7 @@ export function useContactPodcast(contactId: string | null) {
   }, [podcast, load]);
 
   const regenerate = useCallback(
-    async (opts: { format?: "narrator" | "dialogue"; full?: boolean } = {}) => {
+    async (opts: { format?: "narrator" | "dialogue" } = {}) => {
       if (!contactId) return;
       setBusy(true);
       try {
@@ -106,12 +108,12 @@ export function useContactPodcast(contactId: string | null) {
             body: {
               contactId,
               format: opts.format,
-              force_full_regenerate: !!opts.full,
+              force_full_regenerate: true,
             },
           },
         );
         if (error) throw error;
-        toast.success("Generación iniciada");
+        toast.success("Generando podcast de la relación…");
         await load();
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Error generando");
@@ -136,7 +138,7 @@ export function useContactPodcast(contactId: string | null) {
 
   return {
     podcast,
-    segments,
+    segment,
     loading,
     busy,
     refresh: load,

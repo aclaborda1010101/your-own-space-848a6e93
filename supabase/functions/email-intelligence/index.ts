@@ -299,7 +299,38 @@ serve(async (req) => {
           const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
           for (const c of matchedContacts.slice(0, 5)) {
             const scopes = (c as any).categories || ['profesional'];
-            console.log(`[email-intelligence] Triggering contact-analysis for ${c.name} (${c.id})`);
+
+            // Bio-refresh gate: trigger only if ≥20 emails since last refresh
+            const { data: contactRow } = await supabase
+              .from("people_contacts")
+              .select("last_bio_refresh_at")
+              .eq("id", c.id)
+              .maybeSingle();
+            const lastRefreshIso = (contactRow as any)?.last_bio_refresh_at as string | null;
+            const lastRefresh = lastRefreshIso ? new Date(lastRefreshIso).getTime() : 0;
+
+            // Count emails for this contact since last refresh
+            // (proxy: count emails in `emails` table whose from_address matches contact email or whose ai_extracted.people contains its name since lastRefresh)
+            const sinceIso = lastRefreshIso || new Date(0).toISOString();
+            const { count: emailsSince } = await supabase
+              .from("emails")
+              .select("id", { count: "exact", head: true })
+              .eq("user_id", userId)
+              .gte("received_at", sinceIso);
+
+            // Use a coarse threshold: ≥20 new emails in inbox since last refresh
+            // AND >1h since last refresh (throttle)
+            const sinceRefreshMs = Date.now() - lastRefresh;
+            if ((emailsSince || 0) < 20 || sinceRefreshMs < 60 * 60 * 1000) {
+              continue;
+            }
+
+            console.log(`[bio-refresh] Triggering for ${c.name} (${c.id}) — ${emailsSince} emails since last refresh`);
+            await supabase
+              .from("people_contacts")
+              .update({ last_bio_refresh_at: new Date().toISOString() })
+              .eq("id", c.id);
+
             fetch(`${supabaseUrl}/functions/v1/contact-analysis`, {
               method: "POST",
               headers: {
@@ -311,6 +342,13 @@ serve(async (req) => {
                 scopes,
               }),
             }).catch((err) => console.error(`[email-intelligence] contact-analysis fire error for ${c.name}:`, err));
+
+            // Invalidate headlines cache
+            await supabase
+              .from("contact_headlines")
+              .delete()
+              .eq("contact_id", c.id)
+              .eq("user_id", userId);
           }
         }
       }

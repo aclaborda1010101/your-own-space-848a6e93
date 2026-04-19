@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Sparkles,
   RefreshCw,
+  Brain,
   Plus,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -116,6 +117,7 @@ export default function RedEstrategica() {
   const [activity, setActivity] = useState<ActivityFilter>("all");
   const [hasPodcast, setHasPodcast] = useState<"all" | "yes" | "no">("all");
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
   async function removeFromNetwork(contactId: string, name: string) {
@@ -177,6 +179,36 @@ export default function RedEstrategica() {
       });
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function refreshAllProfiles() {
+    if (refreshingAll) return;
+    setRefreshingAll(true);
+    const tId = toast.loading("Regenerando perfiles completos…", {
+      description: "Reanalizando psicológico, emocional, oportunidades. Tarda varios minutos.",
+    });
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "contact-profiles-refresh-all",
+        { body: {} },
+      );
+      if (error) throw error;
+      const refreshed = data?.refreshed ?? 0;
+      const total = data?.total ?? 0;
+      const errors = data?.errors ?? 0;
+      toast.success(`Perfiles regenerados: ${refreshed}/${total}`, {
+        id: tId,
+        description: errors > 0 ? `${errors} con error` : "Todos al día.",
+      });
+      void load();
+    } catch (e) {
+      toast.error("No se pudieron regenerar los perfiles", {
+        id: tId,
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setRefreshingAll(false);
     }
   }
 
@@ -409,6 +441,19 @@ export default function RedEstrategica() {
             <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
             <span className="hidden sm:inline">
               {refreshing ? "Actualizando…" : "Actualizar novedades"}
+            </span>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={refreshAllProfiles}
+            disabled={refreshingAll || rows.length === 0}
+            className="h-11 rounded-full gap-2 px-4 border-primary/40 text-primary hover:bg-primary/10"
+            title="Reanaliza el perfil psicológico, emocional y de oportunidades de TODA tu red. Tarda varios minutos."
+          >
+            <Brain className={cn("w-4 h-4", refreshingAll && "animate-pulse")} />
+            <span className="hidden sm:inline">
+              {refreshingAll ? "Regenerando…" : "Regenerar perfiles"}
             </span>
           </Button>
         </div>

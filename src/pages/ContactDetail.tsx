@@ -22,6 +22,9 @@ import {
 import SuggestedResponses from "@/components/contacts/SuggestedResponses";
 import { useContactHeadlines } from "@/hooks/useContactHeadlines";
 import { useContactPodcast } from "@/hooks/useContactPodcast";
+import { useContactProfile } from "@/hooks/useContactProfile";
+import { ProfileByScope } from "@/components/contact/ProfileByScope";
+import { RelationshipTimelineChart } from "@/components/contact/RelationshipTimelineChart";
 import {
   ArrowLeft,
   Phone,
@@ -37,6 +40,7 @@ import {
   Mail,
   Mic,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -81,9 +85,36 @@ export default function ContactDetail() {
   const [loading, setLoading] = useState(true);
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+  const [refreshingProfile, setRefreshingProfile] = useState(false);
+  const [activeScope, setActiveScope] = useState<"profesional" | "personal" | "familiar">("profesional");
 
   const { payload: headlines, loading: hLoading } = useContactHeadlines(contactId || null);
   const { podcast, segment, busy, regenerate, setFormat } = useContactPodcast(contactId || null);
+  const { profile, allContacts, contactLinks, linkContact, ignoreContact, reload: reloadProfile } =
+    useContactProfile(contactId, user?.id);
+
+  async function refreshProfile() {
+    if (!contactId || !user || refreshingProfile) return;
+    setRefreshingProfile(true);
+    const tId = toast.loading("Reanalizando perfil…", { description: "Tarda 30-90s." });
+    try {
+      const { error } = await supabase.functions.invoke("contact-analysis", {
+        body: {
+          contact_id: contactId,
+          user_id: user.id,
+          scopes: ["profesional", "personal", "familiar"],
+          include_historical: false,
+        },
+      });
+      if (error) throw error;
+      toast.success("Perfil actualizado", { id: tId });
+      await Promise.all([load(), reloadProfile()]);
+    } catch (e) {
+      toast.error("No se pudo actualizar", { id: tId, description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setRefreshingProfile(false);
+    }
+  }
 
   useEffect(() => {
     if (!contactId || !user) return;
@@ -286,6 +317,17 @@ export default function ContactDetail() {
               >
                 <Bell className="w-4 h-4 mr-2" /> Recordatorio
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full border-primary/40 text-primary hover:bg-primary/10"
+                onClick={refreshProfile}
+                disabled={refreshingProfile}
+                title="Reanaliza el perfil completo de esta persona"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${refreshingProfile ? "animate-spin" : ""}`} />
+                {refreshingProfile ? "Analizando…" : "Actualizar perfil"}
+              </Button>
             </div>
           </div>
         </GlassCard>
@@ -468,6 +510,7 @@ export default function ContactDetail() {
           </TabsList>
 
           <TabsContent value="resumen" className="mt-6 space-y-6">
+            <RelationshipTimelineChart contactId={contact.id} contactName={contact.name} />
             <ConversationTimeline messages={messages} contactName={contact.name} />
 
             {quotables.length > 0 && (
@@ -538,7 +581,46 @@ export default function ContactDetail() {
             />
           </TabsContent>
 
-          <TabsContent value="datos" className="mt-6">
+          <TabsContent value="datos" className="mt-6 space-y-4">
+            {/* Selector de ámbito */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70 mr-1">Ámbito</span>
+              {(["profesional", "personal", "familiar"] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setActiveScope(s)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                    activeScope === s
+                      ? "bg-primary/15 border-primary/50 text-primary shadow-[0_0_16px_-4px_hsl(var(--primary)/0.5)]"
+                      : "border-border/60 text-muted-foreground hover:border-primary/40 hover:text-primary bg-card/30"
+                  }`}
+                >
+                  {s.charAt(0).toUpperCase() + s.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            {profile && Object.keys(profile).length > 0 ? (
+              <ProfileByScope
+                profile={profile}
+                ambito={activeScope}
+                contactId={contact.id}
+                allContacts={allContacts}
+                contactLinks={contactLinks}
+                onLinkContact={linkContact}
+                onIgnoreContact={ignoreContact}
+              />
+            ) : (
+              <GlassCard className="p-6 text-center space-y-3">
+                <Brain className="w-10 h-10 text-muted-foreground mx-auto" />
+                <p className="text-sm text-muted-foreground">Sin análisis de perfil todavía</p>
+                <Button size="sm" onClick={refreshProfile} disabled={refreshingProfile}>
+                  <RefreshCw className={`w-4 h-4 mr-2 ${refreshingProfile ? "animate-spin" : ""}`} />
+                  Generar perfil ahora
+                </Button>
+              </GlassCard>
+            )}
+
             <ProfileKnownData contact={contact as any} />
           </TabsContent>
         </Tabs>

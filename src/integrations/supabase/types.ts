@@ -6278,6 +6278,48 @@ export type Database = {
         }
         Relationships: []
       }
+      personal_timeline_events: {
+        Row: {
+          created_at: string
+          description: string | null
+          event_date: string
+          id: string
+          metadata: Json | null
+          sentiment: number
+          source: string
+          source_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          event_date: string
+          id?: string
+          metadata?: Json | null
+          sentiment?: number
+          source?: string
+          source_id?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          event_date?: string
+          id?: string
+          metadata?: Json | null
+          sentiment?: number
+          source?: string
+          source_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       phone_contacts: {
         Row: {
           birthday: string | null

@@ -49,6 +49,7 @@ const CATEGORY_META: Record<
 };
 
 export function ContactCard({ contact, onClick }: ContactCardProps) {
+  const navigate = useNavigate();
   const meta = CATEGORY_META[contact.category || ""] || {
     icon: User,
     label: "Otro",
@@ -60,6 +61,32 @@ export function ContactCard({ contact, onClick }: ContactCardProps) {
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() || "")
     .join("");
+
+  const days = daysSince(contact.last_contact);
+  const rel = relationLabel(days);
+  const needsFollowUp = days != null && days > 14 && !!contact.last_topic;
+
+  const relToneCls =
+    rel.tone === "success"
+      ? "bg-success/10 text-success border-success/30"
+      : rel.tone === "warning"
+      ? "bg-warning/10 text-warning border-warning/30"
+      : rel.tone === "destructive"
+      ? "bg-destructive/10 text-destructive border-destructive/30"
+      : rel.tone === "muted"
+      ? "bg-muted/20 text-muted-foreground border-muted/30"
+      : "bg-card/50 text-foreground/80 border-border/60";
+
+  const handleDraft = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const ctx = encodeURIComponent(
+      `Redacta un mensaje breve y natural para reconectar con ${contact.name}` +
+        (days != null ? ` (llevo ${days} días sin hablar)` : "") +
+        (contact.last_topic ? `. Último tema pendiente: "${contact.last_topic}"` : "") +
+        ". Tono cálido, directo, sin venderse."
+    );
+    navigate(`/chat?contact=${contact.id}&prompt=${ctx}`);
+  };
 
   return (
     <GlassCard
@@ -98,6 +125,30 @@ export function ContactCard({ contact, onClick }: ContactCardProps) {
               <Icon className="w-3 h-3" />
               {meta.label}
             </span>
+
+            {/* Días sin contacto / estado relacional */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium",
+                    relToneCls,
+                  )}
+                >
+                  <Clock className="w-3 h-3" />
+                  {rel.text}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-[220px] text-xs">
+                <p className="font-medium mb-1">Recencia de contacto</p>
+                <p className="text-muted-foreground leading-relaxed">
+                  {days == null
+                    ? "No tenemos registro de la última interacción."
+                    : `Última interacción registrada hace ${days} ${days === 1 ? "día" : "días"}.`}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+
             {contact.has_podcast && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/30 text-[11px] text-primary font-medium">
                 <Headphones className="w-3 h-3" />
@@ -132,6 +183,25 @@ export function ContactCard({ contact, onClick }: ContactCardProps) {
         <p className="mt-3 text-xs text-muted-foreground line-clamp-2 leading-relaxed">
           {contact.last_topic}
         </p>
+      )}
+
+      {/* Seguimiento recomendado */}
+      {needsFollowUp && (
+        <div className="mt-3 flex items-center justify-between gap-2 pt-3 border-t border-border/40">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/30 text-[11px] font-medium">
+            <Sparkles className="w-3 h-3" />
+            Seguimiento recomendado
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs gap-1 text-primary hover:text-primary"
+            onClick={handleDraft}
+          >
+            <MessageSquarePlus className="w-3 h-3" />
+            Redactar mensaje
+          </Button>
+        </div>
       )}
     </GlassCard>
   );

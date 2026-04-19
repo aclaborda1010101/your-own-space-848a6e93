@@ -255,9 +255,15 @@ serve(async (req) => {
       messages_covered: msgs.length,
       format: effectiveFormat,
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error("generate-contact-podcast-segment error:", err);
-    return jsonResp({ error: String(err) }, 500);
+    const msg =
+      err?.message ||
+      err?.error_description ||
+      err?.error ||
+      err?.details ||
+      (typeof err === "string" ? err : JSON.stringify(err));
+    return jsonResp({ error: msg }, 500);
   }
 });
 

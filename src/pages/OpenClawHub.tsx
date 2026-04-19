@@ -1,60 +1,40 @@
-import { useEffect, useState } from "react";
-import { Loader2, RefreshCw, Server, Sparkles, Activity, Zap, Info, Radio } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, RefreshCw, Server, Activity, Cpu, Wifi, WifiOff, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { PageHero } from "@/components/ui/PageHero";
 import { useOpenClawHub } from "@/hooks/useOpenClawHub";
-import { NodeStatusCard } from "@/components/openclaw/NodeStatusCard";
-import { TasksTab } from "@/components/openclaw/TasksTab";
-import { RecurringTab } from "@/components/openclaw/RecurringTab";
-import { ExecutionsTab } from "@/components/openclaw/ExecutionsTab";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { formatDistanceToNow } from "date-fns";
+import { es } from "date-fns/locale";
+
+const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+
+function isLive(lastSeen: string | null) {
+  if (!lastSeen) return false;
+  return Date.now() - new Date(lastSeen).getTime() < ONLINE_WINDOW_MS;
+}
 
 export default function OpenClawHub() {
-  const {
-    nodes,
-    tasks,
-    recurring,
-    executions,
-    loading,
-    refetch,
-    createTask,
-    createRecurring,
-    toggleRecurring,
-    deleteRecurring,
-    executeNow,
-    runTask,
-    completeTask,
-    deleteTask,
-  } = useOpenClawHub();
-
-  const [activating, setActivating] = useState(false);
+  const { nodes, tasks, loading, refetch } = useOpenClawHub();
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     document.title = "OpenClaw Hub | JARVIS";
   }, []);
 
-  const activateBridge = async (node: "POTUS" | "TITAN") => {
-    setActivating(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("openclaw-bridge-selftest", {
-        body: { node_name: node },
-      });
-      if (error) throw error;
-      if (data?.ok) {
-        toast.success(`Bridge ${node} activado`, { description: "Heartbeat live recibido." });
-        refetch();
-      } else {
-        toast.error(`No se pudo activar ${node}`, { description: data?.heartbeat_response?.error ?? "error" });
-      }
-    } catch (e: any) {
-      toast.error(`Error activando ${node}`, { description: e.message });
-    } finally {
-      setActivating(false);
-    }
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refetch();
+    setTimeout(() => setRefreshing(false), 400);
   };
+
+  const today = new Date().toISOString().slice(0, 10);
+  const onlineCount = useMemo(
+    () => nodes.filter((n) => isLive(n.last_seen_at)).length,
+    [nodes]
+  );
 
   if (loading) {
     return (
@@ -64,22 +44,10 @@ export default function OpenClawHub() {
     );
   }
 
-  const onlineCount = nodes.filter((n) => {
-    if (n.status === "online" || n.status === "running") return true;
-    if (!n.last_seen_at) return false;
-    return (Date.now() - new Date(n.last_seen_at).getTime()) / 60000 < 5;
-  }).length;
-
-  const today = new Date().toISOString().slice(0, 10);
-  const tokensToday = nodes.reduce(
-    (sum, n) => sum + (n.tokens_today_date === today ? n.tokens_today : 0),
-    0
-  );
-  const totalTokens = nodes.reduce((sum, n) => sum + (n.tokens_total || 0), 0);
-  const activeTasks = tasks.filter((t) => t.status === "pending" || t.status === "running").length;
+  const recentTasks = tasks.slice(0, 12);
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 space-y-6 max-w-7xl">
+    <div className="container mx-auto p-4 sm:p-6 space-y-6 max-w-6xl">
       <PageHero
         eyebrow="Centro de cómputo"
         eyebrowIcon={<Sparkles className="w-3 h-3" />}
@@ -88,83 +56,152 @@ export default function OpenClawHub() {
             OpenClaw <span className="italic font-serif text-primary">Hub</span>
           </>
         }
-        subtitle="Monitor operativo de POTUS y TITAN. Tareas, recurrentes y logs persistentes en Supabase."
+        subtitle="Monitor real de POTUS y TITAN. Telemetría persistente en Supabase."
         actions={
-          <Button variant="outline" size="sm" onClick={refetch} className="rounded-full">
-            <RefreshCw className="h-4 w-4 mr-2" /> Refrescar
+          <Button variant="outline" size="sm" onClick={handleRefresh} className="rounded-full" disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} /> Forzar actualización
           </Button>
         }
         stats={[
           { label: "Nodos online", value: `${onlineCount}/${nodes.length}`, icon: <Server className="w-4 h-4" />, tone: "success" },
-          { label: "Tareas activas", value: activeTasks, hint: `${tasks.length} totales`, icon: <Activity className="w-4 h-4" />, tone: "primary" },
-          { label: "Tokens hoy", value: tokensToday.toLocaleString(), hint: `${totalTokens.toLocaleString()} total`, icon: <Zap className="w-4 h-4" />, tone: "accent" },
-          { label: "Recurrentes", value: recurring.filter((r) => r.enabled).length, hint: `${recurring.length} programadas`, tone: "warning" },
+          {
+            label: "Tareas activas",
+            value: tasks.filter((t) => t.status === "pending" || t.status === "running").length,
+            hint: `${tasks.length} totales`,
+            icon: <Activity className="w-4 h-4" />,
+            tone: "primary",
+          },
         ]}
       />
 
-      <Alert className="border-amber-500/30 bg-amber-500/5">
-        <Info className="h-4 w-4 text-amber-400" />
-        <AlertTitle className="text-foreground flex items-center gap-2">
-          Bridge live disponible · activación manual
-        </AlertTitle>
-        <AlertDescription className="text-muted-foreground text-xs leading-relaxed space-y-2">
-          <p>
-            Endpoint live <code className="mx-1 px-1.5 py-0.5 rounded bg-muted text-foreground">/openclaw-heartbeat</code> ya operativo.
-            Pulsa el botón para enviar un heartbeat real desde el servidor: el nodo pasa a <span className="text-emerald-300">Live</span> y registra una ejecución real en logs.
-            El modelo activo NO se modifica sin tu permiso explícito.
-          </p>
-          <div className="flex gap-2 flex-wrap pt-1">
-            <Button size="sm" variant="outline" disabled={activating} onClick={() => activateBridge("POTUS")}>
-              <Radio className="h-3 w-3 mr-1.5" /> Activar bridge POTUS
-            </Button>
-            <Button size="sm" variant="outline" disabled={activating} onClick={() => activateBridge("TITAN")}>
-              <Radio className="h-3 w-3 mr-1.5" /> Activar bridge TITAN
-            </Button>
-          </div>
-        </AlertDescription>
-      </Alert>
+      {/* Cards de nodos */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {nodes.map((n) => {
+          const live = isLive(n.last_seen_at);
+          const tokensToday = n.tokens_today_date === today ? n.tokens_today : 0;
+          return (
+            <Card key={n.id} className="p-5 space-y-4 border-border/60">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-bold tracking-tight">{n.name}</h3>
+                    <Badge variant="outline" className="text-[10px] uppercase tracking-wider font-mono">
+                      {(n as any).role ?? "—"}
+                    </Badge>
+                    {!live && (
+                      <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
+                        Simulado
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    {(n as any).ip ?? n.host ?? "sin IP"} · {n.model ?? "modelo no definido"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {live ? (
+                    <>
+                      <Wifi className="h-4 w-4 text-emerald-400" />
+                      <span className="text-xs font-medium text-emerald-400">online</span>
+                    </>
+                  ) : (
+                    <>
+                      <WifiOff className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">offline</span>
+                    </>
+                  )}
+                </div>
+              </div>
 
-      {/* Nodos */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        {nodes.map((n) => (
-          <NodeStatusCard key={n.id} node={n} tasks={tasks.filter((t) => t.node_id === n.id)} />
-        ))}
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="space-y-0.5">
+                  <p className="text-muted-foreground uppercase tracking-wider text-[10px]">Last seen</p>
+                  <p className="font-mono">
+                    {n.last_seen_at
+                      ? formatDistanceToNow(new Date(n.last_seen_at), { addSuffix: true, locale: es })
+                      : "nunca"}
+                  </p>
+                </div>
+                <div className="space-y-0.5">
+                  <p className="text-muted-foreground uppercase tracking-wider text-[10px]">Tokens hoy</p>
+                  <p className="font-mono">{tokensToday > 0 ? tokensToday.toLocaleString() : "—"}</p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 pt-1 border-t border-border/40">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground flex items-center gap-1.5">
+                    <Cpu className="h-3 w-3" />
+                    Tarea activa
+                  </span>
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {(n as any).progress ?? 0}%
+                  </span>
+                </div>
+                <p className="text-sm font-medium">
+                  {(n as any).active_task ?? <span className="text-muted-foreground italic font-normal">sin tarea</span>}
+                </p>
+                <Progress value={(n as any).progress ?? 0} className="h-1" />
+              </div>
+            </Card>
+          );
+        })}
       </div>
 
-      {/* Tabs operativos */}
-      <Tabs defaultValue="tasks" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 max-w-md">
-          <TabsTrigger value="tasks">Tareas</TabsTrigger>
-          <TabsTrigger value="recurring">Recurrentes</TabsTrigger>
-          <TabsTrigger value="logs">Logs</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="tasks">
-          <TasksTab
-            nodes={nodes}
-            tasks={tasks}
-            onCreate={createTask}
-            onRun={runTask}
-            onComplete={completeTask}
-            onDelete={deleteTask}
-          />
-        </TabsContent>
-
-        <TabsContent value="recurring">
-          <RecurringTab
-            nodes={nodes}
-            recurring={recurring}
-            onCreate={createRecurring}
-            onToggle={toggleRecurring}
-            onExecute={executeNow}
-            onDelete={deleteRecurring}
-          />
-        </TabsContent>
-
-        <TabsContent value="logs">
-          <ExecutionsTab executions={executions} />
-        </TabsContent>
-      </Tabs>
+      {/* Tareas recientes */}
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+            Tareas recientes
+          </h3>
+          <span className="text-xs text-muted-foreground font-mono">{recentTasks.length} de {tasks.length}</span>
+        </div>
+        {recentTasks.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic py-6 text-center">
+            No hay tareas registradas todavía.
+          </p>
+        ) : (
+          <div className="divide-y divide-border/40">
+            {recentTasks.map((t) => {
+              const node = nodes.find((n) => n.id === t.node_id);
+              const logs = (t as any).logs as string | undefined;
+              return (
+                <div key={t.id} className="py-3 flex items-start gap-3">
+                  <StatusDot status={t.status} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium truncate">{t.title}</p>
+                      <span className="text-[10px] text-muted-foreground font-mono shrink-0">
+                        {node?.name ?? "—"} · {t.status}
+                      </span>
+                    </div>
+                    {logs && (
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 font-mono">
+                        {logs.slice(0, 220)}
+                      </p>
+                    )}
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {formatDistanceToNow(new Date(t.created_at), { addSuffix: true, locale: es })}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
     </div>
   );
+}
+
+function StatusDot({ status }: { status: string }) {
+  const color =
+    status === "done"
+      ? "bg-emerald-400"
+      : status === "running"
+      ? "bg-primary animate-pulse"
+      : status === "failed"
+      ? "bg-destructive"
+      : "bg-muted-foreground/40";
+  return <div className={`h-2 w-2 rounded-full mt-2 shrink-0 ${color}`} />;
 }

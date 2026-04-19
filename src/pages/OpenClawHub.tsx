@@ -30,9 +30,31 @@ export default function OpenClawHub() {
     deleteTask,
   } = useOpenClawHub();
 
+  const [activating, setActivating] = useState(false);
+
   useEffect(() => {
     document.title = "OpenClaw Hub | JARVIS";
   }, []);
+
+  const activateBridge = async (node: "POTUS" | "TITAN") => {
+    setActivating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("openclaw-bridge-selftest", {
+        body: { node_name: node },
+      });
+      if (error) throw error;
+      if (data?.ok) {
+        toast.success(`Bridge ${node} activado`, { description: "Heartbeat live recibido." });
+        refetch();
+      } else {
+        toast.error(`No se pudo activar ${node}`, { description: data?.heartbeat_response?.error ?? "error" });
+      }
+    } catch (e: any) {
+      toast.error(`Error activando ${node}`, { description: e.message });
+    } finally {
+      setActivating(false);
+    }
+  };
 
   if (loading) {
     return (

@@ -333,7 +333,7 @@ export default function RedEstrategica() {
           <Kpi
             label="Contactos"
             value={kpis.total}
-            hint="en tu red"
+            hint="vigilados"
             icon={<Users className="w-4 h-4" />}
             tone="primary"
           />

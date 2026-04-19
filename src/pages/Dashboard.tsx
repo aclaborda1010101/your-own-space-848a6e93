@@ -25,6 +25,7 @@ import { HabitsInsightsCard } from "@/components/dashboard/HabitsInsightsCard";
 import { SuggestionsCard } from "@/components/dashboard/SuggestionsCard";
 
 import { CommandCenterCard } from "@/components/dashboard/CommandCenterCard";
+import { ExecutiveSummaryCard } from "@/components/dashboard/ExecutiveSummaryCard";
 
 
 import { DraggableCard } from "@/components/dashboard/DraggableCard";
@@ -235,6 +236,9 @@ const Dashboard = () => {
       {userSettings.show_day_summary !== false && (
         <CommandCenterCard tasks={tasks} events={events} onToggleComplete={toggleComplete} />
       )}
+
+      {/* JARVIS Executive Summary — daily LLM brief, cached, manual refresh */}
+      <ExecutiveSummaryCard />
       
       {/* Quick Actions Bar */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

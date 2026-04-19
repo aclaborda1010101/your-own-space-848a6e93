@@ -4479,6 +4479,47 @@ export type Database = {
           },
         ]
       }
+      jarvis_executive_summaries: {
+        Row: {
+          context_snapshot: Json | null
+          created_at: string
+          generated_at: string
+          id: string
+          model_used: string | null
+          summary_date: string
+          summary_text: string
+          user_id: string
+        }
+        Insert: {
+          context_snapshot?: Json | null
+          created_at?: string
+          generated_at?: string
+          id?: string
+          model_used?: string | null
+          summary_date?: string
+          summary_text: string
+          user_id: string
+        }
+        Update: {
+          context_snapshot?: Json | null
+          created_at?: string
+          generated_at?: string
+          id?: string
+          model_used?: string | null
+          summary_date?: string
+          summary_text?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jarvis_executive_summaries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       jarvis_memory: {
         Row: {
           access_count: number | null

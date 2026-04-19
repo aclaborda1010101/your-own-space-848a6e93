@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Eye, EyeOff, Zap, Shield, Brain } from "lucide-react";
 import { isInIframe, getSafeRedirectTarget, persistRedirectTarget } from "@/lib/oauth";
+import { signInWithGoogleNative, isNative } from "@/lib/nativeAuth";
 import AISpectrum from "@/components/ui/AISpectrum";
 
 const GOOGLE_SCOPES =

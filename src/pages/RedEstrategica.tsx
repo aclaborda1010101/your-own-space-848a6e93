@@ -18,7 +18,9 @@ import {
   Activity,
   AlertTriangle,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
+import { toast } from "sonner";
 
 interface Row {
   id: string;
@@ -111,6 +113,42 @@ export default function RedEstrategica() {
   const [health, setHealth] = useState<HealthFilter>("all");
   const [activity, setActivity] = useState<ActivityFilter>("all");
   const [hasPodcast, setHasPodcast] = useState<"all" | "yes" | "no">("all");
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function refreshHeadlines() {
+    if (refreshing) return;
+    setRefreshing(true);
+    const tId = toast.loading("Actualizando novedades de tu red…", {
+      description: "Regenerando análisis con IA. Puede tardar 30-60s.",
+    });
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "contact-headlines-refresh",
+        { body: {} },
+      );
+      if (error) throw error;
+      const refreshed = data?.refreshed ?? 0;
+      const errors = data?.errors ?? 0;
+      const truncated = data?.truncated;
+      toast.success(`Novedades actualizadas en ${refreshed} contactos`, {
+        id: tId,
+        description: [
+          errors > 0 ? `${errors} con error` : null,
+          truncated ? "Procesados los 25 más antiguos" : null,
+        ]
+          .filter(Boolean)
+          .join(" · ") || "Cache renovado.",
+      });
+      void load();
+    } catch (e) {
+      toast.error("No se pudieron actualizar las novedades", {
+        id: tId,
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   useEffect(() => {
     if (!user) return;

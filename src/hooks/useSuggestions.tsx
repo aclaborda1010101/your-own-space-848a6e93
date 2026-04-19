@@ -10,6 +10,8 @@ export interface Suggestion {
   status: string;
   source_transcription_id: string | null;
   created_at: string;
+  confidence?: number | null;
+  reasoning?: string | null;
 }
 
 const PRIORITY_MAP: Record<string, string> = {
@@ -111,7 +113,46 @@ export const useSuggestions = () => {
     if (error) throw error;
   };
 
-  const accept = async (suggestion: Suggestion, eventDate?: string, onCreateEvent?: (data: { title: string; date: string }) => Promise<void>) => {
+  // Confirm a Plaud classification: link transcription to project, create timeline entry
+  const acceptClassification = async (suggestion: Suggestion, overrideProjectId?: string) => {
+    if (!user) return;
+    const c = suggestion.content;
+    const projectId = overrideProjectId || c.project_id;
+    const transcriptionId = c.transcription_id || suggestion.source_transcription_id;
+    const contactIds = (c.contacts || [])
+      .filter((x: any) => x?.id)
+      .map((x: any) => x.id);
+
+    if (transcriptionId) {
+      const update: Record<string, any> = {};
+      if (projectId) update.linked_project_id = projectId;
+      if (contactIds.length > 0) update.linked_contact_ids = contactIds;
+      if (Object.keys(update).length > 0) {
+        await supabase.from("plaud_transcriptions").update(update).eq("id", transcriptionId);
+      }
+    }
+
+    if (projectId && transcriptionId && !c.auto_linked_project) {
+      await supabase.from("business_project_timeline").insert({
+        project_id: projectId,
+        user_id: user.id,
+        channel: "plaud",
+        title: c.title || "Grabación Plaud",
+        description: c.summary_one_line || c.excerpt?.slice(0, 280) || "",
+        event_date: c.recording_date || new Date().toISOString(),
+        auto_detected: false,
+        source_id: transcriptionId,
+        importance_score: Math.round((c.project_confidence || 0.5) * 100),
+      });
+    }
+  };
+
+  const accept = async (
+    suggestion: Suggestion,
+    eventDate?: string,
+    onCreateEvent?: (data: { title: string; date: string }) => Promise<void>,
+    overrideProjectId?: string,
+  ) => {
     try {
       switch (suggestion.suggestion_type) {
         case "task_from_plaud":
@@ -125,6 +166,9 @@ export const useSuggestions = () => {
           break;
         case "contact_from_plaud":
           await acceptContact(suggestion);
+          break;
+        case "classification_from_plaud":
+          await acceptClassification(suggestion, overrideProjectId);
           break;
       }
 

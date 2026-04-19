@@ -64,6 +64,7 @@ const Install = React.lazy(() => import("./pages/Install"));
 const PrivacyPolicy = React.lazy(() => import("./pages/PrivacyPolicy"));
 const AICosts = React.lazy(() => import("./pages/AICosts"));
 const IntelligenceInbox = React.lazy(() => import("./pages/IntelligenceInbox"));
+const MobileMenu = React.lazy(() => import("./pages/MobileMenu"));
 
 // --- Loading fallback ---
 const PageLoader = () => (
@@ -206,6 +207,7 @@ const App = () => (
                   <Route path="/data-import" element={<ProtectedPage><DataImport /></ProtectedPage>} />
                   <Route path="/ai-costs" element={<ProtectedPage><AICosts /></ProtectedPage>} />
                   <Route path="/contacts" element={<Navigate to="/strategic-network" replace />} />
+                  <Route path="/menu" element={<ProtectedPage><MobileMenu /></ProtectedPage>} />
                   
                   {/* PWA Install */}
                   <Route path="/install" element={<Install />} />

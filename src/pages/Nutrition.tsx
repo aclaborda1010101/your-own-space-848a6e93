@@ -28,6 +28,7 @@ import { LearnedPreferencesCard } from "@/components/nutrition/LearnedPreference
 import { ShoppingListCard } from "@/components/nutrition/ShoppingListCard";
 import { MealHistoryCard } from "@/components/nutrition/MealHistoryCard";
 import { SupplementsCard } from "@/components/nutrition/SupplementsCard";
+import { NutritionContextCard } from "@/components/nutrition/NutritionContextCard";
 
 const DIET_TYPES = [
   { value: 'balanced', label: 'Balanceada' },
@@ -124,6 +125,11 @@ const Nutrition = () => {
                 Jarvis Nutrición
               </h1>
               <p className="text-muted-foreground">Configura tu dieta y chatea con tu asistente nutricional</p>
+            </div>
+
+            {/* Análisis nutricional contextual LLM (cruzado con Whoop + tareas) */}
+            <div className="mb-6">
+              <NutritionContextCard />
             </div>
 
             {/* Content - 3 column layout */}

@@ -10,6 +10,7 @@ import { SleepChart } from "@/components/health/SleepChart";
 import { StrainChart } from "@/components/health/StrainChart";
 import { HrvChart } from "@/components/health/HrvChart";
 import { HealthAISummary } from "@/components/health/HealthAISummary";
+import { HealthRecommendationCard } from "@/components/health/HealthRecommendationCard";
 import { HealthMetricRing } from "@/components/health/HealthMetricRing";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -344,6 +345,9 @@ const Health = () => {
                   size="md"
                 />
               </div>
+
+              {/* Recomendación contextual LLM (Whoop + tareas + comida) */}
+              <HealthRecommendationCard />
 
               {data.data_date && (
                 <p className="text-center text-xs text-muted-foreground">

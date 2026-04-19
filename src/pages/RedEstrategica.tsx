@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ContactCard } from "@/components/contact/ContactCard";
+import { AddToNetworkDialog } from "@/components/contact/AddToNetworkDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ import {
   AlertTriangle,
   Sparkles,
   RefreshCw,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 

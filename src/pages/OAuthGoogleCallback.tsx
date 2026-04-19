@@ -16,20 +16,16 @@ export default function OAuthGoogleCallback() {
     const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
     const run = async () => {
-      // Give the auth client a moment to process the redirect URL and persist the session.
-      for (let i = 0; i < 12; i++) {
+      // Damos tiempo al cliente de Supabase a procesar la URL y persistir la sesión.
+      for (let i = 0; i < 20; i++) {
         const { data, error } = await supabase.auth.getSession();
         if (error) {
-          setError(error.message);
-          setStatus("error");
-          return;
+          console.warn("[OAuth Callback] getSession error:", error.message);
         }
 
-        const session = data.session;
-        if (session?.access_token && session.refresh_token) {
-          // Best-effort: si vinimos de un popup con opener válido (mismo origen),
-          // notificamos. Si falla por cross-origin o no hay opener, simplemente
-          // navegamos al dashboard en esta misma pestaña (caso top-level redirect).
+        const session = data?.session;
+        if (session?.access_token) {
+          // Si venimos de un popup con opener válido (mismo origen), notificamos.
           try {
             if (window.opener && !window.opener.closed) {
               window.opener.postMessage(
@@ -50,6 +46,8 @@ export default function OAuthGoogleCallback() {
             // cross-origin opener: caer al navigate normal
           }
 
+          // Top-level redirect: ir directo al dashboard
+          setStatus("done");
           navigate("/dashboard", { replace: true });
           return;
         }

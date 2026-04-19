@@ -78,13 +78,14 @@ export default function OpenClawHub() {
         ]}
       />
 
-      <Alert className="border-primary/30 bg-primary/5">
-        <Info className="h-4 w-4 text-primary" />
-        <AlertTitle className="text-foreground">Bridge live: pendiente de conexión</AlertTitle>
-        <AlertDescription className="text-muted-foreground text-xs">
-          Tareas, recurrentes y logs se persisten al instante. La ejecución física en POTUS / TITAN se conectará vía
-          <code className="mx-1 px-1.5 py-0.5 rounded bg-muted text-foreground">potus-bridge</code>
-          cuando esté en línea. Mientras tanto puedes ejecutar manualmente (Play / Done) para validar el flujo y los tokens registrados.
+      <Alert className="border-amber-500/30 bg-amber-500/5">
+        <Info className="h-4 w-4 text-amber-400" />
+        <AlertTitle className="text-foreground flex items-center gap-2">
+          MVP operativo · datos <span className="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider bg-amber-500/20 text-amber-300">simulated</span>
+        </AlertTitle>
+        <AlertDescription className="text-muted-foreground text-xs leading-relaxed">
+          UI real + DB Supabase real (nodos, tareas, recurrentes, ejecuciones persistentes). Heartbeat, tokens y logs marcados como <span className="text-amber-300">simulated</span> hasta conectar
+          <code className="mx-1 px-1.5 py-0.5 rounded bg-muted text-foreground">potus-bridge</code> (Mac Mini local). Crear / Play / Done ya escribe en DB; al conectar el bridge físico, el mismo flujo dispara ejecución real sin cambios en la UI.
         </AlertDescription>
       </Alert>
 

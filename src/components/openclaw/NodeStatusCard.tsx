@@ -24,6 +24,24 @@ export function NodeStatusCard({ node, tasks }: NodeStatusCardProps) {
   const today = new Date().toISOString().slice(0, 10);
   const tokensToday = node.tokens_today_date === today ? node.tokens_today : 0;
 
+  // Honestidad de datos: distinguimos lo que viene del bridge vs. lo derivado de UI/seed.
+  // Mientras el bridge físico (potus-bridge) no esté conectado, marcamos como "simulated".
+  const bridgeLive = Boolean(node.metadata?.bridge_live);
+  const dataMode: "live" | "simulated" | "pending" = bridgeLive
+    ? "live"
+    : node.last_seen_at
+      ? "simulated"
+      : "pending";
+
+  const tokensLabel =
+    dataMode === "pending" ? "—" : tokensToday.toLocaleString();
+  const tokensTotalLabel =
+    dataMode === "pending" ? "—" : (node.tokens_total || 0).toLocaleString();
+  const modelLabel = node.model ?? "sin asignar";
+  const lastSeenLabel = node.last_seen_at
+    ? formatDistanceToNow(new Date(node.last_seen_at), { addSuffix: true, locale: es })
+    : "sin contacto";
+
   return (
     <Card className="relative overflow-hidden">
       <CardContent className="p-5 space-y-4">

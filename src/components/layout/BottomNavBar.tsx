@@ -2,7 +2,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   CalendarCheck,
   CheckSquare,
-  Mic,
+  Sparkles,
   Activity,
   Menu as MenuIcon,
 } from "lucide-react";
@@ -61,7 +61,7 @@ export const BottomNavBar = ({ onJarvisPress, isJarvisActive = false }: BottomNa
                   : "bg-gradient-to-br from-primary via-primary to-primary/70 border-primary/40 shadow-[0_0_24px_hsl(var(--primary)/0.7)]",
               )}
             >
-              <Mic
+              <Sparkles
                 className={cn(
                   "w-6 h-6",
                   isJarvisActive ? "animate-pulse text-destructive" : "text-primary-foreground",

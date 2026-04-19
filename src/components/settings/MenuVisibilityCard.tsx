@@ -63,7 +63,7 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
     title: "Datos",
     items: [
       { icon: Upload, label: "Importar", path: "/data-import" },
-      { icon: ContactRound, label: "Red Estratégica", path: "/strategic-network" },
+      { icon: ContactRound, label: "Red Estratégica", path: "/red-estrategica" },
     ],
   },
   {

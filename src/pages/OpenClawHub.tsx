@@ -17,9 +17,11 @@ import {
 import { toast } from "sonner";
 import {
   Activity, Cpu, Server, Plus, Loader2, RefreshCw, Play, CheckCircle2, XCircle, Clock,
+  Zap, Sparkles,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
+import { PageHero } from "@/components/ui/PageHero";
 
 type Node = {
   id: string;
@@ -209,22 +211,34 @@ export default function OpenClawHub() {
     );
   }
 
+  const onlineNodes = nodes.filter((n) => n.status === "online").length;
+  const runningTasks = tasks.filter((t) => t.status === "running").length;
+  const totalTokens = nodes.reduce((sum, n) => sum + (n.tokens_total || 0), 0);
+
   return (
     <div className="container mx-auto p-4 sm:p-6 space-y-6 max-w-7xl">
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground flex items-center gap-2">
-            <Server className="h-6 w-6 text-primary" />
-            OpenClaw Hub
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Monitor de nodos, tareas y logs. Persistencia real en Supabase.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={fetchAll}>
-          <RefreshCw className="h-4 w-4 mr-2" /> Refrescar
-        </Button>
-      </header>
+      <PageHero
+        eyebrow="Centro de cómputo"
+        eyebrowIcon={<Sparkles className="w-3 h-3" />}
+        title={
+          <>
+            OpenClaw <span className="italic font-serif text-primary">Hub</span>
+          </>
+        }
+        subtitle="Monitor de nodos, tareas y logs. Persistencia real en Supabase."
+        actions={
+          <Button variant="outline" size="sm" onClick={fetchAll} className="rounded-full">
+            <RefreshCw className="h-4 w-4 mr-2" /> Refrescar
+          </Button>
+        }
+        stats={[
+          { label: "Nodos online", value: `${onlineNodes}/${nodes.length}`, icon: <Server className="w-4 h-4" />, tone: "success" },
+          { label: "Tareas activas", value: runningTasks, hint: `${tasks.length} totales`, icon: <Activity className="w-4 h-4" />, tone: "primary" },
+          { label: "Tokens", value: totalTokens.toLocaleString(), hint: "consumidos", icon: <Zap className="w-4 h-4" />, tone: "accent" },
+          { label: "Errores", value: tasks.filter((t) => t.status === "failed").length, hint: "últimas 24h", icon: <XCircle className="w-4 h-4" />, tone: "warning" },
+        ]}
+      />
+
 
       <div className="grid gap-4 md:grid-cols-2">
         {nodes.map((node) => {

@@ -17,8 +17,9 @@ import {
   Activity, Heart, Moon, Zap, TrendingUp, RefreshCw,
   Loader2, Info, Link, Unlink, Thermometer, Wind,
   Droplets, Timer, BedDouble, Brain, Flame, ChevronUp, ChevronDown,
-  CalendarIcon, ChevronLeft, ChevronRight, Download,
+  CalendarIcon, ChevronLeft, ChevronRight, Download, Sparkles,
 } from "lucide-react";
+import { PageHero } from "@/components/ui/PageHero";
 
 const PERIOD_OPTIONS = [
   { label: "7d", value: 7 },
@@ -84,36 +85,85 @@ const Health = () => {
   const availableDateSet = new Set(availableDates);
   const isToday = selectedDate.toISOString().split("T")[0] === new Date().toISOString().split("T")[0];
 
+  const recoveryScore = data?.recovery_score ?? null;
+  const recoveryTone: "success" | "warning" | "destructive" =
+    recoveryScore == null ? "warning" :
+    recoveryScore >= 67 ? "success" :
+    recoveryScore >= 34 ? "warning" : "destructive";
+  const recoveryLabel =
+    recoveryScore == null ? "Sin datos" :
+    recoveryScore >= 67 ? "En verde, listo" :
+    recoveryScore >= 34 ? "Moderado" : "En rojo, descansa";
+
   return (
     <div className="p-4 lg:p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-success to-success/70 flex items-center justify-center shadow-lg shadow-success/30">
-            <Activity className="w-6 h-6 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Salud</h1>
-            <p className="text-sm text-muted-foreground font-mono">MÉTRICAS WHOOP</p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          {isConnected && (
+      <PageHero
+        eyebrow={`WHOOP · ${format(selectedDate, "EEE d MMM", { locale: es })}`}
+        eyebrowIcon={<Activity className="w-3 h-3" />}
+        title={
+          <>
+            Tu <span className="italic font-serif text-primary">salud</span>{" "}
+            de hoy
+          </>
+        }
+        subtitle={
+          recoveryScore != null
+            ? `Recuperación al ${recoveryScore}% — ${recoveryLabel.toLowerCase()}.`
+            : "Conecta tu WHOOP para ver tus métricas en tiempo real."
+        }
+        tone={recoveryTone === "destructive" ? "warning" : recoveryTone}
+        actions={
+          isConnected && (
             <>
-              <Button variant="outline" size="sm" onClick={() => backfillHistory(30)} disabled={isBackfilling} className="gap-1.5 text-xs">
+              <Button variant="outline" size="sm" onClick={() => backfillHistory(30)} disabled={isBackfilling} className="gap-1.5 text-xs rounded-full">
                 {isBackfilling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
                 Cargar 30d
               </Button>
-              <Button variant="outline" size="icon" onClick={fetchData} disabled={isFetching}>
+              <Button variant="outline" size="icon" onClick={fetchData} disabled={isFetching} className="rounded-full">
                 {isFetching ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
               </Button>
-              <Button variant="outline" size="sm" onClick={disconnect} className="gap-2 text-destructive">
+              <Button variant="outline" size="sm" onClick={disconnect} className="gap-2 text-destructive rounded-full">
                 <Unlink className="w-4 h-4" /> Desconectar
               </Button>
             </>
-          )}
-        </div>
-      </div>
+          )
+        }
+        stats={
+          isConnected && data
+            ? [
+                {
+                  label: "Recuperación",
+                  value: recoveryScore != null ? `${recoveryScore}%` : "—",
+                  hint: recoveryLabel,
+                  icon: <Zap className="w-4 h-4" />,
+                  tone: recoveryTone === "destructive" ? "destructive" : recoveryTone,
+                },
+                {
+                  label: "Sueño",
+                  value: data.sleep_hours != null ? formatTime(data.sleep_hours) : "—",
+                  hint: "horas dormidas",
+                  icon: <Moon className="w-4 h-4" />,
+                  tone: "accent",
+                },
+                {
+                  label: "Esfuerzo",
+                  value: data.strain != null ? data.strain.toFixed(1) : "—",
+                  hint: `${getStrainLabel(data.strain)} / 21`,
+                  icon: <TrendingUp className="w-4 h-4" />,
+                  tone: "warning",
+                },
+                {
+                  label: "HRV",
+                  value: data.hrv != null ? `${data.hrv}` : "—",
+                  hint: "ms (var. cardiaca)",
+                  icon: <Heart className="w-4 h-4" />,
+                  tone: "primary",
+                },
+              ]
+            : undefined
+        }
+      />
+
 
       {isLoading ? (
         <Card className="border-border bg-card">

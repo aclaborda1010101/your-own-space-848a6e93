@@ -132,11 +132,48 @@ serve(async (req) => {
 
     console.log(`Voice data: ${contactExamples.length} contact + ${globalExamples.length} global examples, avg length: ${avgLength}chars (substantive only)`);
 
-    // Build conversation history with more context
-    const conversationHistory = recentMessages
-      .reverse()
-      .map(m => `[${m.direction === "incoming" ? m.sender || contact.name : "Yo"}]: ${m.content}`)
+    // ===== TEMPORAL ANCHORING =====
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    const formatRelative = (dateStr: string): string => {
+      const d = new Date(dateStr);
+      const diffMs = now.getTime() - d.getTime();
+      const diffMin = Math.floor(diffMs / 60000);
+      const diffH = Math.floor(diffMs / 3600000);
+      const diffD = Math.floor(diffMs / 86400000);
+      if (diffMin < 60) return `hace ${diffMin}min`;
+      if (diffH < 24) return `hace ${diffH}h`;
+      if (diffD === 1) return `ayer`;
+      if (diffD < 7) return `hace ${diffD} días`;
+      if (diffD < 30) return `hace ${Math.floor(diffD / 7)} sem`;
+      if (diffD < 365) return `hace ${Math.floor(diffD / 30)} meses`;
+      return `hace ${Math.floor(diffD / 365)} años`;
+    };
+
+    // Build conversation history with relative dates per message (chronological asc)
+    const orderedMessages = [...recentMessages].reverse();
+    const conversationHistory = orderedMessages
+      .map(m => `[${formatRelative(m.message_date)} · ${m.direction === "incoming" ? m.sender || contact.name : "Yo"}]: ${m.content}`)
       .join("\n");
+
+    // Detect last incoming message and conversation freshness
+    const lastIncoming = [...orderedMessages].reverse().find(m => m.direction === "incoming");
+    const daysSinceLastIncoming = lastIncoming
+      ? Math.floor((now.getTime() - new Date(lastIncoming.message_date).getTime()) / 86400000)
+      : null;
+
+    let temporalContextDirective = "";
+    if (lastIncoming && daysSinceLastIncoming !== null) {
+      if (daysSinceLastIncoming <= 2) {
+        temporalContextDirective = `\n🎯 ÚLTIMO MENSAJE DEL CONTACTO (${formatRelative(lastIncoming.message_date)}): "${lastIncoming.content}"
+Las sugerencias DEBEN responder DIRECTAMENTE a ESTE mensaje. No traigas temas viejos del historial.`;
+      } else if (daysSinceLastIncoming <= 7) {
+        temporalContextDirective = `\n⏰ El último mensaje del contacto fue hace ${daysSinceLastIncoming} días: "${lastIncoming.content}". La conversación está enfriándose pero aún viva. Puedes retomar ese hilo.`;
+      } else {
+        temporalContextDirective = `\n❄️ CONVERSACIÓN FRÍA: el último mensaje del contacto fue hace ${daysSinceLastIncoming} días. Las sugerencias deben REABRIR el contacto desde cero, NO continuar temas antiguos. Pregunta cómo está, retoma con algo nuevo, o referencia algo concreto del contexto actual del usuario — nunca asumas que un tema viejo sigue activo.`;
+      }
+    }
 
     // Extract profile info
     const profile = contact.personality_profile as Record<string, any> | null;

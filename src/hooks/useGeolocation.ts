@@ -54,8 +54,9 @@ export function useGeolocation(): UseGeolocationResult {
           if (cancelled) return;
           setPermission(mapNativePerm(status.location));
         } else if ("permissions" in navigator) {
-          // @ts-expect-error: PermissionName 'geolocation' is widely supported
-          const res = await navigator.permissions.query({ name: "geolocation" });
+          const res = await (navigator.permissions as Permissions).query({
+            name: "geolocation" as PermissionName,
+          });
           if (cancelled) return;
           setPermission(res.state as UseGeolocationResult["permission"]);
         }

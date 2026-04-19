@@ -6,81 +6,81 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Normalize a wa_id: strip suffix like ":12", non-digits, keep just digits
+function normalizeWaId(raw: string): string {
+  if (!raw) return "";
+  const beforeColon = raw.split(":")[0];
+  return beforeColon.replace(/\D/g, "");
+}
+
+// Last 9 digits — useful for matching ES numbers with/without prefix
+function last9(num: string): string {
+  const n = normalizeWaId(num);
+  return n.length >= 9 ? n.slice(-9) : n;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Always return 200 — webhook must never fail
   try {
     const body = await req.json();
     console.log("Evolution webhook received:", JSON.stringify(body).substring(0, 500));
 
-    // Extract data from Evolution API payload
     const data = body.data || body;
     const { message, key, messageTimestamp, pushName } = data;
 
     if (!key || !message) {
-      console.log("No key or message in payload, skipping");
       return new Response(JSON.stringify({ ok: true, skipped: "no_data" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Skip group messages
     if (key.remoteJid?.includes("@g.us")) {
-      console.log("Group message, skipping");
       return new Response(JSON.stringify({ ok: true, skipped: "group" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Extract text content
     const textContent =
       message?.conversation ||
       message?.extendedTextMessage?.text ||
       null;
 
     if (!textContent) {
-      console.log("No text content, skipping");
       return new Response(JSON.stringify({ ok: true, skipped: "no_text" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Extract WhatsApp ID - prefer remoteJidAlt (real phone) over remoteJid (may be LID)
     const remoteJid = key.remoteJid || "";
     const remoteJidAlt = key.remoteJidAlt || "";
     const isLid = remoteJid.includes("@lid");
-    
-    // Use the real phone number when available
     const phoneJid = isLid && remoteJidAlt ? remoteJidAlt : remoteJid;
-    const waId = phoneJid.split("@")[0];
-    
-    // Also keep LID for Evolution API sending if needed
+    const rawWaId = phoneJid.split("@")[0];
+    const waId = normalizeWaId(rawWaId);
+    const waLast9 = last9(waId);
     const lidId = isLid ? remoteJid.split("@")[0] : null;
-    
+
     if (!waId) {
-      console.log("No waId extracted, skipping");
       return new Response(JSON.stringify({ ok: true, skipped: "no_waid" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    
-    console.log(`[evolution-webhook] Resolved waId: ${waId}${lidId ? ` (LID: ${lidId})` : ""}`);
 
+    const externalId: string | null = key.id || null;
     const direction = key.fromMe ? "outgoing" : "incoming";
     const senderName = key.fromMe ? "Yo" : (pushName || waId);
     const messageDate = messageTimestamp
       ? new Date(Number(messageTimestamp) * 1000).toISOString()
       : new Date().toISOString();
 
-    // Create Supabase client with service role
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Resolve user_id dynamically from instance owner
+    // Resolve user_id from instance owner
     const instanceName = body.instance || "jarvis-whatsapp";
     const { data: owner } = await supabase
       .from("whatsapp_instance_owners")
@@ -90,137 +90,163 @@ serve(async (req) => {
 
     const userId = owner?.user_id || Deno.env.get("EVOLUTION_DEFAULT_USER_ID");
     if (!userId) {
-      console.error("No instance owner found and EVOLUTION_DEFAULT_USER_ID not configured");
+      console.error("No instance owner / EVOLUTION_DEFAULT_USER_ID");
       return new Response(JSON.stringify({ ok: false, error: "no_user_id" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    console.log(`[evolution-webhook] Resolved userId: ${userId} (from ${owner ? "instance_owner" : "env_fallback"})`);
 
-    // Find or create contact
-    let contactId: string;
+    // ============================
+    // IDEMPOTENCY: short-circuit if message already stored
+    // ============================
+    if (externalId) {
+      const { data: existing } = await supabase
+        .from("contact_messages")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("external_id", externalId)
+        .maybeSingle();
+      if (existing) {
+        console.log(`[idempotency] Already stored ${externalId}, skipping`);
+        return new Response(
+          JSON.stringify({ ok: true, deduped: true, message_id: existing.id }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // ============================
+    // CONTACT RESOLUTION (improved)
+    // ============================
+    let contactId: string | null = null;
     let contactIsFavorite = false;
 
-    // Try by wa_id first
-    const { data: contactByWaId } = await supabase
+    // 1. Exact match by wa_id
+    const { data: byWaId } = await supabase
       .from("people_contacts")
       .select("id, is_favorite")
-      .eq("wa_id", waId)
       .eq("user_id", userId)
+      .eq("wa_id", waId)
       .maybeSingle();
 
-    if (contactByWaId) {
-      contactId = contactByWaId.id;
-      contactIsFavorite = contactByWaId.is_favorite || false;
-      // Ensure phone_numbers includes the real phone (handle NULL and empty arrays)
-      if (waId && !String(waId).includes("lid")) {
-        // Try updating when phone_numbers is NULL
-        const { count: nullCount } = await supabase.from("people_contacts")
-          .update({ phone_numbers: [waId] })
-          .eq("id", contactId)
-          .is("phone_numbers", null)
-          .select("id", { count: "exact", head: true });
-        // If no rows updated, try when phone_numbers is empty array
-        if (!nullCount) {
-          await supabase.from("people_contacts")
-            .update({ phone_numbers: [waId] })
-            .eq("id", contactId)
-            .eq("phone_numbers", "{}");
-        }
-      }
+    if (byWaId) {
+      contactId = byWaId.id;
+      contactIsFavorite = !!byWaId.is_favorite;
     } else {
-      // Try by phone_numbers array
-      const { data: contactByPhone } = await supabase
+      // 2. Match by last 9 digits in wa_id (ES numbers ±34 prefix)
+      const { data: byLast9 } = await supabase
         .from("people_contacts")
-        .select("id, is_favorite")
+        .select("id, is_favorite, wa_id")
         .eq("user_id", userId)
-        .contains("phone_numbers", [waId])
+        .like("wa_id", `%${waLast9}`)
+        .limit(1)
         .maybeSingle();
 
-      if (contactByPhone) {
-        contactId = contactByPhone.id;
-        contactIsFavorite = contactByPhone.is_favorite || false;
-        // Update wa_id for future lookups
-        await supabase
-          .from("people_contacts")
-          .update({ wa_id: waId })
-          .eq("id", contactId);
-      } else if (pushName) {
-        // Try by name (for manually created contacts without wa_id)
-        const { data: contactByName } = await supabase
+      if (byLast9) {
+        contactId = byLast9.id;
+        contactIsFavorite = !!byLast9.is_favorite;
+        // Normalize wa_id to canonical form
+        await supabase.from("people_contacts").update({ wa_id: waId }).eq("id", contactId);
+      } else {
+        // 3. Match by phone_numbers array
+        const { data: byPhone } = await supabase
           .from("people_contacts")
           .select("id, is_favorite")
           .eq("user_id", userId)
-          .ilike("name", pushName)
-          .is("wa_id", null)
+          .contains("phone_numbers", [waId])
           .maybeSingle();
 
-        if (contactByName) {
-          contactId = contactByName.id;
-          contactIsFavorite = contactByName.is_favorite || false;
-          // Update wa_id and phone for future lookups
-          await supabase
+        if (byPhone) {
+          contactId = byPhone.id;
+          contactIsFavorite = !!byPhone.is_favorite;
+          await supabase.from("people_contacts").update({ wa_id: waId }).eq("id", contactId);
+        } else if (pushName && pushName.trim() && pushName !== waId) {
+          // 4. Match by name (manual contacts without wa_id)
+          const { data: byName } = await supabase
             .from("people_contacts")
-            .update({ wa_id: waId, phone_numbers: [waId] })
-            .eq("id", contactId);
-          console.log(`[evolution-webhook] Linked existing contact "${pushName}" with wa_id ${waId}`);
-        } else {
-        // Create new contact
-        const { data: newContact, error: createErr } = await supabase
-          .from("people_contacts")
-          .insert({
-            user_id: userId,
-            name: pushName || waId,
-            wa_id: waId,
-            category: "pendiente",
-            phone_numbers: [waId],
-          })
-          .select("id")
-          .single();
+            .select("id, is_favorite")
+            .eq("user_id", userId)
+            .ilike("name", pushName)
+            .is("wa_id", null)
+            .maybeSingle();
 
-        if (createErr || !newContact) {
-          console.error("Error creating contact:", createErr);
-          return new Response(JSON.stringify({ ok: false, error: "create_contact_failed" }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
-        contactId = newContact.id;
-        console.log(`New contact created: ${pushName || waId} (${contactId})`);
+          if (byName) {
+            contactId = byName.id;
+            contactIsFavorite = !!byName.is_favorite;
+            await supabase
+              .from("people_contacts")
+              .update({ wa_id: waId, phone_numbers: [waId] })
+              .eq("id", contactId);
+            console.log(`[contact] Linked "${pushName}" with wa_id ${waId}`);
+          } else {
+            // 5. Create new contact ONLY when we have a real pushName
+            const { data: newContact, error: createErr } = await supabase
+              .from("people_contacts")
+              .insert({
+                user_id: userId,
+                name: pushName,
+                wa_id: waId,
+                category: "pendiente",
+                phone_numbers: [waId],
+              })
+              .select("id")
+              .single();
+            if (createErr) {
+              console.error("create contact failed:", createErr);
+            } else {
+              contactId = newContact.id;
+              console.log(`[contact] Created ${pushName} (${contactId})`);
+            }
+          }
+        } else {
+          // No pushName + no match → leave unlinked, will reconcile later
+          console.log(`[contact] Unlinked message from ${waId} (no pushName, no match)`);
         }
       }
     }
 
-    // Persist message
+    // ============================
+    // PERSIST MESSAGE (with external_id)
+    // ============================
+    const insertPayload: Record<string, unknown> = {
+      contact_id: contactId,
+      user_id: userId,
+      content: textContent,
+      direction,
+      sender: senderName,
+      source: "whatsapp",
+      message_date: messageDate,
+    };
+    if (externalId) insertPayload.external_id = externalId;
+
     const { data: insertedMessage, error: msgErr } = await supabase
       .from("contact_messages")
-      .insert({
-        contact_id: contactId,
-        user_id: userId,
-        content: textContent,
-        direction,
-        sender: senderName,
-        source: "whatsapp",
-        message_date: messageDate,
-      })
+      .insert(insertPayload)
       .select("id")
       .single();
 
     if (msgErr) {
-      console.error("Error inserting message:", msgErr);
+      // If race condition hit unique index, return success
+      if (msgErr.code === "23505") {
+        console.log(`[idempotency] Race conflict on ${externalId}, treating as deduped`);
+        return new Response(JSON.stringify({ ok: true, deduped: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      console.error("insert message failed:", msgErr);
       return new Response(JSON.stringify({ ok: false, error: "insert_message_failed" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    console.log(`Message persisted: ${insertedMessage.id} (${direction}) from ${senderName}`);
+    console.log(`Message persisted: ${insertedMessage.id} (${direction}) from ${senderName}${contactId ? "" : " [UNLINKED]"}`);
 
-    // Only trigger intelligence for incoming messages
-    if (direction === "incoming") {
-      // Check if we should trigger contact-analysis
+    // ============================
+    // FIRE INTELLIGENCE (only if contact known)
+    // ============================
+    if (direction === "incoming" && contactId) {
       let shouldAnalyze = textContent.length > 20;
-
       if (!shouldAnalyze) {
-        // Check if this is the 5th message today
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         const { count } = await supabase
@@ -232,26 +258,18 @@ serve(async (req) => {
         shouldAnalyze = (count || 0) >= 5;
       }
 
-      // Fire contact-analysis asynchronously
       if (shouldAnalyze) {
-        console.log(`Triggering contact-analysis for ${contactId}`);
         fetch(`${supabaseUrl}/functions/v1/contact-analysis`, {
           method: "POST",
           headers: {
             "Authorization": `Bearer ${supabaseKey}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            contactId,
-            userId,
-            scope: "profesional",
-          }),
+          body: JSON.stringify({ contactId, userId, scope: "profesional" }),
         }).catch((err) => console.error("contact-analysis fire error:", err));
       }
 
-      // Fire generate-response-draft ONLY for favorites
       if (contactIsFavorite) {
-        console.log(`Triggering generate-response-draft for favorite ${contactId}`);
         fetch(`${supabaseUrl}/functions/v1/generate-response-draft`, {
           method: "POST",
           headers: {
@@ -265,8 +283,6 @@ serve(async (req) => {
             message_content: textContent,
           }),
         }).catch((err) => console.error("generate-response-draft fire error:", err));
-      } else {
-        console.log(`Skipping draft generation for non-favorite contact ${contactId}`);
       }
     }
 

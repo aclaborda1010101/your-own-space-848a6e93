@@ -1208,6 +1208,7 @@ const ContactDetail = ({ contact, threads, recordings, allContacts, onEdit, onDe
         .from('contact_messages')
         .select('message_date')
         .eq('contact_id', contact.id)
+        .eq('source', 'whatsapp')
         .gt('message_date', profileDate.toISOString())
         .order('message_date', { ascending: false })
         .limit(1);

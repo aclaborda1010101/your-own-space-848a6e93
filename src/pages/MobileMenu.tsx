@@ -221,10 +221,7 @@ export default function MobileMenu() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <Helmet>
-        <title>JARVIS · Menú</title>
-        <meta name="description" content="JARVIS OS · Panel de control con accesos rápidos, módulos, datos y sistema." />
-      </Helmet>
+      <meta name="description" content="JARVIS OS · Panel de control con accesos rápidos, módulos, datos y sistema." />
 
       <div className="mx-auto max-w-md px-4 pt-5">
         {/* Header */}

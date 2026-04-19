@@ -391,11 +391,20 @@ export default function RedEstrategica() {
           </div>
           <Button
             size="sm"
+            variant="default"
+            onClick={() => setAddOpen(true)}
+            className="h-11 rounded-full gap-2 px-4"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Añadir contacto</span>
+          </Button>
+          <Button
+            size="sm"
             variant="outline"
             onClick={refreshHeadlines}
-            disabled={refreshing}
+            disabled={refreshing || rows.length === 0}
             className="h-11 rounded-full gap-2 px-4"
-            title="Regenera el análisis de IA (salud, pendientes, temas) de tus contactos favoritos / estratégicos"
+            title="Regenera el análisis de IA (salud, pendientes, temas) de los contactos de tu red"
           >
             <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
             <span className="hidden sm:inline">

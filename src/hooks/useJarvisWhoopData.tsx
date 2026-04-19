@@ -13,13 +13,16 @@ export interface JarvisWhoopData {
   synced_at: string;
 }
 
+// Accept any row that has at least ONE non-null metric.
+// Previous version filtered out strain ≤ 0.5 which discarded valid rest-day rows.
 const hasMetrics = (row: any) =>
   row && (
     row.recovery_score != null ||
     row.hrv != null ||
     row.sleep_hours != null ||
     row.sleep_performance != null ||
-    (row.strain != null && Number(row.strain) > 0.5)
+    row.strain != null ||
+    row.resting_hr != null
   );
 
 const mapRow = (row: any, syncedField: string): JarvisWhoopData => ({

@@ -2,11 +2,14 @@
 import "./index.css";
 import { initSafeStorage } from "./lib/safeStorage";
 import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";
+import { bootNativeChrome } from "./lib/native/nativeBoot";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 
 (window as any).__jarvis_booting = true;
 initSafeStorage();
+// Configure native status bar / hide splash (no-op on web)
+void bootNativeChrome();
 
 // If a new build was detected, runtimeFreshness triggers a reload — abort mount.
 const reloading = ensureRuntimeFreshness();

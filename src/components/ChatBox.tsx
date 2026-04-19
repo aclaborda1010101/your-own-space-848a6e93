@@ -7,11 +7,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Loader2, Send, Mic, Keyboard } from 'lucide-react';
+import { Loader2, Send, Mic, Keyboard, Camera as CameraIcon, Image as ImageIcon } from 'lucide-react';
 import { ChatMessage } from '@/components/ChatMessage';
 import { VoiceRecorder } from '@/components/VoiceRecorder';
 import { useRealtimeChat } from '@/hooks/useRealtimeChat';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { useCamera } from '@/hooks/useCamera';
+import { useNativeSpeech } from '@/hooks/useNativeSpeech';
+import { useHaptics } from '@/hooks/useHaptics';
+import { toast } from 'sonner';
 
 interface ChatBoxProps {
   userId?: string;
@@ -23,11 +27,47 @@ export function ChatBox({ userId, className }: ChatBoxProps) {
   const [inputMode, setInputMode] = useState<'text' | 'voice'>('text');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { messages, loading, error, sendMessage, isTyping } = useRealtimeChat(userId);
+  const camera = useCamera();
+  const speech = useNativeSpeech();
+  const haptics = useHaptics();
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
+
+  // Keep textbox in sync with native speech partials
+  useEffect(() => {
+    if (speech.listening && speech.partial) setInputValue(speech.partial);
+  }, [speech.partial, speech.listening]);
+
+  const handleAttach = async (mode: 'camera' | 'gallery') => {
+    haptics.lightTap();
+    const photo = mode === 'camera' ? await camera.takePhoto() : await camera.pickFromGallery();
+    if (!photo) return;
+    toast.success('Foto adjuntada', { description: 'Próximamente: análisis de imagen.' });
+    // TODO: pipe photo.webPath / base64 into the chat upload flow
+  };
+
+  const handleNativeMicToggle = async () => {
+    haptics.mediumTap();
+    if (!speech.isNative || !speech.available) {
+      // Fallback to existing voice-recording UI
+      setInputMode('voice');
+      return;
+    }
+    if (speech.listening) {
+      await speech.stop();
+      if (speech.partial.trim()) {
+        await sendMessage(speech.partial.trim());
+        setInputValue('');
+        speech.reset();
+      }
+    } else {
+      const ok = await speech.start({ language: 'es-ES', partialResults: true });
+      if (!ok) setInputMode('voice');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,7 +163,7 @@ export function ChatBox({ userId, className }: ChatBoxProps) {
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Escribe un mensaje..."
+                placeholder={speech.listening ? 'Escuchando…' : 'Escribe un mensaje...'}
                 disabled={loading}
                 className="flex-1"
               />
@@ -131,10 +171,20 @@ export function ChatBox({ userId, className }: ChatBoxProps) {
                 type="button"
                 variant="outline"
                 size="icon"
-                onClick={() => setInputMode('voice')}
-                title="Cambiar a voz"
+                onClick={() => handleAttach(camera.isNative ? 'camera' : 'gallery')}
+                disabled={camera.busy}
+                title={camera.isNative ? 'Tomar foto' : 'Adjuntar imagen'}
               >
-                <Mic className="h-4 w-4" />
+                {camera.isNative ? <CameraIcon className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+              </Button>
+              <Button
+                type="button"
+                variant={speech.listening ? 'destructive' : 'outline'}
+                size="icon"
+                onClick={handleNativeMicToggle}
+                title={speech.listening ? 'Parar dictado' : 'Dictar (nativo)'}
+              >
+                <Mic className={`h-4 w-4 ${speech.listening ? 'animate-pulse' : ''}`} />
               </Button>
               <Button
                 type="submit"
@@ -145,7 +195,8 @@ export function ChatBox({ userId, className }: ChatBoxProps) {
               </Button>
             </form>
             <p className="text-xs text-muted-foreground mt-2 text-center">
-              Presiona Enter para enviar • Shift+Enter para nueva línea
+              Enter para enviar • Shift+Enter nueva línea
+              {speech.isNative && speech.available && ' • Toca el micro para dictar'}
             </p>
           </>
         ) : (

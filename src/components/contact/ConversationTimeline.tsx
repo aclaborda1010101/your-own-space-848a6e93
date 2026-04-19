@@ -50,7 +50,10 @@ export function ConversationTimeline({ messages, contactName }: ConversationTime
               </span>
             </div>
             <div className="space-y-2">
-              {msgs.slice(0, 8).map((m) => (
+              {[...msgs]
+                .sort((a, b) => new Date(b.message_date).getTime() - new Date(a.message_date).getTime())
+                .slice(0, 8)
+                .map((m) => (
                 <div
                   key={m.id}
                   className={`flex gap-3 text-sm ${

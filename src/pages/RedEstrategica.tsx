@@ -199,6 +199,7 @@ export default function RedEstrategica() {
             "id,name,category,last_contact,is_favorite,wa_message_count,scores,context,in_strategic_network",
           )
           .eq("user_id", user!.id)
+          .eq("in_strategic_network", true)
           .order("name", { ascending: true })
           .range(from, from + STEP - 1);
         if (error) throw error;

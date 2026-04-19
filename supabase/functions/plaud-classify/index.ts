@@ -97,7 +97,17 @@ ${projectList || "(ninguno)"}
 
 CONTACTOS CONOCIDOS (con aliases):
 ${contactList || "(ninguno)"}
+${fewShots.length > 0 ? `
+EJEMPLOS REALES APRENDIDOS DEL USUARIO (clasificaciones que él mismo confirmó/corrigió):
+${fewShots.map((fs: any) => {
+  const examples = (fs.pattern_data?.examples || []).slice(0, 2);
+  const projectId = fs.pattern_data?.project_id;
+  const projectName = projects.find(p => p.id === projectId)?.name || "?";
+  return examples.map((e: any) => `- "${e.excerpt?.slice(0, 200)}" → proyecto: ${projectName} (id:${projectId})`).join("\n");
+}).join("\n")}
 
+Usa estos ejemplos como referencia: si el contenido es similar, prioriza esa clasificación.
+` : ""}
 Devuelve JSON con esta estructura exacta:
 {
   "project_id": "id del proyecto que mejor encaja, o null si ninguno encaja",
@@ -168,8 +178,8 @@ Reglas:
       summary_one_line: parsed.summary_one_line || "",
     };
 
-    // Auto-link if high confidence
-    const HIGH = 0.8;
+    // Auto-link if high confidence (umbral ajustado por feedback)
+    const HIGH = Math.min(0.95, 0.8 + thresholdAdjust);
     const autoLinkProject = result.project_id && result.project_confidence >= HIGH;
     const autoLinkedContactIds = result.contacts
       .filter((c: any) => c.id && c.confidence >= HIGH)

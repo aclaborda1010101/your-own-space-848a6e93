@@ -150,36 +150,36 @@ export const CommandCenterCard = ({ tasks, events, onToggleComplete }: CommandCe
 
       <CardContent className="p-0 relative">
         {/* ===== HERO HEADER ===== */}
-        <div className="relative px-4 sm:px-7 pt-5 pb-4 sm:pb-5 border-b border-border/40">
+        <div className="relative px-4 sm:px-7 pt-4 sm:pt-5 pb-3 sm:pb-5 border-b border-border/40">
           <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3 sm:gap-4 min-w-0 flex-1">
-              {/* Time badge — sin dot pulsante */}
+            <div className="flex items-start gap-2.5 sm:gap-4 min-w-0 flex-1">
+              {/* Time badge */}
               <div className="relative shrink-0">
-                <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-primary/25 to-primary/5 border border-primary/30 flex items-center justify-center text-primary shadow-glow-primary">
+                <div className="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-primary/25 to-primary/5 border border-primary/30 flex items-center justify-center text-primary shadow-glow-primary">
                   {getTimeIcon()}
                 </div>
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="hidden sm:flex items-center gap-2 mb-1">
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest text-primary/90 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/30 whitespace-nowrap">
                     <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-                    JARVIS · Online
+                    Online
                   </span>
                 </div>
-                <h2 className="font-display text-xl sm:text-3xl font-bold leading-tight tracking-tight truncate">
+                <h2 className="font-display text-base sm:text-3xl font-bold leading-tight tracking-tight truncate">
                   <span className="whitespace-nowrap">{getGreeting()},</span>{" "}
                   <span className="holo-text">{userName}</span>
                 </h2>
-                <p className="text-[11px] sm:text-sm text-muted-foreground capitalize mt-1 font-mono truncate">
+                <p className="text-[10px] sm:text-sm text-muted-foreground capitalize mt-0.5 sm:mt-1 font-mono truncate">
                   {formattedDate}
                 </p>
               </div>
             </div>
             <div className="flex flex-col items-end shrink-0">
-              <span className="font-display text-2xl sm:text-4xl font-bold tabular-nums text-glow-primary leading-none">
+              <span className="font-display text-lg sm:text-4xl font-bold tabular-nums text-glow-primary leading-none">
                 {formattedTime}
               </span>
-              <span className="text-[9px] sm:text-[10px] font-mono text-muted-foreground uppercase tracking-widest mt-1">
+              <span className="text-[9px] sm:text-[10px] font-mono text-muted-foreground uppercase tracking-widest mt-0.5 sm:mt-1">
                 LOCAL
               </span>
             </div>

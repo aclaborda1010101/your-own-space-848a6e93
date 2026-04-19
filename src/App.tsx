@@ -132,6 +132,7 @@ const ProtectedPage = ({ children }: { children: React.ReactNode }) => (
     <Suspense fallback={<PageLoader />}>
       <WebSocketInitializer>
         <UserSettingsProvider>
+          <NativeBootstrap />
           <AppLayout>{children}</AppLayout>
         </UserSettingsProvider>
       </WebSocketInitializer>

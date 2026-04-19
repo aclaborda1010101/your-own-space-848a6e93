@@ -21,6 +21,7 @@ import { Loader2 } from "lucide-react";
 import { AppLayout } from "./components/layout/AppLayout";
 import { WebSocketInitializer } from "./components/WebSocketInitializer";
 import { UserSettingsProvider } from "./hooks/useUserSettings";
+import { NativeBootstrap } from "./components/native/NativeBootstrap";
 
 // --- Lazy imports for protected pages ---
 
@@ -132,6 +133,7 @@ const ProtectedPage = ({ children }: { children: React.ReactNode }) => (
     <Suspense fallback={<PageLoader />}>
       <WebSocketInitializer>
         <UserSettingsProvider>
+          <NativeBootstrap />
           <AppLayout>{children}</AppLayout>
         </UserSettingsProvider>
       </WebSocketInitializer>

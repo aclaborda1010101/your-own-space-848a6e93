@@ -12,6 +12,7 @@ import { AccessibilitySettingsCard } from "@/components/settings/AccessibilitySe
 import { ICloudCalendarSettingsCard } from "@/components/settings/ICloudCalendarSettingsCard";
 import { ProfileSettingsCard } from "@/components/settings/ProfileSettingsCard";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
+import { NativeNotificationSettings } from "@/components/settings/NativeNotificationSettings";
 import { MenuVisibilityCard } from "@/components/settings/MenuVisibilityCard";
 import { DashboardVisibilityCard } from "@/components/settings/DashboardVisibilityCard";
 import { AICostTrackerCard } from "@/components/settings/AICostTrackerCard";
@@ -144,7 +145,11 @@ const Settings = () => {
         <DashboardVisibilityCard />
       </SettingsSection>
 
-      <SettingsSection icon={<BellIcon className="h-4 w-4 sm:h-5 sm:w-5" />} title="Notificaciones Push" description="Gestiona las alertas de la app">
+      <SettingsSection icon={<BellIcon className="h-4 w-4 sm:h-5 sm:w-5" />} title="Notificaciones (iOS / nativo)" description="Push reales al iPhone, categorías y horario de silencio">
+        <NativeNotificationSettings />
+      </SettingsSection>
+
+      <SettingsSection icon={<BellIcon className="h-4 w-4 sm:h-5 sm:w-5" />} title="Notificaciones Web (PWA)" description="Recordatorios desde el navegador">
         <NotificationSettings />
       </SettingsSection>
 

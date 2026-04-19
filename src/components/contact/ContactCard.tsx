@@ -1,8 +1,10 @@
 import { GlassCard } from "@/components/ui/GlassCard";
 import { HealthMeter } from "./HealthMeter";
-import { Briefcase, Heart, Users, User, Headphones } from "lucide-react";
+import { Briefcase, Heart, Users, User, Headphones, Clock, MessageSquarePlus, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 
 interface ContactCardData {
   id: string;
@@ -11,11 +13,30 @@ interface ContactCardData {
   health_score: number;
   last_topic: string | null;
   has_podcast: boolean;
+  /** ISO string del último contacto (opcional para cálculo de días sin contactar) */
+  last_contact?: string | null;
 }
 
 interface ContactCardProps {
   contact: ContactCardData;
   onClick: () => void;
+}
+
+/** Devuelve días enteros desde el último contacto (o null si nunca). */
+function daysSince(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const d = new Date(iso).getTime();
+  if (Number.isNaN(d)) return null;
+  return Math.floor((Date.now() - d) / 86_400_000);
+}
+
+/** Etiqueta cualitativa de la relación según días sin contactar. */
+function relationLabel(days: number | null) {
+  if (days == null) return { text: "Sin contacto registrado", tone: "muted" as const };
+  if (days <= 7) return { text: "Relación activa", tone: "success" as const };
+  if (days <= 30) return { text: `${days}d sin contacto`, tone: "default" as const };
+  if (days <= 90) return { text: "En riesgo de enfriarse", tone: "warning" as const };
+  return { text: "Dormida", tone: "destructive" as const };
 }
 
 const CATEGORY_META: Record<

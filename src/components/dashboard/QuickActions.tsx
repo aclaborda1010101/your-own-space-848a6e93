@@ -14,21 +14,21 @@ export const QuickActions = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="flex gap-2 overflow-x-auto scrollbar-none pb-0.5">
+    <div className="grid grid-cols-2 sm:flex sm:flex-row gap-2 sm:overflow-x-auto sm:scrollbar-none pb-0.5">
       {actions.map(({ icon: Icon, label, path, primary }) => (
         <Button
           key={path}
           onClick={() => navigate(path)}
           variant={primary ? "default" : "outline"}
           className={cn(
-            "h-10 gap-2 text-sm font-medium shrink-0 transition-all touch-manipulation",
+            "h-11 gap-2 text-sm font-medium w-full sm:w-auto sm:shrink-0 transition-all touch-manipulation",
             primary
-              ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm shadow-primary/20"
+              ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm shadow-primary/20 col-span-2 sm:col-span-1"
               : "border-border/60 hover:border-primary/40 hover:bg-primary/5"
           )}
         >
           <Icon className="w-4 h-4" />
-          <span className="hidden sm:inline">{label}</span>
+          <span>{label}</span>
         </Button>
       ))}
     </div>

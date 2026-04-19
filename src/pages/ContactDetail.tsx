@@ -190,6 +190,7 @@ export default function ContactDetail() {
     );
   }
 
+  const hasHealth = typeof contact.scores?.health === "number";
   const healthScore = contact.scores?.health ?? 5;
   const sentimentCls =
     contact.sentiment === "positive" ? "bg-success/10 border-success/30 text-success" :
@@ -218,13 +219,10 @@ export default function ContactDetail() {
         <GlassCard className="p-5 sm:p-6 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-accent/[0.03] pointer-events-none" />
           <div className="relative flex flex-col sm:flex-row sm:items-center gap-5">
-            {/* Avatar + Health */}
-            <div className="relative shrink-0">
+            {/* Avatar */}
+            <div className="shrink-0">
               <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-primary/40 via-primary/15 to-accent/10 border border-primary/30 flex items-center justify-center text-2xl sm:text-3xl font-display font-semibold shadow-[0_0_40px_-10px_hsl(var(--primary)/0.5)]">
                 {initials}
-              </div>
-              <div className="absolute -bottom-1 -right-1 bg-card border-2 border-background rounded-full p-1">
-                <HealthMeter score={healthScore} size="sm" showLabel={false} />
               </div>
             </div>
 
@@ -332,9 +330,11 @@ export default function ContactDetail() {
           items={[
             {
               label: "Salud relación",
-              value: healthScore,
-              hint: `score · /10`,
-              tone: healthScore >= 7 ? "success" : healthScore >= 4 ? "warning" : "destructive",
+              value: hasHealth ? healthScore : "—",
+              hint: hasHealth ? `score · /10` : "sin calcular",
+              tone: hasHealth
+                ? (healthScore >= 7 ? "success" : healthScore >= 4 ? "warning" : "destructive")
+                : "default",
             },
             {
               label: "Último contacto",
@@ -356,8 +356,12 @@ export default function ContactDetail() {
             },
             {
               label: "Tier",
-              value: healthScore >= 9 ? "S" : healthScore >= 7 ? "A" : healthScore >= 4 ? "B" : "C",
-              hint: healthScore >= 9 ? "inner circle" : healthScore >= 7 ? "core" : "periphery",
+              value: hasHealth
+                ? (healthScore >= 9 ? "S" : healthScore >= 7 ? "A" : healthScore >= 4 ? "B" : "C")
+                : "—",
+              hint: hasHealth
+                ? (healthScore >= 9 ? "inner circle" : healthScore >= 7 ? "core" : "periphery")
+                : "sin calcular",
               tone: "success",
             },
           ]}

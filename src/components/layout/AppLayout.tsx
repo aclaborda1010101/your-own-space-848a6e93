@@ -6,8 +6,6 @@ import { TopBar } from "./TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
 
-import { ForceRefreshButton } from "./ForceRefreshButton";
-
 interface AppLayoutProps {
   children: ReactNode;
   showBackButton?: boolean;
@@ -63,8 +61,6 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
       {!isLoginPage && !isWizardPage && (
         <BottomNavBar />
       )}
-
-      <ForceRefreshButton />
     </div>
   );
 };

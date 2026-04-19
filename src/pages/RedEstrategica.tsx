@@ -534,6 +534,13 @@ export default function RedEstrategica() {
           </GlassCard>
         )}
       </div>
+
+      <AddToNetworkDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        excludeIds={rows.map((r) => r.id)}
+        onAdded={() => void load()}
+      />
     </div>
   );
 }

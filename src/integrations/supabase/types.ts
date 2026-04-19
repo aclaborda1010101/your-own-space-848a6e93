@@ -2730,6 +2730,42 @@ export type Database = {
           },
         ]
       }
+      contact_refresh_state: {
+        Row: {
+          contact_id: string
+          created_at: string
+          id: string
+          last_scan_at: string | null
+          last_scan_message_count: number | null
+          last_signature: string | null
+          total_messages_seen: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          contact_id: string
+          created_at?: string
+          id?: string
+          last_scan_at?: string | null
+          last_scan_message_count?: number | null
+          last_signature?: string | null
+          total_messages_seen?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          contact_id?: string
+          created_at?: string
+          id?: string
+          last_scan_at?: string | null
+          last_scan_message_count?: number | null
+          last_signature?: string | null
+          total_messages_seen?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       contact_relationships: {
         Row: {
           contact_a_id: string
@@ -9944,29 +9980,95 @@ export type Database = {
           },
         ]
       }
+      suggestion_feedback: {
+        Row: {
+          confidence_at_decision: number | null
+          contact_id: string | null
+          created_at: string
+          decision: string
+          id: string
+          reason_text: string | null
+          reasoning_snapshot: string | null
+          signature: string | null
+          source: string | null
+          suggestion_id: string | null
+          suggestion_type: string
+          user_id: string
+        }
+        Insert: {
+          confidence_at_decision?: number | null
+          contact_id?: string | null
+          created_at?: string
+          decision: string
+          id?: string
+          reason_text?: string | null
+          reasoning_snapshot?: string | null
+          signature?: string | null
+          source?: string | null
+          suggestion_id?: string | null
+          suggestion_type: string
+          user_id: string
+        }
+        Update: {
+          confidence_at_decision?: number | null
+          contact_id?: string | null
+          created_at?: string
+          decision?: string
+          id?: string
+          reason_text?: string | null
+          reasoning_snapshot?: string | null
+          signature?: string | null
+          source?: string | null
+          suggestion_id?: string | null
+          suggestion_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       suggestions: {
         Row: {
+          confidence: number | null
+          contact_id: string | null
           content: Json
           created_at: string
+          expires_at: string | null
           id: string
+          reasoning: string | null
+          signature: string | null
+          source: string | null
+          source_message_ids: string[] | null
           source_transcription_id: string | null
           status: string
           suggestion_type: string
           user_id: string
         }
         Insert: {
+          confidence?: number | null
+          contact_id?: string | null
           content?: Json
           created_at?: string
+          expires_at?: string | null
           id?: string
+          reasoning?: string | null
+          signature?: string | null
+          source?: string | null
+          source_message_ids?: string[] | null
           source_transcription_id?: string | null
           status?: string
           suggestion_type: string
           user_id: string
         }
         Update: {
+          confidence?: number | null
+          contact_id?: string | null
           content?: Json
           created_at?: string
+          expires_at?: string | null
           id?: string
+          reasoning?: string | null
+          signature?: string | null
+          source?: string | null
+          source_message_ids?: string[] | null
           source_transcription_id?: string | null
           status?: string
           suggestion_type?: string

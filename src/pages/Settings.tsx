@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Loader2, User, Bot, Calendar as CalendarIcon, Palette, Eye, LayoutDashboard, Bell as BellIcon, HardDrive, RotateCcw, DollarSign, Share2, Users, MessageSquare } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, User, Bot, Calendar as CalendarIcon, Palette, Eye, LayoutDashboard, Bell as BellIcon, HardDrive, RotateCcw, DollarSign, Share2, Users, MessageSquare, Brain } from "lucide-react";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useAuth } from "@/hooks/useAuth";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
@@ -18,6 +18,7 @@ import { AICostTrackerCard } from "@/components/settings/AICostTrackerCard";
 import { SharedWithMeCard } from "@/components/settings/SharedWithMeCard";
 import { SharingManagerCard } from "@/components/settings/SharingManagerCard";
 import { WhatsAppConnectionCard } from "@/components/settings/WhatsAppConnectionCard";
+import { JarvisLearningCard } from "@/components/settings/JarvisLearningCard";
 const SettingsSection = ({
   icon,
   title,
@@ -145,6 +146,10 @@ const Settings = () => {
 
       <SettingsSection icon={<BellIcon className="h-4 w-4 sm:h-5 sm:w-5" />} title="Notificaciones Push" description="Gestiona las alertas de la app">
         <NotificationSettings />
+      </SettingsSection>
+
+      <SettingsSection icon={<Brain className="h-4 w-4 sm:h-5 sm:w-5" />} title="JARVIS aprendió" description="Patrones detectados y salud de las sugerencias">
+        <JarvisLearningCard />
       </SettingsSection>
 
       <SettingsSection icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />} title="Consumo de IA" description="Desglose de gasto por modelo, tokens y precio">

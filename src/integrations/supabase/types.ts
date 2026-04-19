@@ -4553,6 +4553,90 @@ export type Database = {
           },
         ]
       }
+      jarvis_feedback: {
+        Row: {
+          context: Json | null
+          corrected_value: Json | null
+          created_at: string
+          feedback_type: string
+          id: string
+          initial_confidence: number | null
+          initial_value: Json | null
+          source_id: string | null
+          suggestion_type: string | null
+          user_id: string
+        }
+        Insert: {
+          context?: Json | null
+          corrected_value?: Json | null
+          created_at?: string
+          feedback_type: string
+          id?: string
+          initial_confidence?: number | null
+          initial_value?: Json | null
+          source_id?: string | null
+          suggestion_type?: string | null
+          user_id: string
+        }
+        Update: {
+          context?: Json | null
+          corrected_value?: Json | null
+          created_at?: string
+          feedback_type?: string
+          id?: string
+          initial_confidence?: number | null
+          initial_value?: Json | null
+          source_id?: string | null
+          suggestion_type?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      jarvis_learned_patterns: {
+        Row: {
+          applied_at: string | null
+          confidence: number
+          created_at: string
+          description: string | null
+          evidence_count: number
+          id: string
+          pattern_data: Json
+          pattern_key: string
+          pattern_type: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          applied_at?: string | null
+          confidence?: number
+          created_at?: string
+          description?: string | null
+          evidence_count?: number
+          id?: string
+          pattern_data?: Json
+          pattern_key: string
+          pattern_type: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          applied_at?: string | null
+          confidence?: number
+          created_at?: string
+          description?: string | null
+          evidence_count?: number
+          id?: string
+          pattern_data?: Json
+          pattern_key?: string
+          pattern_type?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       jarvis_memory: {
         Row: {
           access_count: number | null
@@ -4666,6 +4750,48 @@ export type Database = {
           read?: boolean | null
           title?: string
           type?: string
+        }
+        Relationships: []
+      }
+      jarvis_suggestion_health: {
+        Row: {
+          accepted_count: number
+          id: string
+          last_alert_at: string | null
+          recent_reject_rate: number
+          rejected_count: number
+          status: string
+          suggestion_type: string
+          threshold_adjustment: number
+          total_count: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accepted_count?: number
+          id?: string
+          last_alert_at?: string | null
+          recent_reject_rate?: number
+          rejected_count?: number
+          status?: string
+          suggestion_type: string
+          threshold_adjustment?: number
+          total_count?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accepted_count?: number
+          id?: string
+          last_alert_at?: string | null
+          recent_reject_rate?: number
+          rejected_count?: number
+          status?: string
+          suggestion_type?: string
+          threshold_adjustment?: number
+          total_count?: number
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -11110,6 +11236,10 @@ export type Database = {
           count: number
           status: string
         }[]
+      }
+      refresh_jarvis_suggestion_health: {
+        Args: { p_suggestion_type: string; p_user_id: string }
+        Returns: undefined
       }
       search_coaching_knowledge: {
         Args: {

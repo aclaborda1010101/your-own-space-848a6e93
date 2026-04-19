@@ -32,7 +32,7 @@ serve(async (req) => {
     const text = (tx.transcript_raw || tx.summary_structured || "").slice(0, 12000);
     if (text.length < 30) return json({ error: "transcript too short" }, 400);
 
-    const [projectsRes, contactsRes, aliasesRes] = await Promise.all([
+    const [projectsRes, contactsRes, aliasesRes, fewShotRes, healthRes] = await Promise.all([
       sb.from("business_projects")
         .select("id, name, company, sector, need_summary")
         .eq("user_id", user_id)
@@ -47,11 +47,25 @@ serve(async (req) => {
         .eq("user_id", user_id)
         .eq("is_dismissed", false)
         .limit(500),
+      sb.from("jarvis_learned_patterns")
+        .select("pattern_key, pattern_data, evidence_count")
+        .eq("user_id", user_id)
+        .eq("pattern_type", "classification_hint")
+        .eq("status", "confirmed")
+        .order("evidence_count", { ascending: false })
+        .limit(8),
+      sb.from("jarvis_suggestion_health")
+        .select("suggestion_type, threshold_adjustment, status")
+        .eq("user_id", user_id)
+        .eq("suggestion_type", "classification_from_plaud")
+        .maybeSingle(),
     ]);
 
     const projects = projectsRes.data || [];
     const contacts = contactsRes.data || [];
     const aliases = aliasesRes.data || [];
+    const fewShots = fewShotRes.data || [];
+    const thresholdAdjust = Number((healthRes.data as any)?.threshold_adjustment || 0);
 
     // Build alias index for resolution
     const aliasByContact = new Map<string, string[]>();
@@ -83,7 +97,17 @@ ${projectList || "(ninguno)"}
 
 CONTACTOS CONOCIDOS (con aliases):
 ${contactList || "(ninguno)"}
+${fewShots.length > 0 ? `
+EJEMPLOS REALES APRENDIDOS DEL USUARIO (clasificaciones que él mismo confirmó/corrigió):
+${fewShots.map((fs: any) => {
+  const examples = (fs.pattern_data?.examples || []).slice(0, 2);
+  const projectId = fs.pattern_data?.project_id;
+  const projectName = projects.find(p => p.id === projectId)?.name || "?";
+  return examples.map((e: any) => `- "${e.excerpt?.slice(0, 200)}" → proyecto: ${projectName} (id:${projectId})`).join("\n");
+}).join("\n")}
 
+Usa estos ejemplos como referencia: si el contenido es similar, prioriza esa clasificación.
+` : ""}
 Devuelve JSON con esta estructura exacta:
 {
   "project_id": "id del proyecto que mejor encaja, o null si ninguno encaja",
@@ -154,8 +178,8 @@ Reglas:
       summary_one_line: parsed.summary_one_line || "",
     };
 
-    // Auto-link if high confidence
-    const HIGH = 0.8;
+    // Auto-link if high confidence (umbral ajustado por feedback)
+    const HIGH = Math.min(0.95, 0.8 + thresholdAdjust);
     const autoLinkProject = result.project_id && result.project_confidence >= HIGH;
     const autoLinkedContactIds = result.contacts
       .filter((c: any) => c.id && c.confidence >= HIGH)

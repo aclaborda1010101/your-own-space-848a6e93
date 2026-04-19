@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
+import { recordFeedback } from "@/lib/jarvisFeedback";
 
 export interface Task {
   id: string;
@@ -154,6 +155,7 @@ export const useTasks = () => {
 
   const updateTask = async (id: string, updates: Partial<Pick<Task, "title" | "type" | "priority" | "duration" | "isPersonal">>) => {
     try {
+      const previous = tasks.find((t) => t.id === id);
       const dbUpdates: Record<string, any> = {};
       if (updates.title !== undefined) dbUpdates.title = updates.title;
       if (updates.type !== undefined) dbUpdates.type = updates.type;
@@ -167,6 +169,26 @@ export const useTasks = () => {
         .eq("id", id);
 
       if (error) throw error;
+
+      // Feedback loop: detectar cambios manuales de prioridad
+      if (
+        previous &&
+        updates.priority !== undefined &&
+        updates.priority !== previous.priority
+      ) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          recordFeedback({
+            userId: user.id,
+            feedbackType: "priority_change",
+            suggestionType: "task_priority",
+            sourceId: id,
+            initialValue: { priority: previous.priority },
+            correctedValue: { priority: updates.priority },
+            context: { task_type: previous.type, title: previous.title },
+          });
+        }
+      }
 
       setTasks((prev) =>
         prev.map((t) =>

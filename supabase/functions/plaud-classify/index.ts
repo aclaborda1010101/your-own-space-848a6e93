@@ -32,7 +32,7 @@ serve(async (req) => {
     const text = (tx.transcript_raw || tx.summary_structured || "").slice(0, 12000);
     if (text.length < 30) return json({ error: "transcript too short" }, 400);
 
-    const [projectsRes, contactsRes, aliasesRes] = await Promise.all([
+    const [projectsRes, contactsRes, aliasesRes, fewShotRes, healthRes] = await Promise.all([
       sb.from("business_projects")
         .select("id, name, company, sector, need_summary")
         .eq("user_id", user_id)
@@ -47,11 +47,25 @@ serve(async (req) => {
         .eq("user_id", user_id)
         .eq("is_dismissed", false)
         .limit(500),
+      sb.from("jarvis_learned_patterns")
+        .select("pattern_key, pattern_data, evidence_count")
+        .eq("user_id", user_id)
+        .eq("pattern_type", "classification_hint")
+        .eq("status", "confirmed")
+        .order("evidence_count", { ascending: false })
+        .limit(8),
+      sb.from("jarvis_suggestion_health")
+        .select("suggestion_type, threshold_adjustment, status")
+        .eq("user_id", user_id)
+        .eq("suggestion_type", "classification_from_plaud")
+        .maybeSingle(),
     ]);
 
     const projects = projectsRes.data || [];
     const contacts = contactsRes.data || [];
     const aliases = aliasesRes.data || [];
+    const fewShots = fewShotRes.data || [];
+    const thresholdAdjust = Number((healthRes.data as any)?.threshold_adjustment || 0);
 
     // Build alias index for resolution
     const aliasByContact = new Map<string, string[]>();

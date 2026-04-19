@@ -160,8 +160,10 @@ const App = () => (
                   <Route path="/potus" element={<Navigate to="/chat" replace />} />
                   <Route path="/jarvis" element={<Navigate to="/chat" replace />} />
                   <Route path="/communications" element={<ProtectedPage><Communications /></ProtectedPage>} />
-                  <Route path="/openclaw" element={<ProtectedPage><OpenClaw /></ProtectedPage>} />
+                  {/* OpenClaw: la home de OpenClaw es ahora el Hub real (TITAN/POTUS) */}
+                  <Route path="/openclaw" element={<ProtectedPage><OpenClawHub /></ProtectedPage>} />
                   <Route path="/openclaw/hub" element={<ProtectedPage><OpenClawHub /></ProtectedPage>} />
+                  <Route path="/openclaw/legacy" element={<ProtectedPage><OpenClaw /></ProtectedPage>} />
                   <Route path="/openclaw-preview" element={<Suspense fallback={<PageLoader />}><OpenClawPreview /></Suspense>} />
                   <Route path="/strategic-network" element={<ProtectedPage><StrategicNetwork /></ProtectedPage>} />
                   <Route path="/brains-dashboard" element={<ProtectedPage><BrainsDashboard /></ProtectedPage>} />

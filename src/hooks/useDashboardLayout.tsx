@@ -74,7 +74,7 @@ interface DashboardState {
 }
 
 const DEFAULT_CARD_SETTINGS: Record<DashboardCardId, CardSettings> = {
-  "check-in": { size: "normal", width: "full", visible: true },
+  "check-in": { size: "normal", width: "full", visible: false },
   "daily-plan": { size: "normal", width: "full", visible: true },
   "publications": { size: "normal", width: "full", visible: true },
   "agenda": { size: "normal", width: "full", visible: true },
@@ -102,7 +102,7 @@ export const CARD_LABELS: Record<DashboardCardId, string> = {
 };
 
 const DEFAULT_LAYOUT: DashboardLayoutConfig = {
-  leftColumn: ["suggestions", "check-in", "daily-plan", "publications", "habits-insights"],
+  leftColumn: ["suggestions", "daily-plan", "publications", "habits-insights"],
   rightColumn: ["agenda", "challenge", "coach", "priorities", "alerts"],
   cardSettings: DEFAULT_CARD_SETTINGS,
 };

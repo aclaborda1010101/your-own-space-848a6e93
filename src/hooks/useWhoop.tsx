@@ -244,11 +244,10 @@ export const useWhoop = () => {
     await loadDateData(date);
   }, [loadDateData]);
 
-  // Load cached data on mount
+  // Load cached data on mount — parallelize to remove perceived delay
   useEffect(() => {
     if (user) {
-      loadDateData(selectedDate);
-      loadAvailableDates();
+      Promise.all([loadDateData(selectedDate), loadAvailableDates()]).catch(() => {});
     }
   }, [user]);
 

@@ -8,8 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HeadlineCard } from "@/components/contact/HeadlineCard";
 import { PodcastPlayer } from "@/components/contact/PodcastPlayer";
+import { HealthMeter } from "@/components/contact/HealthMeter";
 import { ConversationTimeline } from "@/components/contact/ConversationTimeline";
-import { ProfileByScope } from "@/components/contact/ProfileByScope";
 import {
   WhatsAppTab,
   EmailTab,

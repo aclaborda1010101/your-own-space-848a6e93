@@ -3333,25 +3333,43 @@ export type Database = {
       }
       device_tokens: {
         Row: {
+          app_version: string | null
           created_at: string | null
+          device_model: string | null
           id: string
-          platform: string | null
+          is_active: boolean
+          last_seen: string
+          os_version: string | null
+          platform: string
           token: string
           updated_at: string | null
+          user_id: string | null
         }
         Insert: {
+          app_version?: string | null
           created_at?: string | null
+          device_model?: string | null
           id?: string
-          platform?: string | null
+          is_active?: boolean
+          last_seen?: string
+          os_version?: string | null
+          platform?: string
           token: string
           updated_at?: string | null
+          user_id?: string | null
         }
         Update: {
+          app_version?: string | null
           created_at?: string | null
+          device_model?: string | null
           id?: string
-          platform?: string | null
+          is_active?: boolean
+          last_seen?: string
+          os_version?: string | null
+          platform?: string
           token?: string
           updated_at?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -5218,6 +5236,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      notification_preferences: {
+        Row: {
+          calendar_enabled: boolean
+          calendar_lead_minutes: number
+          created_at: string
+          enabled: boolean
+          jarvis_enabled: boolean
+          plaud_enabled: boolean
+          quiet_hours_enabled: boolean
+          quiet_hours_end: string
+          quiet_hours_start: string
+          tasks_enabled: boolean
+          timezone: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          calendar_enabled?: boolean
+          calendar_lead_minutes?: number
+          created_at?: string
+          enabled?: boolean
+          jarvis_enabled?: boolean
+          plaud_enabled?: boolean
+          quiet_hours_enabled?: boolean
+          quiet_hours_end?: string
+          quiet_hours_start?: string
+          tasks_enabled?: boolean
+          timezone?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          calendar_enabled?: boolean
+          calendar_lead_minutes?: number
+          created_at?: string
+          enabled?: boolean
+          jarvis_enabled?: boolean
+          plaud_enabled?: boolean
+          quiet_hours_enabled?: boolean
+          quiet_hours_end?: string
+          quiet_hours_start?: string
+          tasks_enabled?: boolean
+          timezone?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       nutrition_chat_messages: {
         Row: {
@@ -8984,6 +9050,60 @@ export type Database = {
           },
         ]
       }
+      scheduled_notifications: {
+        Row: {
+          attempt_count: number
+          body: string
+          created_at: string
+          data: Json | null
+          id: string
+          last_error: string | null
+          notification_type: string
+          scheduled_for: string
+          sent_at: string | null
+          source_id: string | null
+          source_table: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempt_count?: number
+          body: string
+          created_at?: string
+          data?: Json | null
+          id?: string
+          last_error?: string | null
+          notification_type: string
+          scheduled_for: string
+          sent_at?: string | null
+          source_id?: string | null
+          source_table?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempt_count?: number
+          body?: string
+          created_at?: string
+          data?: Json | null
+          id?: string
+          last_error?: string | null
+          notification_type?: string
+          scheduled_for?: string
+          sent_at?: string | null
+          source_id?: string | null
+          source_table?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       screenplay_acts: {
         Row: {
           act_arc: string | null
@@ -10550,6 +10670,51 @@ export type Database = {
           },
         ]
       }
+      user_location_history: {
+        Row: {
+          accuracy: number | null
+          altitude: number | null
+          captured_at: string
+          context: string | null
+          created_at: string
+          heading: number | null
+          id: string
+          lat: number
+          lng: number
+          source: string
+          speed: number | null
+          user_id: string
+        }
+        Insert: {
+          accuracy?: number | null
+          altitude?: number | null
+          captured_at?: string
+          context?: string | null
+          created_at?: string
+          heading?: number | null
+          id?: string
+          lat: number
+          lng: number
+          source?: string
+          speed?: number | null
+          user_id: string
+        }
+        Update: {
+          accuracy?: number | null
+          altitude?: number | null
+          captured_at?: string
+          context?: string | null
+          created_at?: string
+          heading?: number | null
+          id?: string
+          lat?: number
+          lng?: number
+          source?: string
+          speed?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_profile: {
         Row: {
           auto_decisions: Json | null
@@ -11176,6 +11341,10 @@ export type Database = {
       increment_node_source_count: {
         Args: { node_id: string }
         Returns: undefined
+      }
+      is_in_quiet_hours: {
+        Args: { p_at?: string; p_user_id: string }
+        Returns: boolean
       }
       mark_job_done: { Args: { job_id: string }; Returns: undefined }
       mark_job_retry: {

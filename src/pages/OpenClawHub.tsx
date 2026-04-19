@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { Loader2, RefreshCw, Server, Sparkles, Activity, Zap, Info } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Loader2, RefreshCw, Server, Sparkles, Activity, Zap, Info, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -9,6 +9,8 @@ import { NodeStatusCard } from "@/components/openclaw/NodeStatusCard";
 import { TasksTab } from "@/components/openclaw/TasksTab";
 import { RecurringTab } from "@/components/openclaw/RecurringTab";
 import { ExecutionsTab } from "@/components/openclaw/ExecutionsTab";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export default function OpenClawHub() {
   const {
@@ -28,9 +30,31 @@ export default function OpenClawHub() {
     deleteTask,
   } = useOpenClawHub();
 
+  const [activating, setActivating] = useState(false);
+
   useEffect(() => {
     document.title = "OpenClaw Hub | JARVIS";
   }, []);
+
+  const activateBridge = async (node: "POTUS" | "TITAN") => {
+    setActivating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("openclaw-bridge-selftest", {
+        body: { node_name: node },
+      });
+      if (error) throw error;
+      if (data?.ok) {
+        toast.success(`Bridge ${node} activado`, { description: "Heartbeat live recibido." });
+        refetch();
+      } else {
+        toast.error(`No se pudo activar ${node}`, { description: data?.heartbeat_response?.error ?? "error" });
+      }
+    } catch (e: any) {
+      toast.error(`Error activando ${node}`, { description: e.message });
+    } finally {
+      setActivating(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -81,11 +105,22 @@ export default function OpenClawHub() {
       <Alert className="border-amber-500/30 bg-amber-500/5">
         <Info className="h-4 w-4 text-amber-400" />
         <AlertTitle className="text-foreground flex items-center gap-2">
-          MVP operativo · datos <span className="px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider bg-amber-500/20 text-amber-300">simulated</span>
+          Bridge live disponible · activación manual
         </AlertTitle>
-        <AlertDescription className="text-muted-foreground text-xs leading-relaxed">
-          UI real + DB Supabase real (nodos, tareas, recurrentes, ejecuciones persistentes). Heartbeat, tokens y logs marcados como <span className="text-amber-300">simulated</span> hasta conectar
-          <code className="mx-1 px-1.5 py-0.5 rounded bg-muted text-foreground">potus-bridge</code> (Mac Mini local). Crear / Play / Done ya escribe en DB; al conectar el bridge físico, el mismo flujo dispara ejecución real sin cambios en la UI.
+        <AlertDescription className="text-muted-foreground text-xs leading-relaxed space-y-2">
+          <p>
+            Endpoint live <code className="mx-1 px-1.5 py-0.5 rounded bg-muted text-foreground">/openclaw-heartbeat</code> ya operativo.
+            Pulsa el botón para enviar un heartbeat real desde el servidor: el nodo pasa a <span className="text-emerald-300">Live</span> y registra una ejecución real en logs.
+            El modelo activo NO se modifica sin tu permiso explícito.
+          </p>
+          <div className="flex gap-2 flex-wrap pt-1">
+            <Button size="sm" variant="outline" disabled={activating} onClick={() => activateBridge("POTUS")}>
+              <Radio className="h-3 w-3 mr-1.5" /> Activar bridge POTUS
+            </Button>
+            <Button size="sm" variant="outline" disabled={activating} onClick={() => activateBridge("TITAN")}>
+              <Radio className="h-3 w-3 mr-1.5" /> Activar bridge TITAN
+            </Button>
+          </div>
         </AlertDescription>
       </Alert>
 

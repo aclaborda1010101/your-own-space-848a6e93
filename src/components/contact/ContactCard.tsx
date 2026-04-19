@@ -86,8 +86,25 @@ export function ContactCard({ contact, onClick }: ContactCardProps) {
           </div>
         </div>
 
-        {/* Health */}
-        <HealthMeter score={contact.health_score} size="sm" showLabel={false} />
+        {/* Health: anillo + label explicativo */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="shrink-0 flex flex-col items-center gap-1">
+              <HealthMeter score={contact.health_score} size="sm" showLabel={false} />
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-mono">
+                Salud /10
+              </span>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="max-w-[220px] text-xs">
+            <p className="font-medium mb-1">Salud relacional: {contact.health_score}/10</p>
+            <p className="text-muted-foreground leading-relaxed">
+              Calculada con frecuencia de contacto, recencia, sentimiento de las conversaciones e historial de interacciones.
+              <br />
+              <span className="text-destructive">0–3</span> crítica · <span className="text-warning">4–6</span> atención · <span className="text-success">7–10</span> sana
+            </p>
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       {contact.last_topic && (

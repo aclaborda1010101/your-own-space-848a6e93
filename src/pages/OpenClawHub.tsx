@@ -17,7 +17,7 @@ const STATUS_STYLES: Record<string, { dot: string; badge: string; label: string 
   failed:  { dot: "bg-destructive", badge: "bg-destructive/15 text-destructive border-destructive/30", label: "failed" },
 };
 
-const ONLINE_WINDOW_MS = 5 * 60 * 1000;
+const ONLINE_WINDOW_MS = 30 * 60 * 1000; // 30 min
 
 function isLive(lastSeen: string | null) {
   if (!lastSeen) return false;

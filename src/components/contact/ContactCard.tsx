@@ -2,6 +2,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { HealthMeter } from "./HealthMeter";
 import { Briefcase, Heart, Users, User, Headphones } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ContactCardData {
   id: string;

@@ -589,6 +589,21 @@ serve(async (req) => {
       .update({ processing_status: "completed" })
       .eq("id", transcriptionId);
 
+    // 10. Trigger LLM classification (project + people) — fire-and-forget
+    try {
+      const classifyUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/plaud-classify`;
+      fetch(classifyUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        },
+        body: JSON.stringify({ user_id, transcription_id: transcriptionId }),
+      }).catch(err => console.warn("[plaud-intelligence] classify trigger failed:", err?.message));
+    } catch (e) {
+      console.warn("[plaud-intelligence] classify dispatch error", e);
+    }
+
     const result = {
       success: true,
       transcription_id: transcriptionId,

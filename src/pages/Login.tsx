@@ -21,30 +21,22 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const cleanCachesAndNavigate = async () => {
-      try {
-        if ("serviceWorker" in navigator) {
-          const regs = await navigator.serviceWorker.getRegistrations();
-          await Promise.all(regs.map((r) => r.unregister()));
-        }
-        if ("caches" in window) {
-          const keys = await caches.keys();
-          await Promise.all(keys.map((k) => caches.delete(k)));
-        }
-      } catch {
-        // Non-critical
-      }
-      navigate("/dashboard");
+    let navigated = false;
+    const goDashboard = () => {
+      if (navigated) return;
+      navigated = true;
+      // Replace para que el botón "atrás" no devuelva a /login
+      navigate("/dashboard", { replace: true });
     };
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) cleanCachesAndNavigate();
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) goDashboard();
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) cleanCachesAndNavigate();
+      if (session?.user) goDashboard();
     });
 
     return () => subscription.unsubscribe();

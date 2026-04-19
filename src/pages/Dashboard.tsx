@@ -233,7 +233,7 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-4 sm:space-y-6">
+    <div className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-5 sm:space-y-6">
       {/* Day Summary with Greeting */}
       {userSettings.show_day_summary !== false && (
         <CommandCenterCard tasks={tasks} events={events} onToggleComplete={toggleComplete} />

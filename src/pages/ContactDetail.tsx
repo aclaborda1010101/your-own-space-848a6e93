@@ -57,7 +57,7 @@ export default function ContactDetail() {
   const [savingNotes, setSavingNotes] = useState(false);
 
   const { payload: headlines, loading: hLoading } = useContactHeadlines(contactId || null);
-  const { podcast, segments, busy, regenerate, setFormat } = useContactPodcast(contactId || null);
+  const { podcast, segment, busy, regenerate, setFormat } = useContactPodcast(contactId || null);
 
   useEffect(() => {
     if (!contactId || !user) return;
@@ -259,7 +259,7 @@ export default function ContactDetail() {
         {/* PODCAST */}
         <PodcastPlayer
           podcast={podcast}
-          segments={segments}
+          segment={segment}
           busy={busy}
           totalMessages={totalMessages}
           contactName={contact.name}

@@ -317,9 +317,10 @@ serve(async (req) => {
       }
 
       // ============================
-      // PODCAST AUTO-ENQUEUE
-      // If total messages with this contact crosses a multiple of 100
-      // and the previous message is older than 5 minutes, enqueue a segment.
+      // BIO AUTO-REFRESH
+      // Every 100 messages exchanged with a contact (and >5 min since the
+      // previous message, and >1h since last bio refresh) → re-run
+      // contact-analysis to refresh the bio + invalidate headlines cache.
       // ============================
       try {
         const { count: totalMsgs } = await supabase
@@ -330,7 +331,6 @@ serve(async (req) => {
 
         const total = totalMsgs || 0;
         if (total > 0 && total % 100 === 0) {
-          // Check last message age (excluding current)
           const { data: prevMsg } = await supabase
             .from("contact_messages")
             .select("message_date")
@@ -344,36 +344,43 @@ serve(async (req) => {
           const prevDate = prevMsg?.message_date ? new Date(prevMsg.message_date).getTime() : 0;
           const ageMs = Date.now() - prevDate;
           if (ageMs > 5 * 60 * 1000) {
-            // Read existing podcast format (default narrator)
-            const { data: existingPodcast } = await supabase
-              .from("contact_podcasts")
-              .select("format")
-              .eq("contact_id", contactId)
-              .eq("user_id", userId)
+            // Throttle: only refresh if last refresh was >1h ago (or never)
+            const { data: contactRow } = await supabase
+              .from("people_contacts")
+              .select("last_bio_refresh_at")
+              .eq("id", contactId)
               .maybeSingle();
 
-            // Don't double-enqueue if there's already a pending/processing job
-            const { data: pendingJob } = await supabase
-              .from("podcast_generation_queue")
-              .select("id")
-              .eq("contact_id", contactId)
-              .eq("user_id", userId)
-              .in("status", ["pending", "processing"])
-              .maybeSingle();
-
-            if (!pendingJob) {
-              await supabase.from("podcast_generation_queue").insert({
-                contact_id: contactId,
-                user_id: userId,
-                format: existingPodcast?.format || "narrator",
-                status: "pending",
-              });
-              console.log(`[podcast] Enqueued segment for contact ${contactId} at ${total} msgs`);
+            const lastRefresh = contactRow?.last_bio_refresh_at
+              ? new Date(contactRow.last_bio_refresh_at).getTime()
+              : 0;
+            const sinceRefresh = Date.now() - lastRefresh;
+            if (sinceRefresh > 60 * 60 * 1000) {
+              console.log(`[bio-refresh] Triggering for contact ${contactId} at ${total} msgs`);
+              await supabase
+                .from("people_contacts")
+                .update({ last_bio_refresh_at: new Date().toISOString() })
+                .eq("id", contactId);
+              // Fire contact-analysis (refreshes bio)
+              fetch(`${supabaseUrl}/functions/v1/contact-analysis`, {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${supabaseKey}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ contactId, userId, scope: "profesional" }),
+              }).catch((err) => console.error("[bio-refresh] contact-analysis error:", err));
+              // Invalidate headlines cache (delete row → next view regenerates)
+              await supabase
+                .from("contact_headlines")
+                .delete()
+                .eq("contact_id", contactId)
+                .eq("user_id", userId);
             }
           }
         }
       } catch (e) {
-        console.error("podcast enqueue error:", e);
+        console.error("[bio-refresh] error:", e);
       }
     }
 

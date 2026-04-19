@@ -1,10 +1,12 @@
 // generate-contact-podcast-segment
-// Generates ONE incremental podcast segment of 100 messages for a contact.
-// Format: 'narrator' (OpenAI TTS, voice "nova") OR 'dialogue' (ElevenLabs, Sarah + Brian).
+// On-demand: produces ONE single audio summarizing the WHOLE relationship
+// with a contact. If conversation is large (>500 msgs) it does hierarchical
+// summarization. Output is always stored as segment_number=1 (upsert-style),
+// replacing any previous audio.
+// Format: 'narrator' (OpenAI TTS, voice "nova") OR 'dialogue' (ElevenLabs).
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,21 +14,25 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const SEGMENT_SIZE = 100;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
 const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
 
-// ElevenLabs voices (Sarah + Brian)
+// ElevenLabs voices
 const VOICE_A = "EXAVITQu4vr4xnSDxMaL"; // Sarah
 const VOICE_B = "nPczCjzI2devNBz1zQrb"; // Brian
+
+// Hierarchical summarization threshold
+const CHUNK_THRESHOLD = 500; // if >500 msgs, summarize in chunks first
+const CHUNK_SIZE = 200;
 
 interface RequestBody {
   contactId: string;
   userId?: string;
   format?: "narrator" | "dialogue";
+  // kept for backward-compat; ignored (always full regenerate)
   force_full_regenerate?: boolean;
 }
 
@@ -39,14 +45,12 @@ serve(async (req) => {
 
   try {
     const body = (await req.json()) as RequestBody;
-    const { contactId, force_full_regenerate = false } = body;
+    const { contactId } = body;
     let { userId, format } = body;
 
-    if (!contactId) {
-      return jsonResp({ error: "contactId required" }, 400);
-    }
+    if (!contactId) return jsonResp({ error: "contactId required" }, 400);
 
-    // Resolve user from auth header if not provided
+    // Resolve user
     if (!userId) {
       const auth = req.headers.get("Authorization") || "";
       if (auth.startsWith("Bearer ")) {
@@ -55,7 +59,6 @@ serve(async (req) => {
       }
     }
     if (!userId) {
-      // Look up contact owner
       const { data: c } = await supabase
         .from("people_contacts")
         .select("user_id")
@@ -92,68 +95,6 @@ serve(async (req) => {
       | "narrator"
       | "dialogue";
 
-    // Force full regeneration: wipe segments + storage, reset counters
-    if (force_full_regenerate && podcast.total_segments > 0) {
-      const { data: oldSegs } = await supabase
-        .from("contact_podcast_segments")
-        .select("audio_storage_path")
-        .eq("podcast_id", podcast.id);
-      if (oldSegs && oldSegs.length) {
-        const paths = oldSegs.map((s) => s.audio_storage_path);
-        await supabase.storage.from("contact-podcasts").remove(paths);
-      }
-      await supabase
-        .from("contact_podcast_segments")
-        .delete()
-        .eq("podcast_id", podcast.id);
-      await supabase
-        .from("contact_podcasts")
-        .update({
-          total_segments: 0,
-          last_message_count: 0,
-          total_duration_seconds: 0,
-          status: "idle",
-          format: effectiveFormat,
-        })
-        .eq("id", podcast.id);
-      podcast.total_segments = 0;
-      podcast.last_message_count = 0;
-      podcast.total_duration_seconds = 0;
-    }
-
-    // Count current total messages
-    const { count: totalMessages } = await supabase
-      .from("contact_messages")
-      .select("id", { count: "exact", head: true })
-      .eq("contact_id", contactId)
-      .eq("user_id", userId);
-
-    const total = totalMessages || 0;
-    const last = podcast.last_message_count || 0;
-    const delta = total - last;
-
-    // First segment requires >= 100 msgs total
-    if (podcast.total_segments === 0 && total < SEGMENT_SIZE) {
-      await supabase
-        .from("contact_podcasts")
-        .update({ status: "idle" })
-        .eq("id", podcast.id);
-      return jsonResp({
-        ok: true,
-        skipped: "not_enough_messages",
-        total,
-      });
-    }
-    // Subsequent segments require delta >= 100
-    if (podcast.total_segments > 0 && delta < SEGMENT_SIZE) {
-      return jsonResp({
-        ok: true,
-        skipped: "no_new_segment_needed",
-        total,
-        last,
-      });
-    }
-
     // Mark generating
     await supabase
       .from("contact_podcasts")
@@ -164,28 +105,23 @@ serve(async (req) => {
       })
       .eq("id", podcast.id);
 
-    // Range: load messages [last+1 .. last+SEGMENT_SIZE] (1-indexed)
-    // Order chronologically and offset.
-    const startIdx = last + 1;
-    const endIdx = last + SEGMENT_SIZE;
-
+    // Load ALL messages for this contact (cap at 5000 for safety)
     const { data: msgs } = await supabase
       .from("contact_messages")
       .select("direction, sender, content, message_date")
       .eq("contact_id", contactId)
       .eq("user_id", userId)
       .order("message_date", { ascending: true })
-      .range(last, endIdx - 1); // range is inclusive [from..to], 0-indexed
+      .limit(5000);
 
     if (!msgs || msgs.length === 0) {
       await supabase
         .from("contact_podcasts")
         .update({ status: "idle" })
         .eq("id", podcast.id);
-      return jsonResp({ ok: true, skipped: "no_messages_in_range" });
+      return jsonResp({ ok: true, skipped: "no_messages" });
     }
 
-    // Get contact + owner names
     const { data: contact } = await supabase
       .from("people_contacts")
       .select("name")
@@ -194,48 +130,59 @@ serve(async (req) => {
     const contactName = contact?.name || "tu contacto";
     const ownerName = "tú";
 
-    // Accumulated summary from previous segments (last 2 scripts truncated)
-    let accumulated = "";
-    if (podcast.total_segments > 0) {
-      const { data: prev } = await supabase
-        .from("contact_podcast_segments")
-        .select("script, segment_number")
-        .eq("podcast_id", podcast.id)
-        .order("segment_number", { ascending: false })
-        .limit(2);
-      if (prev) {
-        accumulated = prev
-          .reverse()
-          .map(
-            (p) =>
-              `--- Segmento ${p.segment_number} (resumen) ---\n${p.script.slice(0, 800)}`,
-          )
-          .join("\n\n");
+    // ============================
+    // Build a global digest of the whole relationship
+    // ============================
+    let globalDigest: string;
+    if (msgs.length <= CHUNK_THRESHOLD) {
+      globalDigest = msgs
+        .map((m) => {
+          const who = m.direction === "outgoing" ? ownerName : (m.sender || contactName);
+          return `${who}: ${m.content}`;
+        })
+        .join("\n")
+        .slice(0, 60000);
+    } else {
+      // Hierarchical: chunk → mini summaries → join
+      const chunks: typeof msgs[] = [];
+      for (let i = 0; i < msgs.length; i += CHUNK_SIZE) {
+        chunks.push(msgs.slice(i, i + CHUNK_SIZE));
       }
+      console.log(`[podcast] Hierarchical summarization: ${chunks.length} chunks (${msgs.length} msgs)`);
+
+      const miniSummaries: string[] = [];
+      for (let i = 0; i < chunks.length; i++) {
+        const chunkText = chunks[i]
+          .map((m) => {
+            const who = m.direction === "outgoing" ? ownerName : (m.sender || contactName);
+            return `${who}: ${m.content}`;
+          })
+          .join("\n")
+          .slice(0, 20000);
+        const firstDate = chunks[i][0].message_date?.slice(0, 10) || "";
+        const lastDate = chunks[i][chunks[i].length - 1].message_date?.slice(0, 10) || "";
+        const summary = await summarizeChunk({
+          chunkText,
+          ownerName,
+          contactName,
+          chunkIndex: i + 1,
+          totalChunks: chunks.length,
+          dateRange: `${firstDate} → ${lastDate}`,
+        });
+        miniSummaries.push(`--- Periodo ${i + 1} (${firstDate} → ${lastDate}) ---\n${summary}`);
+      }
+      globalDigest = miniSummaries.join("\n\n").slice(0, 60000);
     }
 
-    // Build messages text (limit to ~30k chars)
-    const messagesText = msgs
-      .map((m) => {
-        const who =
-          m.direction === "outgoing" ? ownerName : (m.sender || contactName);
-        return `${who}: ${m.content}`;
-      })
-      .join("\n")
-      .slice(0, 30000);
-
     // ============================
-    // Generate script via Lovable AI
+    // Generate the FINAL script (whole relationship)
     // ============================
-    const segmentNumber = podcast.total_segments + 1;
     const script = await generateScript({
       format: effectiveFormat,
       ownerName,
       contactName,
-      accumulated,
-      messagesText,
-      messagesCount: msgs.length,
-      segmentNumber,
+      digest: globalDigest,
+      totalMessages: msgs.length,
     });
 
     // ============================
@@ -249,7 +196,7 @@ serve(async (req) => {
         return jsonResp({ error: "OPENAI_API_KEY missing" }, 500);
       }
       mp3Buffer = await openaiTTS(script);
-      durationEstimate = Math.round(script.split(/\s+/).length / 2.5); // ~150 wpm
+      durationEstimate = Math.round(script.split(/\s+/).length / 2.5);
     } else {
       if (!ELEVENLABS_API_KEY) {
         await markError(supabase, podcast.id, "ELEVENLABS_API_KEY missing");
@@ -260,9 +207,22 @@ serve(async (req) => {
     }
 
     // ============================
-    // Upload to Storage
+    // Wipe previous segment(s) and upload new one
     // ============================
-    const path = `${userId}/${contactId}/segment-${segmentNumber}.mp3`;
+    const { data: oldSegs } = await supabase
+      .from("contact_podcast_segments")
+      .select("audio_storage_path")
+      .eq("podcast_id", podcast.id);
+    if (oldSegs && oldSegs.length) {
+      const paths = oldSegs.map((s) => s.audio_storage_path);
+      await supabase.storage.from("contact-podcasts").remove(paths);
+      await supabase
+        .from("contact_podcast_segments")
+        .delete()
+        .eq("podcast_id", podcast.id);
+    }
+
+    const path = `${userId}/${contactId}/relationship-${Date.now()}.mp3`;
     const { error: upErr } = await supabase.storage
       .from("contact-podcasts")
       .upload(path, mp3Buffer, {
@@ -274,16 +234,13 @@ serve(async (req) => {
       return jsonResp({ error: upErr.message }, 500);
     }
 
-    // ============================
-    // Insert segment + update podcast
-    // ============================
     const { error: insErr } = await supabase
       .from("contact_podcast_segments")
       .insert({
         podcast_id: podcast.id,
-        segment_number: segmentNumber,
-        message_range_start: startIdx,
-        message_range_end: last + msgs.length,
+        segment_number: 1,
+        message_range_start: 1,
+        message_range_end: msgs.length,
         message_count: msgs.length,
         format: effectiveFormat,
         script,
@@ -299,10 +256,9 @@ serve(async (req) => {
       .from("contact_podcasts")
       .update({
         status: "ready",
-        total_segments: segmentNumber,
-        last_message_count: last + msgs.length,
-        total_duration_seconds:
-          (podcast.total_duration_seconds || 0) + durationEstimate,
+        total_segments: 1,
+        last_message_count: msgs.length,
+        total_duration_seconds: durationEstimate,
         last_generated_at: new Date().toISOString(),
         format: effectiveFormat,
       })
@@ -311,7 +267,6 @@ serve(async (req) => {
     return jsonResp({
       ok: true,
       podcast_id: podcast.id,
-      segment_number: segmentNumber,
       duration: durationEstimate,
       messages_covered: msgs.length,
     });
@@ -341,59 +296,78 @@ async function markError(
     .eq("id", podcastId);
 }
 
+async function summarizeChunk(params: {
+  chunkText: string;
+  ownerName: string;
+  contactName: string;
+  chunkIndex: number;
+  totalChunks: number;
+  dateRange: string;
+}): Promise<string> {
+  const { chunkText, ownerName, contactName, dateRange } = params;
+  const prompt = `Resume en español los siguientes mensajes intercambiados entre ${ownerName} y ${contactName} (periodo ${dateRange}).
+Devuelve 6-10 bullets densos: temas tratados, decisiones, momentos emocionales, asuntos pendientes, tono general.
+NO inventes. Solo lo que aparece en los mensajes.
+
+MENSAJES:
+${chunkText}`;
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!resp.ok) {
+    const t = await resp.text();
+    throw new Error(`AI gateway (chunk) error ${resp.status}: ${t.slice(0, 300)}`);
+  }
+  const data = await resp.json();
+  return data.choices?.[0]?.message?.content?.trim() || "";
+}
+
 async function generateScript(params: {
   format: "narrator" | "dialogue";
   ownerName: string;
   contactName: string;
-  accumulated: string;
-  messagesText: string;
-  messagesCount: number;
-  segmentNumber: number;
+  digest: string;
+  totalMessages: number;
 }) {
-  const {
-    format,
-    ownerName,
-    contactName,
-    accumulated,
-    messagesText,
-    messagesCount,
-    segmentNumber,
-  } = params;
+  const { format, ownerName, contactName, digest, totalMessages } = params;
 
   const systemPrompt =
     format === "narrator"
-      ? `Eres un biógrafo íntimo escribiendo un brief de audio (~500 palabras) sobre la relación entre ${ownerName} y ${contactName}. Tono cálido, observador, en español. NO uses fórmulas tipo "en este episodio". Habla como si resumieras esta relación al oyente.`
-      : `Eres dos presentadores estilo NotebookLM (Locutor A enérgico, Locutor B reflexivo) que conversan en español sobre la relación entre ${ownerName} y ${contactName}. Formato OBLIGATORIO: cada línea empieza con "A: " o "B: ". Diálogo natural, alternando observaciones y preguntas, citas breves, ~900 palabras. NO menciones "podcast" ni "episodio".`;
+      ? `Eres un biógrafo íntimo escribiendo un brief de audio (~600 palabras) que resume TODA la relación entre ${ownerName} y ${contactName}. Tono cálido, observador, en español. NO uses fórmulas tipo "en este episodio" ni "podcast". Habla como si le contaras al oyente cómo es esta relación, qué ha pasado, qué destaca, qué vigilar.`
+      : `Eres dos presentadores estilo NotebookLM (Locutor A enérgico, Locutor B reflexivo) que conversan en español sobre TODA la relación entre ${ownerName} y ${contactName}. Formato OBLIGATORIO: cada línea empieza con "A: " o "B: ". Diálogo natural alternando observaciones, citas breves y preguntas, ~1000 palabras. NO menciones "podcast" ni "episodio".`;
 
-  const userPrompt = `Contexto previo (segmentos anteriores ya narrados):
-${accumulated || "(este es el primer segmento, no hay contexto previo)"}
+  const userPrompt = `Resumen completo de la relación (${totalMessages} mensajes intercambiados):
 
-Mensajes nuevos (${messagesCount} mensajes) que debes narrar AHORA. NO repitas contenido del contexto previo:
-${messagesText}
+${digest}
 
-Escribe el guion del segmento ${segmentNumber}. ${
+Escribe ahora el guion del audio. ${
     format === "narrator"
-      ? "Incluye: 1 titular de apertura, 2-3 momentos concretos, 1 observación de evolución, 1 cierre con qué vigilar."
-      : 'Diálogo de 5-7 minutos. Termina con una pregunta abierta de B.'
+      ? "Estructura: 1 titular de apertura, contexto general (cómo es la relación), 3-4 momentos concretos a lo largo del tiempo, evolución del tono, asuntos pendientes, cierre con qué vigilar."
+      : "Diálogo de 6-8 minutos. Empieza A presentando la relación, alternad observaciones, citad momentos concretos, terminad con una pregunta abierta de B sobre el futuro de la relación."
   }`;
 
-  const resp = await fetch(
-    "https://ai.gateway.lovable.dev/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-      }),
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+    }),
+  });
   if (!resp.ok) {
     const t = await resp.text();
     throw new Error(`AI gateway error ${resp.status}: ${t.slice(0, 300)}`);
@@ -405,7 +379,6 @@ Escribe el guion del segmento ${segmentNumber}. ${
 }
 
 async function openaiTTS(text: string): Promise<Uint8Array> {
-  // Trim to OpenAI TTS limit (~4096 chars)
   const safeText = text.slice(0, 4000);
   const resp = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
@@ -424,19 +397,15 @@ async function openaiTTS(text: string): Promise<Uint8Array> {
     const t = await resp.text();
     throw new Error(`OpenAI TTS error ${resp.status}: ${t.slice(0, 300)}`);
   }
-  const buf = new Uint8Array(await resp.arrayBuffer());
-  return buf;
+  return new Uint8Array(await resp.arrayBuffer());
 }
 
 async function elevenLabsDialogueTTS(script: string): Promise<Uint8Array> {
-  // Parse "A: ..." / "B: ..." lines and synthesize each with corresponding voice,
-  // then concatenate raw MP3 bytes.
   const lines = script
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => /^[AB]\s*:/i.test(l));
   if (lines.length === 0) {
-    // Fallback: single voice
     return await elevenLabsSingle(script.slice(0, 2500), VOICE_A);
   }
   const chunks: Uint8Array[] = [];
@@ -447,7 +416,6 @@ async function elevenLabsDialogueTTS(script: string): Promise<Uint8Array> {
     const buf = await elevenLabsSingle(text.slice(0, 1500), isA ? VOICE_A : VOICE_B);
     chunks.push(buf);
   }
-  // Concat
   const total = chunks.reduce((s, c) => s + c.length, 0);
   const out = new Uint8Array(total);
   let offset = 0;

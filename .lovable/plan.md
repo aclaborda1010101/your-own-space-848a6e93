@@ -1,48 +1,29 @@
 
+El usuario quiere verificar si hay más contactos con el mismo problema (nombre incorrecto "Agustín" o similar) antes de aplicar el fix.
 
-## Plan: arreglar carga de WhatsApp (3 problemas reales)
+Voy a:
+1. Consultar BD para detectar contactos con nombres "basura" (= waId, numérico puro, o = "Agustín" cuando hay mensajes incoming con `pushName` distinto y válido).
+2. Listar los candidatos para corregir en bloque.
+3. Aplicar el fix masivo + el cambio estructural en el webhook.
 
-### Diagnóstico confirmado en BD
+## Plan
 
-| Problema | Evidencia | Causa |
-|---|---|---|
-| Mensajes duplicados x2 | 52 filas en 24h, solo 26 únicas | webhook sin idempotencia, Evolution reintenta |
-| Contactos cruzados | `wa_id 34663409882` aparece como Agustín y Dominic Vieira | matching mal, crea contactos nuevos en lugar de reusar |
-| "Mensajes del número viejo" | 612k filas `source='whatsapp_backup'` (2011→mar 2026) mezcladas con 597k live | el backup importado del número anterior se muestra junto al nuevo |
+**1. Auditoría previa (SELECT)**
+Detectar todos los `people_contacts` donde:
+- `name` = "Agustín" / "Agustin" / waId puro / numérico, **Y**
+- existe al menos un `contact_messages` incoming con `sender` válido (≠ waId, con letras, ≠ "Yo", ≠ "Agustín").
 
-### Cambios
+Usaré el sender más frecuente de los mensajes incoming como nombre real candidato.
 
-**1. Idempotencia en `evolution-webhook` (corrige duplicación)**
-- Añadir columna `external_id` (text) a `contact_messages` con índice único parcial por `(user_id, external_id)` cuando no es null.
-- Guardar `key.id` de Evolution como `external_id` y usar `upsert` con `onConflict: 'user_id,external_id'`. Si ya existe, devolver 200 sin reinsertar.
+**2. Migración de corrección masiva**
+`UPDATE people_contacts` por cada candidato detectado, asignando el sender más frecuente como `name`. Solo toca filas con nombre "basura" confirmado.
 
-**2. Resolución correcta de contactos (corrige cruces)**
-- En mensajes salientes (`fromMe=true`), el `remoteJid` es el destinatario, no tú. El código ya lo hace bien, pero el bug es que cuando `pushName` viene vacío usa el `waId` como nombre y crea contacto nuevo.
-- Añadir paso previo: normalizar `waId` quitando sufijos (`:NN`) y buscar también por las últimas 9 cifras del teléfono (números españoles con/sin prefijo).
-- Si no hay match exacto Y no hay `pushName` real, NO crear contacto: marcar el mensaje con `contact_id = null` y dejar para reconciliación posterior.
+**3. Fix estructural en `supabase/functions/evolution-webhook/index.ts`**
+Tras resolver `contactId`, si el mensaje es incoming y `pushName` es válido (tiene letras, ≠ waId, no numérico puro) y el nombre actual del contacto es "basura" (= waId, numérico puro, = "Agustín" o nombre del dueño), auto-actualizar `people_contacts.name = pushName`. Solo en incoming, nunca en outgoing.
 
-**3. Separar backup viejo del número nuevo (corrige "ves los del viejo")**
-Dos opciones, prefiero la **A** porque preserva histórico:
+**4. Cache-bust** en `src/main.tsx`.
 
-- **A (recomendada)**: añadir filtro por `source` en la UI. En `WhatsAppTab` y dashboards mostrar por defecto solo `source='whatsapp'` (live del número actual) con un toggle "Incluir histórico importado". Así no pierdes los 612k mensajes pero no contaminan la vista del día a día.
-- **B**: borrar `contact_messages` con `source='whatsapp_backup'` anteriores a una fecha que tú confirmes. Destructivo.
-
-**4. Migración de limpieza (one-shot)**
-- Detectar duplicados existentes en `contact_messages` por `(user_id, contact_id, content, message_date, direction)` y eliminar las filas extra conservando la más antigua.
-- Estimado: ~600k filas duplicadas a borrar.
-
-**5. Reconciliar contactos duplicados**
-- Para cada `wa_id` con múltiples filas en `people_contacts` del mismo `user_id`: fusionar en la fila más antigua, reasignar `contact_messages.contact_id` y borrar las duplicadas.
-
-### Decisión que necesito de ti
-
-Solo una: **¿opción A o B para el backup viejo?**
-- **A**: lo escondo de la UI por defecto, lo conservas (recomiendo esto).
-- **B**: lo borro de BD para no volver a verlo nunca.
-
-Si no respondes, voy con **A**.
-
-### Qué queda igual
-- Conexión Evolution / instancia / owner (ya es tu nuevo número, verificado).
-- Routing del webhook y triggers de IA (`contact-analysis`, drafts).
-
+## Qué NO se toca
+- Contactos con nombre legítimo manual.
+- `wa_id`, `phone_numbers`, favoritos, categoría (excepto Alicia → personal).
+- Mensajes ni `contact_id` existentes.

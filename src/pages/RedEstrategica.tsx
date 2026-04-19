@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   Sparkles,
   RefreshCw,
+  Brain,
   Plus,
 } from "lucide-react";
 import { toast } from "sonner";

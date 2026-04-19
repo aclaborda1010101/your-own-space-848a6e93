@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Play, Pause, Download, RefreshCw, Loader2, Mic } from "lucide-react";
+import { Play, Pause, Download, RefreshCw, Loader2, Mic, Newspaper, MessageSquare, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { GlassCard } from "@/components/ui/GlassCard";
-import type { PodcastRow, PodcastSegment } from "@/hooks/useContactPodcast";
+import type { PodcastFormat, PodcastRow, PodcastSegment } from "@/hooks/useContactPodcast";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -19,8 +19,8 @@ interface PodcastPlayerProps {
   busy: boolean;
   totalMessages: number;
   contactName: string;
-  onRegenerate: (opts: { format?: "narrator" | "dialogue" }) => void;
-  onSetFormat: (f: "narrator" | "dialogue") => void;
+  onRegenerate: (opts: { format?: PodcastFormat }) => void;
+  onSetFormat: (f: PodcastFormat) => void;
 }
 
 function fmtTime(s: number) {
@@ -28,6 +28,39 @@ function fmtTime(s: number) {
   const m = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
   return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
+function FormatSelect({
+  value,
+  onChange,
+}: {
+  value: PodcastFormat;
+  onChange: (v: PodcastFormat) => void;
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as PodcastFormat)}>
+      <SelectTrigger className="w-[170px] h-9">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="informative">
+          <span className="flex items-center gap-2">
+            <Newspaper className="w-3.5 h-3.5" /> Informativo
+          </span>
+        </SelectItem>
+        <SelectItem value="narrator">
+          <span className="flex items-center gap-2">
+            <BookOpen className="w-3.5 h-3.5" /> Narrador
+          </span>
+        </SelectItem>
+        <SelectItem value="dialogue">
+          <span className="flex items-center gap-2">
+            <MessageSquare className="w-3.5 h-3.5" /> Diálogo (2 voces)
+          </span>
+        </SelectItem>
+      </SelectContent>
+    </Select>
+  );
 }
 
 export function PodcastPlayer({
@@ -64,7 +97,8 @@ export function PodcastPlayer({
   const isGenerating =
     podcast?.status === "generating" || podcast?.status === "queued";
 
-  // Empty state: no podcast yet AND no messages → invite
+  const currentFormat: PodcastFormat = (podcast?.format as PodcastFormat) || "informative";
+
   if (!podcast || (!segment && !isGenerating)) {
     return (
       <GlassCard className="p-6">
@@ -80,32 +114,16 @@ export function PodcastPlayer({
               Genera un audio único que resume toda tu relación con {contactName}.
             </p>
             <p className="text-xs text-muted-foreground">
-              Mensajes intercambiados:{" "}
-              <span className="font-mono">{totalMessages}</span>
+              Mensajes intercambiados: <span className="font-mono">{totalMessages}</span>
             </p>
             <div className="mt-3 flex items-center gap-2 flex-wrap">
-              <Select
-                value={podcast?.format || "narrator"}
-                onValueChange={(v) => onSetFormat(v as "narrator" | "dialogue")}
-              >
-                <SelectTrigger className="w-[140px] h-9">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="narrator">Narrador</SelectItem>
-                  <SelectItem value="dialogue">Diálogo (2 voces)</SelectItem>
-                </SelectContent>
-              </Select>
+              <FormatSelect value={currentFormat} onChange={onSetFormat} />
               <Button
                 size="sm"
                 disabled={busy || totalMessages === 0}
                 onClick={() => onRegenerate({})}
               >
-                {busy ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Mic className="w-4 h-4 mr-2" />
-                )}
+                {busy ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Mic className="w-4 h-4 mr-2" />}
                 Generar podcast
               </Button>
             </div>
@@ -141,29 +159,14 @@ export function PodcastPlayer({
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Select
-            value={podcast.format}
-            onValueChange={(v) => onSetFormat(v as "narrator" | "dialogue")}
-          >
-            <SelectTrigger className="w-[140px] h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="narrator">Narrador</SelectItem>
-              <SelectItem value="dialogue">Diálogo (2 voces)</SelectItem>
-            </SelectContent>
-          </Select>
+          <FormatSelect value={currentFormat} onChange={onSetFormat} />
           <Button
             size="sm"
             variant="outline"
             disabled={busy || isGenerating}
             onClick={() => onRegenerate({})}
           >
-            {busy || isGenerating ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4 mr-2" />
-            )}
+            {busy || isGenerating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
             Regenerar
           </Button>
         </div>
@@ -172,16 +175,8 @@ export function PodcastPlayer({
       {segment?.signedUrl ? (
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            <Button
-              size="icon"
-              onClick={togglePlay}
-              className="w-12 h-12 rounded-full"
-            >
-              {playing ? (
-                <Pause className="w-5 h-5" />
-              ) : (
-                <Play className="w-5 h-5 ml-0.5" />
-              )}
+            <Button size="icon" onClick={togglePlay} className="w-12 h-12 rounded-full">
+              {playing ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
             </Button>
             <div className="flex-1">
               <input
@@ -213,12 +208,8 @@ export function PodcastPlayer({
             src={segment.signedUrl}
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
-            onTimeUpdate={(e) =>
-              setProgress((e.target as HTMLAudioElement).currentTime)
-            }
-            onLoadedMetadata={(e) =>
-              setDuration((e.target as HTMLAudioElement).duration)
-            }
+            onTimeUpdate={(e) => setProgress((e.target as HTMLAudioElement).currentTime)}
+            onLoadedMetadata={(e) => setDuration((e.target as HTMLAudioElement).duration)}
             onEnded={() => setPlaying(false)}
             preload="metadata"
           />
@@ -226,14 +217,10 @@ export function PodcastPlayer({
       ) : isGenerating ? (
         <div className="flex items-center gap-3 text-muted-foreground py-6">
           <Loader2 className="w-5 h-5 animate-spin" />
-          <span>
-            Generando el podcast de toda la relación… puede tardar 1-3 minutos.
-          </span>
+          <span>Generando el podcast de toda la relación… puede tardar 1-3 minutos.</span>
         </div>
       ) : podcast.status === "error" ? (
-        <p className="text-sm text-destructive">
-          Error: {podcast.error_message || "fallo desconocido"}
-        </p>
+        <p className="text-sm text-destructive">Error: {podcast.error_message || "fallo desconocido"}</p>
       ) : (
         <p className="text-sm text-muted-foreground">No hay audio todavía.</p>
       )}

@@ -5,9 +5,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HeadlineCard } from "@/components/contact/HeadlineCard";
 import { PodcastPlayer } from "@/components/contact/PodcastPlayer";
 import { ConversationTimeline } from "@/components/contact/ConversationTimeline";
+import { ProfileByScope } from "@/components/contact/ProfileByScope";
+import {
+  WhatsAppTab,
+  EmailTab,
+  PlaudTab,
+  ProfileKnownData,
+} from "@/components/contacts/ContactTabs";
+import SuggestedResponses from "@/components/contacts/SuggestedResponses";
 import { useContactHeadlines } from "@/hooks/useContactHeadlines";
 import { useContactPodcast } from "@/hooks/useContactPodcast";
 import {
@@ -21,6 +30,10 @@ import {
   Network,
   Loader2,
   Save,
+  Brain,
+  Mail,
+  Mic,
+  Sparkles,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -30,10 +43,17 @@ interface Contact {
   id: string;
   name: string;
   category: string | null;
+  categories?: string[] | null;
   wa_id: string | null;
   phone_numbers: string[] | null;
   last_contact: string | null;
   context: string | null;
+  personality_profile?: any;
+  role?: string | null;
+  company?: string | null;
+  brain?: string | null;
+  relationship?: string | null;
+  email?: string | null;
 }
 
 interface MsgRow {

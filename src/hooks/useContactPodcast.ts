@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+export type PodcastFormat = "informative" | "narrator" | "dialogue";
+
 export interface PodcastRow {
   id: string;
   status: "idle" | "queued" | "generating" | "ready" | "error";
-  format: "narrator" | "dialogue";
+  format: PodcastFormat;
   total_segments: number;
   last_message_count: number;
   total_duration_seconds: number;
@@ -50,7 +52,6 @@ export function useContactPodcast(contactId: string | null) {
       setPodcast((pod as PodcastRow) || null);
 
       if (pod) {
-        // Single audio: pick the latest segment (segment_number=1 by design)
         const { data: segs } = await supabase
           .from("contact_podcast_segments")
           .select("*")
@@ -79,7 +80,6 @@ export function useContactPodcast(contactId: string | null) {
     load();
   }, [load]);
 
-  // Poll while generating
   useEffect(() => {
     if (!podcast) return;
     if (podcast.status === "generating" || podcast.status === "queued") {
@@ -98,7 +98,7 @@ export function useContactPodcast(contactId: string | null) {
   }, [podcast, load]);
 
   const regenerate = useCallback(
-    async (opts: { format?: "narrator" | "dialogue" } = {}) => {
+    async (opts: { format?: PodcastFormat } = {}) => {
       if (!contactId) return;
       setBusy(true);
       try {
@@ -125,7 +125,7 @@ export function useContactPodcast(contactId: string | null) {
   );
 
   const setFormat = useCallback(
-    async (format: "narrator" | "dialogue") => {
+    async (format: PodcastFormat) => {
       if (!podcast) return;
       await supabase
         .from("contact_podcasts")

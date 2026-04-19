@@ -24,6 +24,24 @@ export function NodeStatusCard({ node, tasks }: NodeStatusCardProps) {
   const today = new Date().toISOString().slice(0, 10);
   const tokensToday = node.tokens_today_date === today ? node.tokens_today : 0;
 
+  // Honestidad de datos: distinguimos lo que viene del bridge vs. lo derivado de UI/seed.
+  // Mientras el bridge físico (potus-bridge) no esté conectado, marcamos como "simulated".
+  const bridgeLive = Boolean(node.metadata?.bridge_live);
+  const dataMode: "live" | "simulated" | "pending" = bridgeLive
+    ? "live"
+    : node.last_seen_at
+      ? "simulated"
+      : "pending";
+
+  const tokensLabel =
+    dataMode === "pending" ? "—" : tokensToday.toLocaleString();
+  const tokensTotalLabel =
+    dataMode === "pending" ? "—" : (node.tokens_total || 0).toLocaleString();
+  const modelLabel = node.model ?? "sin asignar";
+  const lastSeenLabel = node.last_seen_at
+    ? formatDistanceToNow(new Date(node.last_seen_at), { addSuffix: true, locale: es })
+    : "sin contacto";
+
   return (
     <Card className="relative overflow-hidden">
       <CardContent className="p-5 space-y-4">
@@ -63,6 +81,19 @@ export function NodeStatusCard({ node, tasks }: NodeStatusCardProps) {
           >
             {online ? "Online" : "Offline"}
           </Badge>
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[10px] uppercase tracking-wider",
+              dataMode === "live"
+                ? "border-emerald-500/40 text-emerald-300 bg-emerald-500/10"
+                : dataMode === "simulated"
+                  ? "border-amber-500/40 text-amber-300 bg-amber-500/10"
+                  : "border-border text-muted-foreground bg-muted/40"
+            )}
+          >
+            {dataMode === "live" ? "Live" : dataMode === "simulated" ? "Simulated" : "Pending bridge"}
+          </Badge>
         </div>
 
         {node.description && (
@@ -72,29 +103,26 @@ export function NodeStatusCard({ node, tasks }: NodeStatusCardProps) {
         <div className="grid grid-cols-2 gap-3 text-xs">
           <div className="space-y-0.5">
             <p className="text-muted-foreground uppercase tracking-wider text-[10px]">Modelo</p>
-            <p className="font-medium text-foreground truncate">{node.model ?? "—"}</p>
+            <p className="font-medium text-foreground truncate">{modelLabel}</p>
           </div>
           <div className="space-y-0.5">
             <p className="text-muted-foreground uppercase tracking-wider text-[10px] flex items-center gap-1">
               <Clock className="h-3 w-3" /> Last seen
             </p>
-            <p className="font-medium text-foreground">
-              {node.last_seen_at
-                ? formatDistanceToNow(new Date(node.last_seen_at), { addSuffix: true, locale: es })
-                : "Nunca"}
-            </p>
+            <p className="font-medium text-foreground">{lastSeenLabel}</p>
           </div>
           <div className="space-y-0.5">
             <p className="text-muted-foreground uppercase tracking-wider text-[10px] flex items-center gap-1">
               <Zap className="h-3 w-3" /> Tokens hoy
+              {dataMode !== "live" && (
+                <span className="text-[9px] text-amber-300/80 normal-case">· {dataMode}</span>
+              )}
             </p>
-            <p className="font-medium text-foreground tabular-nums">{tokensToday.toLocaleString()}</p>
+            <p className="font-medium text-foreground tabular-nums">{tokensLabel}</p>
           </div>
           <div className="space-y-0.5">
             <p className="text-muted-foreground uppercase tracking-wider text-[10px]">Tokens total</p>
-            <p className="font-medium text-foreground tabular-nums">
-              {(node.tokens_total || 0).toLocaleString()}
-            </p>
+            <p className="font-medium text-foreground tabular-nums">{tokensTotalLabel}</p>
           </div>
           <div className="col-span-2 flex items-center justify-between pt-2 border-t border-border/40">
             <span className="text-muted-foreground uppercase tracking-wider text-[10px] flex items-center gap-1">

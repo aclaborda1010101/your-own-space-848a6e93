@@ -10,6 +10,9 @@ import { HeadlineCard } from "@/components/contact/HeadlineCard";
 import { PodcastPlayer } from "@/components/contact/PodcastPlayer";
 import { HealthMeter } from "@/components/contact/HealthMeter";
 import { ConversationTimeline } from "@/components/contact/ConversationTimeline";
+import { JarvisSuggestionHero } from "@/components/contact/JarvisSuggestionHero";
+import { ContactKpiStrip } from "@/components/contact/ContactKpiStrip";
+import { formatDistanceToNowStrict } from "date-fns";
 import {
   WhatsAppTab,
   EmailTab,

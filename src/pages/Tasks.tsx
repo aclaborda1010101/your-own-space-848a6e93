@@ -30,6 +30,7 @@ import {
   CalendarCheck,
 } from "lucide-react";
 import { PageHero } from "@/components/ui/PageHero";
+import { cn } from "@/lib/utils";
 
 const typeConfig = {
   work: { icon: Briefcase, label: "Trabajo", color: "bg-primary/10 text-primary border-primary/20" },

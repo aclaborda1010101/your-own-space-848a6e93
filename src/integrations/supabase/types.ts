@@ -2431,6 +2431,41 @@ export type Database = {
           },
         ]
       }
+      contact_headlines: {
+        Row: {
+          contact_id: string
+          generated_at: string
+          id: string
+          message_count_at_generation: number
+          payload: Json
+          user_id: string
+        }
+        Insert: {
+          contact_id: string
+          generated_at?: string
+          id?: string
+          message_count_at_generation?: number
+          payload: Json
+          user_id: string
+        }
+        Update: {
+          contact_id?: string
+          generated_at?: string
+          id?: string
+          message_count_at_generation?: number
+          payload?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_headlines_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_link_suggestions: {
         Row: {
           confidence: number | null
@@ -2585,6 +2620,109 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "contact_messages_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_podcast_segments: {
+        Row: {
+          audio_storage_path: string
+          duration_seconds: number
+          format: string
+          generated_at: string
+          id: string
+          message_count: number
+          message_range_end: number
+          message_range_start: number
+          podcast_id: string
+          script: string
+          segment_number: number
+        }
+        Insert: {
+          audio_storage_path: string
+          duration_seconds?: number
+          format: string
+          generated_at?: string
+          id?: string
+          message_count: number
+          message_range_end: number
+          message_range_start: number
+          podcast_id: string
+          script: string
+          segment_number: number
+        }
+        Update: {
+          audio_storage_path?: string
+          duration_seconds?: number
+          format?: string
+          generated_at?: string
+          id?: string
+          message_count?: number
+          message_range_end?: number
+          message_range_start?: number
+          podcast_id?: string
+          script?: string
+          segment_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_podcast_segments_podcast_id_fkey"
+            columns: ["podcast_id"]
+            isOneToOne: false
+            referencedRelation: "contact_podcasts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_podcasts: {
+        Row: {
+          contact_id: string
+          created_at: string
+          error_message: string | null
+          format: string
+          id: string
+          last_generated_at: string | null
+          last_message_count: number
+          status: string
+          total_duration_seconds: number
+          total_segments: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          contact_id: string
+          created_at?: string
+          error_message?: string | null
+          format?: string
+          id?: string
+          last_generated_at?: string | null
+          last_message_count?: number
+          status?: string
+          total_duration_seconds?: number
+          total_segments?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          contact_id?: string
+          created_at?: string
+          error_message?: string | null
+          format?: string
+          id?: string
+          last_generated_at?: string | null
+          last_message_count?: number
+          status?: string
+          total_duration_seconds?: number
+          total_segments?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_podcasts_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
             referencedRelation: "people_contacts"
@@ -6102,6 +6240,53 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      podcast_generation_queue: {
+        Row: {
+          attempts: number
+          contact_id: string
+          created_at: string
+          error_message: string | null
+          force_full_regenerate: boolean
+          format: string
+          id: string
+          processed_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          contact_id: string
+          created_at?: string
+          error_message?: string | null
+          force_full_regenerate?: boolean
+          format?: string
+          id?: string
+          processed_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          contact_id?: string
+          created_at?: string
+          error_message?: string | null
+          force_full_regenerate?: boolean
+          format?: string
+          id?: string
+          processed_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "podcast_generation_queue_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "people_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pomodoro_sessions: {
         Row: {

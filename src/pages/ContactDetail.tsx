@@ -188,10 +188,10 @@ export default function ContactDetail() {
   }
 
   const healthScore = contact.scores?.health ?? 5;
-  const sentimentColor =
-    contact.sentiment === "positive" ? "success" :
-    contact.sentiment === "negative" ? "destructive" :
-    "muted";
+  const sentimentCls =
+    contact.sentiment === "positive" ? "bg-success/10 border-success/30 text-success" :
+    contact.sentiment === "negative" ? "bg-destructive/10 border-destructive/30 text-destructive" :
+    "bg-muted/20 border-border text-muted-foreground";
 
   return (
     <div className="min-h-screen bg-background relative">

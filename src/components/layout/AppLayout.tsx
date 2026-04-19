@@ -45,7 +45,9 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
         )}
         
         <main className={cn(
-          !isWizardPage && "pb-20 lg:pb-0"
+          !isWizardPage && "pb-20 lg:pb-0",
+          // Safe area iOS: respeta la status bar en móvil (la barra superior se oculta en móvil)
+          "pt-[env(safe-area-inset-top)] md:pt-0"
         )}>
           {children}
         </main>

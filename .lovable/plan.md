@@ -1,54 +1,43 @@
 
-El usuario aprueba el plan con 3 ajustes:
-1. Usar OpenAI TTS para narrator (más barato). Verificar OPENAI_API_KEY → ya está en secrets ✅
-2. Aceptar scrub por segmento en MVP, mostrar tira visual de segmentos
-3. Activar pg_cron y pg_net en Supabase (lo hago en la migración)
+El usuario aclara: el trigger de "100 mensajes / 20 emails" debe ser para **actualizar la bio/perfil del contacto** (no el podcast). El podcast debe generar un audio único de la **relación completa** con ese contacto, bajo demanda o cuando él lo pida — no en segmentos incrementales cada 100 mensajes.
 
-Buenas noticias: `OPENAI_API_KEY` ya está configurada. Ajusto el plan a opción **(b)**.
+Voy a corregir la arquitectura.
 
-## Plan final consolidado
+## Plan: separar "actualizar bio" de "generar podcast"
 
-### Stack TTS
-- **Narrator**: OpenAI TTS (`tts-1`, voz "nova") → ~0.05€/segmento ✅
-- **Dialogue**: ElevenLabs Turbo v2.5 con 2 voces (Sarah + Brian) → ~0.30€/segmento
-- **Guion**: Lovable AI Gateway (Gemini 2.5 Flash) — sin secret extra
+### A) Bio del contacto (auto-actualización)
+- **Trigger 1**: tras cada inserción en `contact_messages`, si `count(messages WHERE contact_id) % 100 == 0` y hace >5 min del anterior → encolar refresh de bio.
+- **Trigger 2**: tras procesar emails en `email-intelligence`, contar emails nuevos para ese contacto desde el último refresh. Si ≥20 → encolar refresh de bio.
+- "Refresh de bio" = invocar `contact-analysis` (ya existe) + `get-contact-headlines` (invalidar cache).
+- Quitar del `evolution-webhook` el encolado a `podcast_generation_queue`.
 
-### Fase 1 — Backend
-**Migración SQL** (incluye `CREATE EXTENSION IF NOT EXISTS pg_cron; pg_net;`):
-- `contact_podcasts`, `contact_podcast_segments`, `contact_headlines`, `podcast_generation_queue` + RLS por `user_id`
-- Bucket privado `contact-podcasts` con políticas `{userId}/...`
-- Cron `process-podcast-queue` cada minuto vía `pg_net`
+### B) Podcast del contacto (relación completa, on-demand)
+- **Cambio funcional**: el podcast es **un único audio** que resume **toda la relación** (no segmentos de 100).
+- Se genera cuando el usuario pulsa "Generar podcast" en la ficha (bajo demanda).
+- Se puede regenerar manualmente. No hay auto-encolado.
+- Internamente: si la conversación es muy larga (>500 msgs), `generate-contact-podcast-segment` hace **resumen jerárquico** (chunks → resumen global → guion único → 1 mp3). Pero la salida es **un solo audio** y **un solo "segmento"** en BD (segment_number=1 siempre, se sobrescribe al regenerar).
+- Renombrar conceptualmente: en UI "Podcast de la relación" en lugar de "segmentos".
+- `PodcastPlayer`: mostrar un solo reproductor sin tira de segmentos. Botón "Regenerar" rehace el audio completo.
 
-**Edge Functions nuevas**:
-- `generate-contact-podcast-segment` — delta 100 msgs, prompt con `accumulated_summary`, OpenAI TTS o ElevenLabs según formato, sube a Storage, actualiza tablas.
-- `get-contact-headlines` — Gemini sobre últimos 200 msgs → 3 titulares, cachea, invalida cada 20 msgs nuevos.
-- `process-podcast-queue` — desencola e invoca generador.
+### Cambios concretos
 
-**Modificación `evolution-webhook`**: tras persistir, si `count(messages) % 100 == 0` y último mensaje hace >5 min → encola.
+**Backend**:
+1. `evolution-webhook/index.ts`: eliminar bloque de `podcast_generation_queue`. Añadir bloque que, al cruzar múltiplo de 100 msgs y >5 min del anterior, invoque `contact-analysis` (fire-and-forget) para refrescar bio + invalide `contact_headlines` para el contacto.
+2. `email-intelligence/index.ts`: tras analizar, por cada contacto resuelto, contar emails procesados desde `last_bio_refresh_at` (campo nuevo en `people_contacts`). Si ≥20 → invocar `contact-analysis` + invalidar headlines.
+3. `people_contacts`: añadir columna `last_bio_refresh_at timestamptz` (migración).
+4. `generate-contact-podcast-segment/index.ts`: reescribir para procesar **toda la conversación** del contacto (con resumen jerárquico si >500 msgs); siempre genera segmento `1` (upsert), reemplazando el anterior. Renombrar internamente sigue OK; es la lógica la que cambia.
+5. `process-podcast-queue` y `podcast_generation_queue`: dejar de usarse para auto-trigger. Mantener tabla por si el usuario quiere encolar manual desde UI, pero sin cron auto. Alternativa: borrar cron job y tabla. **Decisión**: borrar cron + tabla (no se usan).
 
-### Fase 2 — Diseño
-- Tokens en `index.css` (background `#0A0B10`, glass, fonts Inter Display + Instrument Serif + JetBrains Mono).
-- `tailwind.config.ts` con sombras halo índigo, accents turquesa/rosa.
-- `<GlassCard>` wrapper.
+**Frontend**:
+6. `PodcastPlayer.tsx`: simplificar a un solo audio (sin tira de segmentos, sin auto-advance). Mostrar "Podcast generado · hace X" + botón Regenerar + selector formato + descarga.
+7. `useContactPodcast.ts`: simplificar — solo 1 segmento esperado. `regenerate()` invoca `generate-contact-podcast-segment` con `force_full_regenerate: true` siempre.
+8. `ContactDetail.tsx`: pequeño ajuste de copy ("Podcast de la relación").
 
-### Fase 3 — Red Estratégica
-- `src/pages/RedEstrategica.tsx`: hero + filtros (relación, salud, actividad, tiene podcast) + toggle vista (Tarjetas / Lista densa / Mapa placeholder) + grid `ContactCard`.
-- `ContactCard` + `HealthMeter` (gradiente rojo→verde 0-10).
+### Lo que NO se toca
+- Tablas `contact_podcasts` / `contact_podcast_segments` (estructura sigue OK, solo se usa segment 1).
+- `get-contact-headlines` (sigue invalidando cada 20 msgs, ya estaba bien).
+- UI de Red Estratégica.
 
-### Fase 4 — Ficha de contacto
-- `src/pages/ContactDetail.tsx` en `/red-estrategica/:contactId`: header con avatar grande, nombre serif, botones (Llamar, WhatsApp, Recordatorio); 3 `HeadlineCard`; `PodcastPlayer` con **tira de segmentos visual** (Seg 1 · Seg 2 · Seg 3, scrub por segmento, tooltip "El scrub funciona dentro de cada segmento — concatenación completa próximamente"); detalle (timeline mensual, quotable moments, mini grafo placeholder, notas, historial podcasts).
-- `useContactPodcast(contactId)` con polling 5s mientras `generating`, signed URLs 1h, `regenerate()`, `setFormat()`.
-- `useContactHeadlines(contactId)`.
-
-### Fase 5 — Compatibilidad
-- Mantener rutas viejas (`/strategic-network`) → redirect a `/red-estrategica`.
-- No tocar dashboard, saludo, otras secciones.
-
-### Lo que NO hago
-ffmpeg server-side, transcripción de audios WhatsApp, Spotify/RSS, push, sync multi-dispositivo, detección automática tipo relación. Mini grafo y mapa de red = placeholders.
-
-### Acciones manuales tras pegar
-- Verificar en Supabase Dashboard → Database → Extensions que `pg_cron` y `pg_net` están en verde tras la migración (la migración intenta activarlos; si falla por permisos, el usuario los activa con un click).
-- `OPENAI_API_KEY` ya está ✅, `ELEVENLABS_API_KEY` ya está ✅.
-
-Tras ejecutar entregaré: lista de archivos creados/modificados + estado de extensiones + URL de logs de cada edge function.
+### Resumen
+- Auto: bio se refresca cada 100 msgs WhatsApp o 20 emails.
+- Manual: podcast = audio único de toda la relación, generado al pulsar el botón.

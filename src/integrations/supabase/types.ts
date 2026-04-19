@@ -5739,6 +5739,7 @@ export type Database = {
           in_strategic_network: boolean | null
           interaction_count: number
           is_favorite: boolean | null
+          last_bio_refresh_at: string | null
           last_contact: string | null
           metadata: Json | null
           name: string
@@ -5768,6 +5769,7 @@ export type Database = {
           in_strategic_network?: boolean | null
           interaction_count?: number
           is_favorite?: boolean | null
+          last_bio_refresh_at?: string | null
           last_contact?: string | null
           metadata?: Json | null
           name: string
@@ -5797,6 +5799,7 @@ export type Database = {
           in_strategic_network?: boolean | null
           interaction_count?: number
           is_favorite?: boolean | null
+          last_bio_refresh_at?: string | null
           last_contact?: string | null
           metadata?: Json | null
           name?: string
@@ -6240,53 +6243,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      podcast_generation_queue: {
-        Row: {
-          attempts: number
-          contact_id: string
-          created_at: string
-          error_message: string | null
-          force_full_regenerate: boolean
-          format: string
-          id: string
-          processed_at: string | null
-          status: string
-          user_id: string
-        }
-        Insert: {
-          attempts?: number
-          contact_id: string
-          created_at?: string
-          error_message?: string | null
-          force_full_regenerate?: boolean
-          format?: string
-          id?: string
-          processed_at?: string | null
-          status?: string
-          user_id: string
-        }
-        Update: {
-          attempts?: number
-          contact_id?: string
-          created_at?: string
-          error_message?: string | null
-          force_full_regenerate?: boolean
-          format?: string
-          id?: string
-          processed_at?: string | null
-          status?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "podcast_generation_queue_contact_id_fkey"
-            columns: ["contact_id"]
-            isOneToOne: false
-            referencedRelation: "people_contacts"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       pomodoro_sessions: {
         Row: {

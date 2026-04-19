@@ -330,12 +330,14 @@ export const useDashboardLayout = () => {
     updateActiveLayout(() => ({ ...DEFAULT_LAYOUT, cardSettings: { ...DEFAULT_CARD_SETTINGS } }));
   };
 
-  const visibleLeftCards = layout.leftColumn.filter(
-    (id) => layout.cardSettings[id]?.visible !== false
-  );
-  const visibleRightCards = layout.rightColumn.filter(
-    (id) => layout.cardSettings[id]?.visible !== false
-  );
+  // Hide manual check-in card globally — auto-derived from health data now.
+  // Filter it out at the visible-cards layer so existing localStorage profiles get the fix too.
+  const HIDDEN_CARDS: DashboardCardId[] = ["check-in"];
+  const isHidden = (id: DashboardCardId) =>
+    HIDDEN_CARDS.includes(id) || layout.cardSettings[id]?.visible === false;
+
+  const visibleLeftCards = layout.leftColumn.filter((id) => !isHidden(id));
+  const visibleRightCards = layout.rightColumn.filter((id) => !isHidden(id));
 
   return {
     // Profile data

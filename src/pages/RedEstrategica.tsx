@@ -468,13 +468,34 @@ export default function RedEstrategica() {
         ) : view === "cards" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {cards.map((c) => (
-              <ContactCard key={c.id} contact={c} onClick={() => navigate(`/red-estrategica/${c.id}`)} />
+              <ContactCard
+                key={c.id}
+                contact={c}
+                onClick={() => navigate(`/red-estrategica/${c.id}`)}
+                onRemove={() => removeFromNetwork(c.id, c.name)}
+              />
             ))}
             {cards.length === 0 && (
               <div className="col-span-full">
-                <GlassCard className="p-12 text-center">
-                  <Network className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-                  <p className="text-muted-foreground">Sin resultados con esos filtros.</p>
+                <GlassCard className="p-12 text-center space-y-4">
+                  <Network className="w-10 h-10 mx-auto text-muted-foreground/40" />
+                  {rows.length === 0 ? (
+                    <>
+                      <div>
+                        <p className="font-display text-lg">Tu red estratégica está vacía</p>
+                        <p className="text-muted-foreground text-sm mt-1">
+                          Añade los contactos que quieres vigilar de cerca. Solo estos
+                          aparecerán aquí y se actualizarán al pulsar "Actualizar novedades".
+                        </p>
+                      </div>
+                      <Button onClick={() => setAddOpen(true)} className="gap-2">
+                        <Plus className="w-4 h-4" />
+                        Añadir primer contacto
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">Sin resultados con esos filtros.</p>
+                  )}
                 </GlassCard>
               </div>
             )}

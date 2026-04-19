@@ -5061,6 +5061,142 @@ export type Database = {
         }
         Relationships: []
       }
+      openclaw_nodes: {
+        Row: {
+          created_at: string
+          description: string | null
+          host: string | null
+          id: string
+          last_seen_at: string | null
+          metadata: Json | null
+          model: string | null
+          name: string
+          status: string
+          tokens_total: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          host?: string | null
+          id?: string
+          last_seen_at?: string | null
+          metadata?: Json | null
+          model?: string | null
+          name: string
+          status?: string
+          tokens_total?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          host?: string | null
+          id?: string
+          last_seen_at?: string | null
+          metadata?: Json | null
+          model?: string | null
+          name?: string
+          status?: string
+          tokens_total?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      openclaw_task_logs: {
+        Row: {
+          created_at: string
+          id: string
+          level: string
+          message: string
+          task_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          level?: string
+          message: string
+          task_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          level?: string
+          message?: string
+          task_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "openclaw_task_logs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "openclaw_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      openclaw_tasks: {
+        Row: {
+          created_at: string
+          description: string | null
+          finished_at: string | null
+          id: string
+          node_id: string
+          priority: string
+          result: string | null
+          started_at: string | null
+          status: string
+          title: string
+          tokens_used: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          finished_at?: string | null
+          id?: string
+          node_id: string
+          priority?: string
+          result?: string | null
+          started_at?: string | null
+          status?: string
+          title: string
+          tokens_used?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          finished_at?: string | null
+          id?: string
+          node_id?: string
+          priority?: string
+          result?: string | null
+          started_at?: string | null
+          status?: string
+          title?: string
+          tokens_used?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "openclaw_tasks_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "openclaw_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pattern_api_keys: {
         Row: {
           api_key: string

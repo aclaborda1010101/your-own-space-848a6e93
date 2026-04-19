@@ -44,11 +44,12 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
           </div>
         )}
         
-        <main className={cn(
-          !isWizardPage && "pb-20 lg:pb-0",
-          // Safe area iOS: respeta la status bar en móvil (la barra superior se oculta en móvil)
-          "pt-[env(safe-area-inset-top)] md:pt-0"
-        )}>
+        <main
+          className={cn(
+            "pt-[env(safe-area-inset-top)] md:pt-0"
+          )}
+          style={!isWizardPage ? { paddingBottom: "calc(5rem + env(safe-area-inset-bottom))" } : undefined}
+        >
           {children}
         </main>
       </div>

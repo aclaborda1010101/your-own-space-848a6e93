@@ -13,6 +13,26 @@ export interface JarvisWhoopData {
   synced_at: string;
 }
 
+const hasMetrics = (row: any) =>
+  row && (
+    row.recovery_score != null ||
+    row.hrv != null ||
+    row.sleep_hours != null ||
+    row.sleep_performance != null ||
+    (row.strain != null && Number(row.strain) > 0.5)
+  );
+
+const mapRow = (row: any, syncedField: string): JarvisWhoopData => ({
+  recovery_score: row.recovery_score ?? null,
+  hrv: row.hrv ?? null,
+  strain: row.strain != null ? Number(row.strain) : null,
+  sleep_hours: row.sleep_hours != null ? Number(row.sleep_hours) : null,
+  resting_hr: row.resting_hr ?? null,
+  sleep_performance: row.sleep_performance ?? null,
+  data_date: row.data_date,
+  synced_at: row[syncedField] ?? row.synced_at ?? row.fetched_at ?? new Date().toISOString(),
+});
+
 export const useJarvisWhoopData = () => {
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
@@ -26,31 +46,38 @@ export const useJarvisWhoopData = () => {
 
     setIsLoading(true);
     try {
-      // Get the most recent WHOOP data synced by POTUS
-      const { data: whoopData, error } = await supabase
-        .from("jarvis_whoop_data")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("data_date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // Query both sources in parallel: jarvis_whoop_data (POTUS mirror) and whoop_data (Health page direct).
+      // Pick the row with the most recent data_date that actually has metrics.
+      const [jarvisRes, whoopRes] = await Promise.all([
+        supabase
+          .from("jarvis_whoop_data")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("data_date", { ascending: false })
+          .limit(5),
+        supabase
+          .from("whoop_data")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("data_date", { ascending: false })
+          .limit(5),
+      ]);
 
-      if (error) throw error;
+      const jarvisRow = (jarvisRes.data || []).find(hasMetrics);
+      const whoopRow = (whoopRes.data || []).find(hasMetrics);
 
-      if (whoopData) {
-        setData({
-          recovery_score: whoopData.recovery_score,
-          hrv: whoopData.hrv,
-          strain: whoopData.strain ? Number(whoopData.strain) : null,
-          sleep_hours: whoopData.sleep_hours ? Number(whoopData.sleep_hours) : null,
-          resting_hr: whoopData.resting_hr,
-          sleep_performance: whoopData.sleep_performance,
-          data_date: whoopData.data_date,
-          synced_at: whoopData.synced_at,
-        });
-      } else {
-        setData(null);
+      let chosen: JarvisWhoopData | null = null;
+      if (jarvisRow && whoopRow) {
+        chosen = jarvisRow.data_date >= whoopRow.data_date
+          ? mapRow(jarvisRow, "synced_at")
+          : mapRow(whoopRow, "fetched_at");
+      } else if (jarvisRow) {
+        chosen = mapRow(jarvisRow, "synced_at");
+      } else if (whoopRow) {
+        chosen = mapRow(whoopRow, "fetched_at");
       }
+
+      setData(chosen);
     } catch (error) {
       console.error("Error fetching WHOOP data:", error);
       setData(null);
@@ -59,17 +86,13 @@ export const useJarvisWhoopData = () => {
     }
   }, [user]);
 
-  // Fetch on mount and when user changes
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Check if we have data (synced by POTUS)
-  const hasData = data !== null;
-
   return {
     isLoading,
-    hasData,
+    hasData: data !== null,
     data,
     refetch: fetchData,
   };

@@ -74,7 +74,7 @@ interface DashboardState {
 }
 
 const DEFAULT_CARD_SETTINGS: Record<DashboardCardId, CardSettings> = {
-  "check-in": { size: "normal", width: "full", visible: true },
+  "check-in": { size: "normal", width: "full", visible: false },
   "daily-plan": { size: "normal", width: "full", visible: true },
   "publications": { size: "normal", width: "full", visible: true },
   "agenda": { size: "normal", width: "full", visible: true },
@@ -102,7 +102,7 @@ export const CARD_LABELS: Record<DashboardCardId, string> = {
 };
 
 const DEFAULT_LAYOUT: DashboardLayoutConfig = {
-  leftColumn: ["suggestions", "check-in", "daily-plan", "publications", "habits-insights"],
+  leftColumn: ["suggestions", "daily-plan", "publications", "habits-insights"],
   rightColumn: ["agenda", "challenge", "coach", "priorities", "alerts"],
   cardSettings: DEFAULT_CARD_SETTINGS,
 };
@@ -330,12 +330,14 @@ export const useDashboardLayout = () => {
     updateActiveLayout(() => ({ ...DEFAULT_LAYOUT, cardSettings: { ...DEFAULT_CARD_SETTINGS } }));
   };
 
-  const visibleLeftCards = layout.leftColumn.filter(
-    (id) => layout.cardSettings[id]?.visible !== false
-  );
-  const visibleRightCards = layout.rightColumn.filter(
-    (id) => layout.cardSettings[id]?.visible !== false
-  );
+  // Hide manual check-in card globally — auto-derived from health data now.
+  // Filter it out at the visible-cards layer so existing localStorage profiles get the fix too.
+  const HIDDEN_CARDS: DashboardCardId[] = ["check-in"];
+  const isHidden = (id: DashboardCardId) =>
+    HIDDEN_CARDS.includes(id) || layout.cardSettings[id]?.visible === false;
+
+  const visibleLeftCards = layout.leftColumn.filter((id) => !isHidden(id));
+  const visibleRightCards = layout.rightColumn.filter((id) => !isHidden(id));
 
   return {
     // Profile data

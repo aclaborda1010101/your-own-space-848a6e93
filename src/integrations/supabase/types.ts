@@ -3006,6 +3006,39 @@ export type Database = {
           },
         ]
       }
+      daily_briefs: {
+        Row: {
+          brief_date: string
+          content: string
+          context_snapshot: Json | null
+          created_at: string
+          generated_at: string
+          id: string
+          scope: string
+          user_id: string
+        }
+        Insert: {
+          brief_date?: string
+          content: string
+          context_snapshot?: Json | null
+          created_at?: string
+          generated_at?: string
+          id?: string
+          scope: string
+          user_id: string
+        }
+        Update: {
+          brief_date?: string
+          content?: string
+          context_snapshot?: Json | null
+          created_at?: string
+          generated_at?: string
+          id?: string
+          scope?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       daily_logs: {
         Row: {
           completed_count: number | null

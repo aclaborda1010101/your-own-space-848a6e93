@@ -22,6 +22,9 @@ import {
 import SuggestedResponses from "@/components/contacts/SuggestedResponses";
 import { useContactHeadlines } from "@/hooks/useContactHeadlines";
 import { useContactPodcast } from "@/hooks/useContactPodcast";
+import { useContactProfile } from "@/hooks/useContactProfile";
+import { ProfileByScope } from "@/components/contact/ProfileByScope";
+import { RelationshipTimelineChart } from "@/components/contact/RelationshipTimelineChart";
 import {
   ArrowLeft,
   Phone,
@@ -37,6 +40,7 @@ import {
   Mail,
   Mic,
   Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";

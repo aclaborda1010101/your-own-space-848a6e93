@@ -81,6 +81,19 @@ export function NodeStatusCard({ node, tasks }: NodeStatusCardProps) {
           >
             {online ? "Online" : "Offline"}
           </Badge>
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[10px] uppercase tracking-wider",
+              dataMode === "live"
+                ? "border-emerald-500/40 text-emerald-300 bg-emerald-500/10"
+                : dataMode === "simulated"
+                  ? "border-amber-500/40 text-amber-300 bg-amber-500/10"
+                  : "border-border text-muted-foreground bg-muted/40"
+            )}
+          >
+            {dataMode === "live" ? "Live" : dataMode === "simulated" ? "Simulated" : "Pending bridge"}
+          </Badge>
         </div>
 
         {node.description && (

@@ -11,6 +11,8 @@ import { StrainChart } from "@/components/health/StrainChart";
 import { HrvChart } from "@/components/health/HrvChart";
 import { HealthAISummary } from "@/components/health/HealthAISummary";
 import { HealthRecommendationCard } from "@/components/health/HealthRecommendationCard";
+import { RecoveryTrendChart } from "@/components/health/RecoveryTrendChart";
+import { WhoopFreshness } from "@/components/health/WhoopFreshness";
 import { HealthMetricRing } from "@/components/health/HealthMetricRing";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -348,6 +350,12 @@ const Health = () => {
 
               {/* Recomendación contextual LLM (Whoop + tareas + comida) */}
               <HealthRecommendationCard />
+
+              {/* Tendencia 7d Recovery + HRV */}
+              <RecoveryTrendChart />
+
+              {/* Indicador de frescura + refresh manual */}
+              <WhoopFreshness />
 
               {data.data_date && (
                 <p className="text-center text-xs text-muted-foreground">

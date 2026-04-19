@@ -202,13 +202,34 @@ export default function RedEstrategica() {
     });
   }, [rows, search, rel, health, activity, hasPodcast, podcastIds]);
 
+  // Score real: si ya existe scores.health lo respetamos; si no, derivamos
+  // a partir de frecuencia (interacciones/wa_message_count) + recencia (last_contact).
+  const computeScore = (r: Row): number => {
+    if (typeof r.scores?.health === "number") return r.scores.health;
+    let s = 5;
+    if (r.last_contact) {
+      const days = (Date.now() - new Date(r.last_contact).getTime()) / 86_400_000;
+      if (days <= 7) s += 2;
+      else if (days <= 30) s += 1;
+      else if (days > 90) s -= 2;
+      else if (days > 60) s -= 1;
+    } else {
+      s -= 1;
+    }
+    const msgs = r.wa_message_count || 0;
+    if (msgs > 50) s += 2;
+    else if (msgs > 10) s += 1;
+    return Math.max(0, Math.min(10, s));
+  };
+
   const cards = filtered.map((r) => ({
     id: r.id,
     name: r.name,
     category: r.category,
-    health_score: r.scores?.health ?? 5,
+    health_score: computeScore(r),
     last_topic: r.context,
     has_podcast: podcastIds.has(r.id),
+    last_contact: r.last_contact,
   }));
 
   const hasActiveFilters =

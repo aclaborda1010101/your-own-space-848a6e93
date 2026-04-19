@@ -45,6 +45,8 @@ import { ProfileSelector } from "@/components/dashboard/ProfileSelector";
 import { Loader2, RotateCcw, Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
 import MorningBriefingCard from "@/components/dashboard/MorningBriefingCard";
+import TomorrowBriefCard from "@/components/dashboard/TomorrowBriefCard";
+import { BurnoutBanner } from "@/components/dashboard/BurnoutBanner";
 import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
@@ -236,6 +238,12 @@ const Dashboard = () => {
       {userSettings.show_day_summary !== false && (
         <CommandCenterCard tasks={tasks} events={events} onToggleComplete={toggleComplete} />
       )}
+
+      {/* Banner proactivo de burnout / patrón crónico de recuperación baja */}
+      <BurnoutBanner />
+
+      {/* Brief de mañana (solo después de las 20h) */}
+      <TomorrowBriefCard />
 
       {/* JARVIS Executive Summary — daily LLM brief, cached, manual refresh */}
       <ExecutiveSummaryCard />

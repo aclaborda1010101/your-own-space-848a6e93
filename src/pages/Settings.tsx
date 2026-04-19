@@ -148,6 +148,10 @@ const Settings = () => {
         <NotificationSettings />
       </SettingsSection>
 
+      <SettingsSection icon={<Brain className="h-4 w-4 sm:h-5 sm:w-5" />} title="JARVIS aprendió" description="Patrones detectados y salud de las sugerencias">
+        <JarvisLearningCard />
+      </SettingsSection>
+
       <SettingsSection icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />} title="Consumo de IA" description="Desglose de gasto por modelo, tokens y precio">
         <AICostTrackerCard />
       </SettingsSection>

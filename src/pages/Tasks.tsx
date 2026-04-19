@@ -238,8 +238,6 @@ const Tasks = () => {
             ]}
           />
 
-          </div>
-
           {/* Add Task */}
           <Card className="border-border bg-card">
             <CardContent className="pt-6">

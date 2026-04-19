@@ -214,37 +214,38 @@ export default function ContactDetail() {
           <ArrowLeft className="w-4 h-4 mr-1" /> Volver a la red
         </Button>
 
-        {/* HEADER */}
-        <GlassCard className="p-6 sm:p-8 relative overflow-hidden">
+        {/* HEADER COMPACTO — identidad */}
+        <GlassCard className="p-5 sm:p-6 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-accent/[0.03] pointer-events-none" />
-          <div className="relative flex flex-col lg:flex-row lg:items-center gap-6">
+          <div className="relative flex flex-col sm:flex-row sm:items-center gap-5">
             {/* Avatar + Health */}
-            <div className="flex items-center gap-5 shrink-0">
-              <div className="relative">
-                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-br from-primary/40 via-primary/15 to-accent/10 border border-primary/30 flex items-center justify-center text-3xl sm:text-4xl font-display font-semibold shadow-[0_0_40px_-10px_hsl(var(--primary)/0.5)]">
-                  {initials}
-                </div>
-                <div className="absolute -bottom-1 -right-1 bg-card border-2 border-background rounded-full p-1">
-                  <HealthMeter score={healthScore} size="sm" showLabel={false} />
-                </div>
+            <div className="relative shrink-0">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-primary/40 via-primary/15 to-accent/10 border border-primary/30 flex items-center justify-center text-2xl sm:text-3xl font-display font-semibold shadow-[0_0_40px_-10px_hsl(var(--primary)/0.5)]">
+                {initials}
+              </div>
+              <div className="absolute -bottom-1 -right-1 bg-card border-2 border-background rounded-full p-1">
+                <HealthMeter score={healthScore} size="sm" showLabel={false} />
               </div>
             </div>
 
             {/* Info */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-primary/80 mb-2">
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-primary/80 mb-1.5 font-mono">
                 <Sparkles className="w-3 h-3" />
-                <span>Ficha relacional</span>
+                <span>Red estratégica · Expediente</span>
               </div>
-              <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-medium tracking-tight leading-[1.05]">
+              <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl font-medium tracking-tight leading-[1.05]">
                 {contact.name}
+                {contact.role && (
+                  <span className="text-muted-foreground font-sans font-normal text-lg sm:text-xl ml-2">
+                    / {contact.role}
+                  </span>
+                )}
               </h1>
-              {(contact.role || contact.company) && (
-                <p className="text-sm text-muted-foreground mt-1.5">
-                  {[contact.role, contact.company].filter(Boolean).join(" · ")}
-                </p>
+              {contact.company && (
+                <p className="text-sm text-muted-foreground mt-1">{contact.company}</p>
               )}
-              <div className="flex flex-wrap items-center gap-2 mt-3">
+              <div className="flex flex-wrap items-center gap-2 mt-2.5">
                 {contact.category && (
                   <span className="px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[11px] font-medium">
                     {contact.category}
@@ -260,15 +261,6 @@ export default function ContactDetail() {
                     {t}
                   </span>
                 ))}
-                {contact.last_contact && (
-                  <span className="text-xs text-muted-foreground font-mono">
-                    · último contacto{" "}
-                    {formatDistanceToNow(new Date(contact.last_contact), {
-                      addSuffix: true,
-                      locale: es,
-                    })}
-                  </span>
-                )}
               </div>
             </div>
 
@@ -300,11 +292,82 @@ export default function ContactDetail() {
           </div>
         </GlassCard>
 
-        {/* HEADLINES */}
+        {/* JARVIS SUGIERE — bloque protagonista */}
+        {headlines && (
+          <JarvisSuggestionHero
+            headline={
+              <>
+                {headlines.pending.title.split(/(:|—|·)/)[0]}{" "}
+                <span className="text-success">{headlines.pending.who_owes}</span>.{" "}
+                {headlines.health.trend && (
+                  <span className="text-foreground/80">{headlines.health.trend}</span>
+                )}
+              </>
+            }
+            pretext={headlines.pending.last_mentioned}
+            context={`${headlines.health.relationship_type} — salud relacional ${headlines.health.score}/10 (${headlines.health.label}).`}
+            confidence={Math.round((headlines.health.score / 10) * 100)}
+            priority={healthScore < 4 ? "alta" : healthScore < 7 ? "media" : "baja"}
+            detectedAgo={
+              contact.last_contact
+                ? formatDistanceToNowStrict(new Date(contact.last_contact), { locale: es })
+                : undefined
+            }
+            tags={[
+              contact.category || "personal",
+              totalMessages > 1000 ? "histórico denso" : "activo",
+            ]}
+            onAccept={() => navigate(`/tasks?contact=${contact.id}&suggest=1`)}
+            acceptLabel="Aceptar y agendar"
+            onEvidence={() => {
+              const el = document.getElementById("contact-tabs");
+              el?.scrollIntoView({ behavior: "smooth" });
+            }}
+            evidenceLabel={`Ver evidencia (${totalMessages.toLocaleString("es")} mensajes)`}
+          />
+        )}
+
+        {/* KPI STRIP — datos crudos tipo fichero */}
+        <ContactKpiStrip
+          items={[
+            {
+              label: "Salud relación",
+              value: healthScore,
+              hint: `score · /10`,
+              tone: healthScore >= 7 ? "success" : healthScore >= 4 ? "warning" : "destructive",
+            },
+            {
+              label: "Último contacto",
+              value: contact.last_contact
+                ? formatDistanceToNowStrict(new Date(contact.last_contact), { locale: es })
+                : "—",
+              hint: contact.last_contact
+                ? new Date(contact.last_contact).toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" })
+                : "sin registro",
+              tone: "primary",
+            },
+            {
+              label: "Mensajes totales",
+              value: totalMessages >= 1000
+                ? `${(totalMessages / 1000).toFixed(1)}k`
+                : totalMessages.toString(),
+              hint: "whatsapp",
+              tone: "accent",
+            },
+            {
+              label: "Tier",
+              value: healthScore >= 9 ? "S" : healthScore >= 7 ? "A" : healthScore >= 4 ? "B" : "C",
+              hint: healthScore >= 9 ? "inner circle" : healthScore >= 7 ? "core" : "periphery",
+              tone: "success",
+            },
+          ]}
+        />
+
+        {/* HEADLINES — análisis IA secundario */}
         <div>
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3 px-1">
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3 px-1 font-mono">
             <Activity className="w-3 h-3" />
-            <span>Titulares de IA</span>
+            <span>Análisis profundo</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {hLoading || !headlines ? (
@@ -364,7 +427,7 @@ export default function ContactDetail() {
 
         {/* PODCAST — destacado */}
         <div>
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-primary/80 mb-3 px-1">
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-primary/80 mb-3 px-1 font-mono">
             <Mic className="w-3 h-3" />
             <span>Podcast de la relación</span>
           </div>
@@ -381,7 +444,7 @@ export default function ContactDetail() {
 
 
         {/* DETAIL TABS — toda la información detallada */}
-        <Tabs defaultValue="resumen" className="w-full">
+        <Tabs defaultValue="resumen" className="w-full" id="contact-tabs">
           <TabsList className="grid grid-cols-5 w-full bg-card/40 backdrop-blur-md border border-border h-auto p-1">
             <TabsTrigger value="resumen" className="text-xs sm:text-sm py-2">
               <Sparkles className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" /> Resumen

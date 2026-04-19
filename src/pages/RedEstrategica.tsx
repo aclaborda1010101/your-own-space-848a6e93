@@ -358,6 +358,19 @@ export default function RedEstrategica() {
               <List className="w-4 h-4" />
             </Button>
           </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={refreshHeadlines}
+            disabled={refreshing}
+            className="h-11 rounded-full gap-2 px-4"
+            title="Regenera el análisis de IA (salud, pendientes, temas) de tus contactos favoritos / estratégicos"
+          >
+            <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
+            <span className="hidden sm:inline">
+              {refreshing ? "Actualizando…" : "Actualizar novedades"}
+            </span>
+          </Button>
         </div>
 
         {/* FILTER PILLS */}

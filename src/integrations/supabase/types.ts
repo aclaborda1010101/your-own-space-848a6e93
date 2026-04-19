@@ -5292,6 +5292,7 @@ export type Database = {
           model: string | null
           name: string
           progress: number
+          provider: string | null
           role: string | null
           status: string
           tokens_today: number
@@ -5312,6 +5313,7 @@ export type Database = {
           model?: string | null
           name: string
           progress?: number
+          provider?: string | null
           role?: string | null
           status?: string
           tokens_today?: number
@@ -5332,6 +5334,7 @@ export type Database = {
           model?: string | null
           name?: string
           progress?: number
+          provider?: string | null
           role?: string | null
           status?: string
           tokens_today?: number

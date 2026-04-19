@@ -6,8 +6,16 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { PageHero } from "@/components/ui/PageHero";
 import { useOpenClawHub } from "@/hooks/useOpenClawHub";
+import { NewTaskDialog } from "@/components/openclaw/NewTaskDialog";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
+
+const STATUS_STYLES: Record<string, { dot: string; badge: string; label: string }> = {
+  pending: { dot: "bg-muted-foreground/40", badge: "bg-muted text-muted-foreground border-border", label: "pending" },
+  running: { dot: "bg-primary animate-pulse", badge: "bg-primary/15 text-primary border-primary/30", label: "running" },
+  done:    { dot: "bg-emerald-400", badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30", label: "done" },
+  failed:  { dot: "bg-destructive", badge: "bg-destructive/15 text-destructive border-destructive/30", label: "failed" },
+};
 
 const ONLINE_WINDOW_MS = 5 * 60 * 1000;
 
@@ -17,7 +25,7 @@ function isLive(lastSeen: string | null) {
 }
 
 export default function OpenClawHub() {
-  const { nodes, tasks, loading, refetch } = useOpenClawHub();
+  const { nodes, tasks, loading, refetch, createTask } = useOpenClawHub();
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -58,9 +66,12 @@ export default function OpenClawHub() {
         }
         subtitle="Monitor real de POTUS y TITAN. Telemetría persistente en Supabase."
         actions={
-          <Button variant="outline" size="sm" onClick={handleRefresh} className="rounded-full" disabled={refreshing}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} /> Forzar actualización
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleRefresh} className="rounded-full" disabled={refreshing}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} /> Forzar actualización
+            </Button>
+            <NewTaskDialog nodes={nodes} onCreate={createTask as any} />
+          </div>
         }
         stats={[
           { label: "Nodos online", value: `${onlineCount}/${nodes.length}`, icon: <Server className="w-4 h-4" />, tone: "success" },
@@ -95,8 +106,14 @@ export default function OpenClawHub() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground font-mono">
-                    {(n as any).ip ?? n.host ?? "sin IP"} · {n.model ?? "modelo no definido"}
+                    {(n as any).ip ?? n.host ?? "sin IP"}
                   </p>
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    <Badge variant="secondary" className="text-[10px] uppercase tracking-wider font-mono">
+                      {(n as any).provider ?? "anthropic"}
+                    </Badge>
+                    <span className="text-xs font-mono text-foreground/80">{n.model ?? "—"}</span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-1.5">
                   {live ? (
@@ -165,23 +182,28 @@ export default function OpenClawHub() {
             {recentTasks.map((t) => {
               const node = nodes.find((n) => n.id === t.node_id);
               const logs = (t as any).logs as string | undefined;
+              const desc = (t as any).description as string | undefined;
+              const st = STATUS_STYLES[t.status] ?? STATUS_STYLES.pending;
               return (
                 <div key={t.id} className="py-3 flex items-start gap-3">
-                  <StatusDot status={t.status} />
+                  <div className={`h-2.5 w-2.5 rounded-full mt-2 shrink-0 ${st.dot}`} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium truncate">{t.title}</p>
-                      <span className="text-[10px] text-muted-foreground font-mono shrink-0">
-                        {node?.name ?? "—"} · {t.status}
-                      </span>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-base font-semibold leading-tight truncate">{t.title}</p>
+                      <Badge variant="outline" className={`text-[10px] uppercase tracking-wider font-mono shrink-0 ${st.badge}`}>
+                        {st.label}
+                      </Badge>
                     </div>
+                    {desc && (
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{desc}</p>
+                    )}
                     {logs && (
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 font-mono">
+                      <p className="text-[11px] text-muted-foreground/80 mt-1 line-clamp-2 font-mono">
                         {logs.slice(0, 220)}
                       </p>
                     )}
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {formatDistanceToNow(new Date(t.created_at), { addSuffix: true, locale: es })}
+                    <p className="text-[10px] text-muted-foreground mt-1 font-mono">
+                      {node?.name ?? "—"} · {formatDistanceToNow(new Date(t.created_at), { addSuffix: true, locale: es })}
                     </p>
                   </div>
                 </div>

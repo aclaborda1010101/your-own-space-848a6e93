@@ -54,6 +54,9 @@ interface Contact {
   brain?: string | null;
   relationship?: string | null;
   email?: string | null;
+  scores?: { health?: number } | null;
+  sentiment?: string | null;
+  ai_tags?: string[] | null;
 }
 
 interface MsgRow {

@@ -74,25 +74,21 @@ export const useSignalSuggestions = () => {
     if (!user) return;
     try {
       const c = s.content || {};
-      if (s.suggestion_type === "task_from_signal" || s.suggestion_type === "followup_from_signal" || s.suggestion_type === "outreach_from_signal") {
-        const priorityMap: Record<string, string> = { urgent: "P0", high: "P1", medium: "P2", low: "P3" };
-        await supabase.from("tasks").insert({
-          user_id: user.id,
-          title: c.title || "Tarea sugerida",
-          type: "work",
-          priority: priorityMap[c.priority || "medium"] || "P2",
-          duration: 30,
-          completed: false,
-        });
-      } else if (s.suggestion_type === "meeting_from_signal") {
-        const date = c.date || new Date(Date.now() + 24 * 3600 * 1000).toISOString();
-        await supabase.from("calendar_events").insert({
-          user_id: user.id,
-          title: c.title || "Reunión sugerida",
-          start_time: date,
-          end_time: new Date(new Date(date).getTime() + 60 * 60 * 1000).toISOString(),
-        });
-      }
+      // Todos los tipos de señal aceptados se materializan como tareas en el inbox
+      // del usuario. Las reuniones se marcan con prefijo y fecha para que el usuario
+      // las pase manualmente al calendario externo (iCloud/Google) si quiere.
+      const priorityMap: Record<string, string> = { urgent: "P0", high: "P1", medium: "P2", low: "P3" };
+      const isMeeting = s.suggestion_type === "meeting_from_signal";
+      const titlePrefix = isMeeting ? "📅 " : s.suggestion_type === "outreach_from_signal" ? "📞 " : "";
+      const dateSuffix = isMeeting && c.date ? ` — ${new Date(c.date).toLocaleString("es-ES")}` : "";
+      await supabase.from("tasks").insert({
+        user_id: user.id,
+        title: `${titlePrefix}${c.title || "Sugerencia aceptada"}${dateSuffix}`,
+        type: "work",
+        priority: priorityMap[c.priority || "medium"] || "P2",
+        duration: isMeeting ? 60 : 30,
+        completed: false,
+      });
       await supabase.from("suggestions").update({ status: "accepted" }).eq("id", s.id);
       await logFeedback(s, "accepted");
       setItems((prev) => prev.filter((x) => x.id !== s.id));

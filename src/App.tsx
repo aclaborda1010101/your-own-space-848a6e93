@@ -167,8 +167,9 @@ const App = () => (
                   <Route path="/openclaw/hub" element={<ProtectedPage><OpenClawHub /></ProtectedPage>} />
                   <Route path="/openclaw/legacy" element={<ProtectedPage><OpenClaw /></ProtectedPage>} />
                   <Route path="/openclaw-preview" element={<Suspense fallback={<PageLoader />}><OpenClawPreview /></Suspense>} />
-                  <Route path="/strategic-network" element={<ProtectedPage><StrategicNetwork /></ProtectedPage>} />
+                  <Route path="/strategic-network" element={<Navigate to="/red-estrategica" replace />} />
                   <Route path="/strategic-network/legacy" element={<ProtectedPage><StrategicNetwork /></ProtectedPage>} />
+                  <Route path="/strategic-network/:contactId" element={<ProtectedPage><ContactDetail /></ProtectedPage>} />
                   <Route path="/red-estrategica" element={<ProtectedPage><RedEstrategica /></ProtectedPage>} />
                   <Route path="/red-estrategica/:contactId" element={<ProtectedPage><ContactDetail /></ProtectedPage>} />
                   <Route path="/brains-dashboard" element={<ProtectedPage><BrainsDashboard /></ProtectedPage>} />

@@ -102,7 +102,7 @@ const sections: NavSection[] = [
     defaultOpen: true,
     items: [
       { icon: Upload, label: "Importar", path: "/data-import" },
-      { icon: ContactRound, label: "Red Estratégica", path: "/strategic-network" },
+      { icon: ContactRound, label: "Red Estratégica", path: "/red-estrategica" },
     ],
   },
   {

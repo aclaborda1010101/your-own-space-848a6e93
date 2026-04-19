@@ -8,8 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HeadlineCard } from "@/components/contact/HeadlineCard";
 import { PodcastPlayer } from "@/components/contact/PodcastPlayer";
+import { HealthMeter } from "@/components/contact/HealthMeter";
 import { ConversationTimeline } from "@/components/contact/ConversationTimeline";
-import { ProfileByScope } from "@/components/contact/ProfileByScope";
 import {
   WhatsAppTab,
   EmailTab,
@@ -54,6 +54,9 @@ interface Contact {
   brain?: string | null;
   relationship?: string | null;
   email?: string | null;
+  scores?: { health?: number } | null;
+  sentiment?: string | null;
+  ai_tags?: string[] | null;
 }
 
 interface MsgRow {
@@ -184,32 +187,79 @@ export default function ContactDetail() {
     );
   }
 
+  const healthScore = contact.scores?.health ?? 5;
+  const sentimentCls =
+    contact.sentiment === "positive" ? "bg-success/10 border-success/30 text-success" :
+    contact.sentiment === "negative" ? "bg-destructive/10 border-destructive/30 text-destructive" :
+    "bg-muted/20 border-border text-muted-foreground";
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/red-estrategica")} className="text-muted-foreground">
+    <div className="min-h-screen bg-background relative">
+      {/* Ambient glow */}
+      <div className="absolute inset-x-0 top-0 h-[400px] pointer-events-none overflow-hidden">
+        <div className="absolute -top-32 left-1/4 w-[600px] h-[500px] bg-primary/10 blur-[120px] rounded-full opacity-60" />
+        <div className="absolute top-10 right-10 w-[400px] h-[400px] bg-accent/10 blur-[100px] rounded-full opacity-40" />
+      </div>
+
+      <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate("/red-estrategica")}
+          className="text-muted-foreground hover:text-primary -ml-2"
+        >
           <ArrowLeft className="w-4 h-4 mr-1" /> Volver a la red
         </Button>
 
         {/* HEADER */}
-        <GlassCard className="p-6 sm:p-8">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-5">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-primary/40 to-primary/10 border border-primary/20 flex items-center justify-center text-2xl font-display font-semibold shrink-0">
-              {initials}
+        <GlassCard className="p-6 sm:p-8 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-accent/[0.03] pointer-events-none" />
+          <div className="relative flex flex-col lg:flex-row lg:items-center gap-6">
+            {/* Avatar + Health */}
+            <div className="flex items-center gap-5 shrink-0">
+              <div className="relative">
+                <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-br from-primary/40 via-primary/15 to-accent/10 border border-primary/30 flex items-center justify-center text-3xl sm:text-4xl font-display font-semibold shadow-[0_0_40px_-10px_hsl(var(--primary)/0.5)]">
+                  {initials}
+                </div>
+                <div className="absolute -bottom-1 -right-1 bg-card border-2 border-background rounded-full p-1">
+                  <HealthMeter score={healthScore} size="sm" showLabel={false} />
+                </div>
+              </div>
             </div>
+
+            {/* Info */}
             <div className="flex-1 min-w-0">
-              <h1 className="font-serif text-3xl sm:text-4xl font-medium tracking-tight">
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-primary/80 mb-2">
+                <Sparkles className="w-3 h-3" />
+                <span>Ficha relacional</span>
+              </div>
+              <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl font-medium tracking-tight leading-[1.05]">
                 {contact.name}
               </h1>
-              <div className="text-sm text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
+              {(contact.role || contact.company) && (
+                <p className="text-sm text-muted-foreground mt-1.5">
+                  {[contact.role, contact.company].filter(Boolean).join(" · ")}
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-2 mt-3">
                 {contact.category && (
-                  <span className="px-2 py-0.5 rounded-full bg-primary/10 border border-primary/30 text-primary text-xs">
+                  <span className="px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[11px] font-medium">
                     {contact.category}
                   </span>
                 )}
+                {contact.sentiment && (
+                  <span className={`px-2.5 py-1 rounded-full border text-[11px] font-medium capitalize ${sentimentCls}`}>
+                    {contact.sentiment}
+                  </span>
+                )}
+                {contact.ai_tags?.slice(0, 3).map((t) => (
+                  <span key={t} className="px-2.5 py-1 rounded-full bg-card/50 border border-border text-muted-foreground text-[11px]">
+                    {t}
+                  </span>
+                ))}
                 {contact.last_contact && (
-                  <span>
-                    Último contacto{" "}
+                  <span className="text-xs text-muted-foreground font-mono">
+                    · último contacto{" "}
                     {formatDistanceToNow(new Date(contact.last_contact), {
                       addSuffix: true,
                       locale: es,
@@ -218,17 +268,19 @@ export default function ContactDetail() {
                 )}
               </div>
             </div>
+
+            {/* Actions */}
             <div className="flex items-center gap-2 flex-wrap">
               {phone && (
                 <a href={`tel:${phone}`}>
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" className="rounded-full">
                     <Phone className="w-4 h-4 mr-2" /> Llamar
                   </Button>
                 </a>
               )}
               {phone && (
                 <a href={`https://wa.me/${phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer">
-                  <Button variant="outline" size="sm">
+                  <Button size="sm" className="rounded-full">
                     <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
                   </Button>
                 </a>
@@ -236,6 +288,7 @@ export default function ContactDetail() {
               <Button
                 variant="outline"
                 size="sm"
+                className="rounded-full"
                 onClick={() => navigate(`/tasks?contact=${contact.id}`)}
               >
                 <Bell className="w-4 h-4 mr-2" /> Recordatorio
@@ -245,71 +298,84 @@ export default function ContactDetail() {
         </GlassCard>
 
         {/* HEADLINES */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {hLoading || !headlines ? (
-            <>
-              {[0, 1, 2].map((i) => (
-                <GlassCard key={i} className="p-6 h-[180px] animate-pulse">
-                  <div className="h-3 w-24 bg-white/10 rounded mb-3" />
-                  <div className="h-7 w-32 bg-white/10 rounded mb-2" />
-                  <div className="h-3 w-full bg-white/5 rounded mb-1" />
-                  <div className="h-3 w-3/4 bg-white/5 rounded" />
-                </GlassCard>
-              ))}
-            </>
-          ) : (
-            <>
-              <HeadlineCard
-                label="Relación y salud"
-                icon={<Activity className="w-4 h-4" />}
-                accent="success"
-                value={
-                  <span>
-                    <span className="font-mono">{headlines.health.score}/10</span>{" "}
-                    · {headlines.health.label}
-                  </span>
-                }
-                line2={headlines.health.relationship_type}
-                line3={headlines.health.trend}
-              />
-              <HeadlineCard
-                label="Asunto pendiente"
-                icon={<AlertCircle className="w-4 h-4" />}
-                accent="warning"
-                value={headlines.pending.title}
-                line2={`Mover ficha: ${headlines.pending.who_owes}`}
-                line3={`Última mención: ${headlines.pending.last_mentioned}`}
-              />
-              <HeadlineCard
-                label="Temas y tono"
-                icon={<MessageSquare className="w-4 h-4" />}
-                value={
-                  <span>
-                    <span className="mr-2 text-2xl">{headlines.topics.tone_emoji}</span>
-                    {headlines.topics.tone_label}
-                  </span>
-                }
-                line2={
-                  headlines.topics.top_topics
-                    .map((t) => `${t.name} ${t.percentage}%`)
-                    .join(" · ") || "—"
-                }
-                line3={headlines.topics.tone_evolution}
-              />
-            </>
-          )}
+        <div>
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3 px-1">
+            <Activity className="w-3 h-3" />
+            <span>Titulares de IA</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {hLoading || !headlines ? (
+              <>
+                {[0, 1, 2].map((i) => (
+                  <GlassCard key={i} className="p-6 h-[180px] animate-pulse">
+                    <div className="h-3 w-24 bg-white/10 rounded mb-3" />
+                    <div className="h-7 w-32 bg-white/10 rounded mb-2" />
+                    <div className="h-3 w-full bg-white/5 rounded mb-1" />
+                    <div className="h-3 w-3/4 bg-white/5 rounded" />
+                  </GlassCard>
+                ))}
+              </>
+            ) : (
+              <>
+                <HeadlineCard
+                  label="Relación y salud"
+                  icon={<Activity className="w-4 h-4" />}
+                  accent="success"
+                  value={
+                    <span>
+                      <span className="font-mono">{headlines.health.score}/10</span>{" "}
+                      · {headlines.health.label}
+                    </span>
+                  }
+                  line2={headlines.health.relationship_type}
+                  line3={headlines.health.trend}
+                />
+                <HeadlineCard
+                  label="Asunto pendiente"
+                  icon={<AlertCircle className="w-4 h-4" />}
+                  accent="warning"
+                  value={headlines.pending.title}
+                  line2={`Mover ficha: ${headlines.pending.who_owes}`}
+                  line3={`Última mención: ${headlines.pending.last_mentioned}`}
+                />
+                <HeadlineCard
+                  label="Temas y tono"
+                  icon={<MessageSquare className="w-4 h-4" />}
+                  value={
+                    <span>
+                      <span className="mr-2 text-2xl">{headlines.topics.tone_emoji}</span>
+                      {headlines.topics.tone_label}
+                    </span>
+                  }
+                  line2={
+                    headlines.topics.top_topics
+                      .map((t) => `${t.name} ${t.percentage}%`)
+                      .join(" · ") || "—"
+                  }
+                  line3={headlines.topics.tone_evolution}
+                />
+              </>
+            )}
+          </div>
         </div>
 
-        {/* PODCAST */}
-        <PodcastPlayer
-          podcast={podcast}
-          segment={segment}
-          busy={busy}
-          totalMessages={totalMessages}
-          contactName={contact.name}
-          onRegenerate={(opts) => regenerate(opts)}
-          onSetFormat={setFormat}
-        />
+        {/* PODCAST — destacado */}
+        <div>
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-primary/80 mb-3 px-1">
+            <Mic className="w-3 h-3" />
+            <span>Podcast de la relación</span>
+          </div>
+          <PodcastPlayer
+            podcast={podcast}
+            segment={segment}
+            busy={busy}
+            totalMessages={totalMessages}
+            contactName={contact.name}
+            onRegenerate={(opts) => regenerate(opts)}
+            onSetFormat={setFormat}
+          />
+        </div>
+
 
         {/* DETAIL TABS — toda la información detallada */}
         <Tabs defaultValue="resumen" className="w-full">

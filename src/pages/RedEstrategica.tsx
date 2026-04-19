@@ -5,15 +5,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { ContactCard } from "@/components/contact/ContactCard";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Loader2, Search, LayoutGrid, List, Network } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  Loader2,
+  Search,
+  LayoutGrid,
+  List,
+  Network,
+  Users,
+  Headphones,
+  Activity,
+  AlertTriangle,
+  Sparkles,
+} from "lucide-react";
 
 interface Row {
   id: string;
@@ -27,10 +32,72 @@ interface Row {
   in_strategic_network: boolean | null;
 }
 
-type ViewMode = "cards" | "list" | "map";
+type ViewMode = "cards" | "list";
 type RelFilter = "all" | "profesional" | "personal" | "familiar" | "otro";
 type HealthFilter = "all" | "critical" | "attention" | "ok" | "strong";
 type ActivityFilter = "all" | "week" | "month" | "dormant";
+
+interface PillProps {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  tone?: "default" | "warning" | "success" | "primary";
+}
+
+function Pill({ active, onClick, children, tone = "default" }: PillProps) {
+  const toneCls = {
+    default: "border-border/60 hover:border-primary/40 hover:text-primary",
+    primary: "border-primary/30 hover:border-primary/60 hover:text-primary",
+    warning: "border-warning/30 hover:border-warning/60 hover:text-warning",
+    success: "border-success/30 hover:border-success/60 hover:text-success",
+  }[tone];
+  const activeCls = {
+    default: "bg-primary/15 border-primary/50 text-primary shadow-[0_0_16px_-4px_hsl(var(--primary)/0.5)]",
+    primary: "bg-primary/15 border-primary/50 text-primary shadow-[0_0_16px_-4px_hsl(var(--primary)/0.5)]",
+    warning: "bg-warning/15 border-warning/50 text-warning shadow-[0_0_16px_-4px_hsl(var(--warning)/0.5)]",
+    success: "bg-success/15 border-success/50 text-success shadow-[0_0_16px_-4px_hsl(var(--success)/0.5)]",
+  }[tone];
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "px-3 py-1.5 rounded-full text-xs font-medium border bg-card/30 backdrop-blur-md transition-all duration-200",
+        active ? activeCls : cn("text-muted-foreground", toneCls),
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+interface KpiProps {
+  label: string;
+  value: number | string;
+  hint?: string;
+  icon: React.ReactNode;
+  tone?: "primary" | "warning" | "success" | "accent";
+}
+
+function Kpi({ label, value, hint, icon, tone = "primary" }: KpiProps) {
+  const toneCls = {
+    primary: "text-primary border-primary/30 shadow-[0_0_24px_-8px_hsl(var(--primary)/0.4)]",
+    warning: "text-warning border-warning/30 shadow-[0_0_24px_-8px_hsl(var(--warning)/0.4)]",
+    success: "text-success border-success/30 shadow-[0_0_24px_-8px_hsl(var(--success)/0.4)]",
+    accent: "text-accent border-accent/30 shadow-[0_0_24px_-8px_hsl(var(--accent)/0.4)]",
+  }[tone];
+  return (
+    <GlassCard className={cn("p-5 border", toneCls)}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground font-medium">
+          {label}
+        </span>
+        <span className="opacity-80">{icon}</span>
+      </div>
+      <div className="font-display text-3xl font-semibold leading-none">{value}</div>
+      {hint && <div className="text-xs text-muted-foreground mt-1.5">{hint}</div>}
+    </GlassCard>
+  );
+}
 
 export default function RedEstrategica() {
   const { user } = useAuth();
@@ -85,6 +152,27 @@ export default function RedEstrategica() {
     }
   }
 
+  // ── KPIs ──
+  const kpis = useMemo(() => {
+    const now = Date.now();
+    let activeWeek = 0;
+    let critical = 0;
+    rows.forEach((r) => {
+      if (r.last_contact) {
+        const days = (now - new Date(r.last_contact).getTime()) / (1000 * 60 * 60 * 24);
+        if (days <= 7) activeWeek++;
+      }
+      const s = r.scores?.health ?? 5;
+      if (s < 4) critical++;
+    });
+    return {
+      total: rows.length,
+      activeWeek,
+      critical,
+      podcasts: podcastIds.size,
+    };
+  }, [rows, podcastIds]);
+
   const filtered = useMemo(() => {
     const now = Date.now();
     return rows.filter((r) => {
@@ -123,141 +211,193 @@ export default function RedEstrategica() {
     has_podcast: podcastIds.has(r.id),
   }));
 
+  const hasActiveFilters =
+    rel !== "all" || health !== "all" || activity !== "all" || hasPodcast !== "all" || search.trim() !== "";
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10 space-y-8">
-        {/* Hero */}
-        <div className="space-y-2">
-          <h1 className="font-display font-semibold text-3xl sm:text-4xl tracking-tight">
-            Tu red estratégica
+    <div className="min-h-screen bg-background relative">
+      {/* Ambient glow */}
+      <div className="absolute inset-x-0 top-0 h-[420px] pointer-events-none overflow-hidden">
+        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-primary/10 blur-[120px] rounded-full opacity-60" />
+        <div className="absolute top-20 right-1/4 w-[400px] h-[400px] bg-accent/10 blur-[100px] rounded-full opacity-40" />
+      </div>
+
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
+        {/* HERO */}
+        <header className="space-y-3">
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-primary/80">
+            <Sparkles className="w-3 h-3" />
+            <span>Inteligencia relacional</span>
+          </div>
+          <h1 className="font-display font-semibold text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-[1.05]">
+            Tu red <span className="italic font-serif text-primary">estratégica</span>
           </h1>
-          <p className="text-muted-foreground">
-            <span className="font-mono text-foreground">{rows.length}</span> contactos
-            {" · "}
-            <span className="font-mono text-foreground">{cards.length}</span> mostrados
-            {" · "}
-            <span className="font-mono text-primary">{podcastIds.size}</span> con podcast
+          <p className="text-muted-foreground max-w-2xl text-sm sm:text-base">
+            Cada persona, cada conversación, cada oportunidad. Visualiza, prioriza y actúa
+            con contexto completo de IA.
           </p>
+        </header>
+
+        {/* KPIs */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <Kpi
+            label="Contactos"
+            value={kpis.total}
+            hint="en tu red"
+            icon={<Users className="w-4 h-4" />}
+            tone="primary"
+          />
+          <Kpi
+            label="Activos 7d"
+            value={kpis.activeWeek}
+            hint="con actividad reciente"
+            icon={<Activity className="w-4 h-4" />}
+            tone="success"
+          />
+          <Kpi
+            label="Críticos"
+            value={kpis.critical}
+            hint="requieren atención"
+            icon={<AlertTriangle className="w-4 h-4" />}
+            tone="warning"
+          />
+          <Kpi
+            label="Podcasts"
+            value={kpis.podcasts}
+            hint="relaciones audiables"
+            icon={<Headphones className="w-4 h-4" />}
+            tone="accent"
+          />
         </div>
 
-        {/* Filters bar */}
-        <GlassCard className="p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nombre…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            <Select value={rel} onValueChange={(v) => setRel(v as RelFilter)}>
-              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Relación" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Toda relación</SelectItem>
-                <SelectItem value="profesional">Profesional</SelectItem>
-                <SelectItem value="personal">Personal</SelectItem>
-                <SelectItem value="familiar">Familia</SelectItem>
-                <SelectItem value="otro">Otro</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={health} onValueChange={(v) => setHealth(v as HealthFilter)}>
-              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Salud" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Toda salud</SelectItem>
-                <SelectItem value="critical">Crítica (&lt;4)</SelectItem>
-                <SelectItem value="attention">Atención (4-6)</SelectItem>
-                <SelectItem value="ok">Sana (7-8)</SelectItem>
-                <SelectItem value="strong">Fuerte (9-10)</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={activity} onValueChange={(v) => setActivity(v as ActivityFilter)}>
-              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Actividad" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Toda actividad</SelectItem>
-                <SelectItem value="week">Esta semana</SelectItem>
-                <SelectItem value="month">Este mes</SelectItem>
-                <SelectItem value="dormant">Dormidos &gt;30d</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={hasPodcast} onValueChange={(v) => setHasPodcast(v as "all" | "yes" | "no")}>
-              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Podcast" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todo</SelectItem>
-                <SelectItem value="yes">Con podcast</SelectItem>
-                <SelectItem value="no">Sin podcast</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <div className="flex items-center gap-1 ml-auto p-1 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-              <Button size="sm" variant={view === "cards" ? "default" : "ghost"} onClick={() => setView("cards")} className="h-8 w-8 p-0">
-                <LayoutGrid className="w-4 h-4" />
-              </Button>
-              <Button size="sm" variant={view === "list" ? "default" : "ghost"} onClick={() => setView("list")} className="h-8 w-8 p-0">
-                <List className="w-4 h-4" />
-              </Button>
-              <Button size="sm" variant={view === "map" ? "default" : "ghost"} onClick={() => setView("map")} className="h-8 w-8 p-0">
-                <Network className="w-4 h-4" />
-              </Button>
-            </div>
+        {/* SEARCH + VIEW */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[260px]">
+            <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar contacto…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-11 h-11 bg-card/40 backdrop-blur-xl border-border/60 focus:border-primary/50 rounded-full"
+            />
           </div>
-        </GlassCard>
+          <div className="flex items-center gap-1 p-1 rounded-full bg-card/40 backdrop-blur-xl border border-border/60">
+            <Button
+              size="sm"
+              variant={view === "cards" ? "default" : "ghost"}
+              onClick={() => setView("cards")}
+              className="h-9 w-9 p-0 rounded-full"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant={view === "list" ? "default" : "ghost"}
+              onClick={() => setView("list")}
+              className="h-9 w-9 p-0 rounded-full"
+            >
+              <List className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
 
-        {/* Body */}
+        {/* FILTER PILLS */}
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70 mr-1">Relación</span>
+            <Pill active={rel === "all"} onClick={() => setRel("all")}>Todas</Pill>
+            <Pill active={rel === "profesional"} onClick={() => setRel("profesional")}>Profesional</Pill>
+            <Pill active={rel === "personal"} onClick={() => setRel("personal")}>Personal</Pill>
+            <Pill active={rel === "familiar"} onClick={() => setRel("familiar")}>Familia</Pill>
+            <Pill active={rel === "otro"} onClick={() => setRel("otro")}>Otro</Pill>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70 mr-1">Salud</span>
+            <Pill active={health === "all"} onClick={() => setHealth("all")}>Toda</Pill>
+            <Pill tone="warning" active={health === "critical"} onClick={() => setHealth("critical")}>Crítica</Pill>
+            <Pill tone="warning" active={health === "attention"} onClick={() => setHealth("attention")}>Atención</Pill>
+            <Pill tone="success" active={health === "ok"} onClick={() => setHealth("ok")}>Sana</Pill>
+            <Pill tone="success" active={health === "strong"} onClick={() => setHealth("strong")}>Fuerte</Pill>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70 mr-1">Actividad</span>
+            <Pill active={activity === "all"} onClick={() => setActivity("all")}>Toda</Pill>
+            <Pill active={activity === "week"} onClick={() => setActivity("week")}>7 días</Pill>
+            <Pill active={activity === "month"} onClick={() => setActivity("month")}>30 días</Pill>
+            <Pill tone="warning" active={activity === "dormant"} onClick={() => setActivity("dormant")}>Dormidos</Pill>
+            <span className="w-px h-4 bg-border/60 mx-1" />
+            <Pill tone="primary" active={hasPodcast === "yes"} onClick={() => setHasPodcast(hasPodcast === "yes" ? "all" : "yes")}>
+              <span className="flex items-center gap-1"><Headphones className="w-3 h-3" /> Con podcast</span>
+            </Pill>
+          </div>
+          {hasActiveFilters && (
+            <div className="flex items-center gap-2 pt-1">
+              <span className="text-xs text-muted-foreground font-mono">
+                {cards.length} de {rows.length}
+              </span>
+              <button
+                onClick={() => {
+                  setSearch(""); setRel("all"); setHealth("all"); setActivity("all"); setHasPodcast("all");
+                }}
+                className="text-xs text-primary hover:underline"
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* BODY */}
         {loading ? (
-          <div className="flex items-center justify-center py-20 text-muted-foreground">
+          <div className="flex items-center justify-center py-24 text-muted-foreground">
             <Loader2 className="w-6 h-6 animate-spin mr-2" />
             Cargando red…
           </div>
         ) : view === "cards" ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {cards.map((c) => (
               <ContactCard key={c.id} contact={c} onClick={() => navigate(`/red-estrategica/${c.id}`)} />
             ))}
             {cards.length === 0 && (
-              <div className="col-span-full text-center text-muted-foreground py-12">
-                Sin resultados con esos filtros.
+              <div className="col-span-full">
+                <GlassCard className="p-12 text-center">
+                  <Network className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+                  <p className="text-muted-foreground">Sin resultados con esos filtros.</p>
+                </GlassCard>
               </div>
             )}
           </div>
-        ) : view === "list" ? (
+        ) : (
           <GlassCard className="overflow-hidden">
-            <div className="divide-y divide-white/[0.06]">
+            <div className="divide-y divide-border/40">
               {cards.map((c) => (
                 <button
                   key={c.id}
                   onClick={() => navigate(`/red-estrategica/${c.id}`)}
-                  className="w-full px-5 py-3 flex items-center gap-4 hover:bg-white/[0.03] transition text-left"
+                  className="w-full px-5 py-3.5 flex items-center gap-4 hover:bg-primary/5 transition text-left group"
                 >
-                  <div className="w-9 h-9 rounded-full bg-primary/15 border border-primary/20 flex items-center justify-center text-xs font-semibold font-display">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary/30 to-primary/5 border border-primary/20 flex items-center justify-center text-xs font-semibold font-display group-hover:border-primary/50 transition">
                     {c.name.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("")}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{c.name}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {c.category || "—"} · Salud {c.health_score}/10
+                    <div className="font-medium truncate group-hover:text-primary transition">{c.name}</div>
+                    <div className="text-xs text-muted-foreground truncate font-mono">
+                      {c.category || "—"} · salud {c.health_score}/10
                       {c.has_podcast && " · 🎧"}
                     </div>
                   </div>
+                  <div
+                    className={cn(
+                      "w-2 h-2 rounded-full",
+                      c.health_score >= 7 ? "bg-success" : c.health_score >= 4 ? "bg-warning" : "bg-destructive",
+                    )}
+                  />
                 </button>
               ))}
               {cards.length === 0 && (
                 <div className="text-center text-muted-foreground py-12">Sin resultados.</div>
               )}
             </div>
-          </GlassCard>
-        ) : (
-          <GlassCard className="p-12 text-center">
-            <Network className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-            <h3 className="font-display font-semibold text-lg mb-1">Mapa de red</h3>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Visualización gráfica de tu red próximamente. Por ahora usa Tarjetas o Lista densa.
-            </p>
           </GlassCard>
         )}
       </div>

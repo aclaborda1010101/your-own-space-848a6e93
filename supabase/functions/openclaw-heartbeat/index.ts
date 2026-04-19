@@ -2,15 +2,30 @@
 // Marca el nodo como bridge_live=true en cuanto reporta por aquí.
 //
 // POST /openclaw-heartbeat
-// Body: {
-//   node_name: "POTUS" | "TITAN",
-//   user_id: string,                       // a qué usuario pertenece este nodo
-//   model?: string,                        // opcional: modelo activo reportado por el nodo
-//   tokens_used?: number,                  // tokens consumidos en este ciclo
-//   status?: "online" | "idle" | "running",
+// Body (contrato extendido):
+// {
+//   // Identificación del nodo (acepta cualquiera de las dos formas):
+//   node_id?: string,             // = name del nodo ("POTUS" | "TITAN")
+//   node_name?: string,           // alias de node_id (compat)
+//   user_id: string,              // a qué usuario pertenece este nodo
+//
+//   // Telemetría:
+//   status?: "online" | "idle" | "running" | "offline",
+//   model?: string,
+//   tokens_used?: number,         // delta a sumar a tokens_today / tokens_total
+//   tokens_today?: number,        // alternativo: valor absoluto del día
+//   active_tasks?: number,        // nº de tareas activas reportadas
+//   active_task?: string,         // título de la tarea activa
+//   progress?: number,            // 0..100
+//   last_seen?: string,           // ISO opcional; si falta usamos now()
+//
+//   // Logging opcional:
 //   log?: { task_id?: string, level?: "info"|"warn"|"error", message: string, output?: string },
-//   secret: string                         // shared secret OPENCLAW_BRIDGE_SECRET
+//
+//   // Auth:
+//   secret: string                // shared secret OPENCLAW_BRIDGE_SECRET
 // }
+//
 // Idempotente. Sin auth de usuario (los nodos son procesos físicos, no usuarios web).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
@@ -19,6 +34,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 Deno.serve(async (req) => {
@@ -29,11 +45,17 @@ Deno.serve(async (req) => {
   try {
     const body = await req.json();
     const {
+      node_id,
       node_name,
       user_id,
       model,
       tokens_used = 0,
+      tokens_today: tokensTodayAbs,
       status = "online",
+      active_tasks,
+      active_task,
+      progress,
+      last_seen,
       log,
       secret,
     } = body ?? {};
@@ -42,8 +64,9 @@ Deno.serve(async (req) => {
     if (!expected || secret !== expected) {
       return json({ error: "unauthorized" }, 401);
     }
-    if (!node_name || !user_id) {
-      return json({ error: "node_name and user_id required" }, 400);
+    const name = node_id || node_name;
+    if (!name || !user_id) {
+      return json({ error: "node_id (or node_name) and user_id required" }, 400);
     }
 
     const sb = createClient(
@@ -56,29 +79,42 @@ Deno.serve(async (req) => {
       .from("openclaw_nodes")
       .select("*")
       .eq("user_id", user_id)
-      .eq("name", node_name)
+      .eq("name", name)
       .maybeSingle();
 
     if (nErr) return json({ error: nErr.message }, 500);
-    if (!node) return json({ error: `node ${node_name} not found for user` }, 404);
+    if (!node) return json({ error: `node ${name} not found for user` }, 404);
 
-    // 2) Calcular tokens hoy
+    // 2) Calcular tokens hoy (acepta delta o absoluto)
     const today = new Date().toISOString().slice(0, 10);
     const tokensTodayBase =
       node.tokens_today_date === today ? node.tokens_today : 0;
+    const newTokensToday =
+      typeof tokensTodayAbs === "number"
+        ? tokensTodayAbs
+        : tokensTodayBase + tokens_used;
+    const tokensDelta = Math.max(0, newTokensToday - tokensTodayBase);
 
     // 3) Update con marca bridge_live=true (esto es lo que la UI lee como Live)
     const newMetadata = { ...(node.metadata || {}), bridge_live: true, last_source: "bridge" };
+    const seenAt = last_seen ? new Date(last_seen).toISOString() : new Date().toISOString();
     const update: Record<string, unknown> = {
       status,
-      last_seen_at: new Date().toISOString(),
-      tokens_today: tokensTodayBase + tokens_used,
+      last_seen_at: seenAt,
+      tokens_today: newTokensToday,
       tokens_today_date: today,
-      tokens_total: (node.tokens_total || 0) + tokens_used,
+      tokens_total: (node.tokens_total || 0) + tokensDelta,
       metadata: newMetadata,
     };
-    // Solo actualizamos modelo si el nodo lo reporta — y guardamos el anterior por trazabilidad.
-    // (No se sobreescribe sin permiso si el usuario eligió uno: el bridge puede mandarlo o no.)
+    if (typeof active_tasks === "number") {
+      newMetadata.active_tasks = active_tasks;
+    }
+    if (typeof active_task === "string") {
+      update.active_task = active_task;
+    }
+    if (typeof progress === "number") {
+      update.progress = Math.max(0, Math.min(100, Math.round(progress)));
+    }
     if (model && model !== node.model) {
       update.model = model;
       newMetadata.previous_model = node.model;
@@ -100,14 +136,14 @@ Deno.serve(async (req) => {
         status: log.level === "error" ? "failed" : "done",
         source: "bridge_live",
         model_used: model ?? node.model,
-        tokens_used,
+        tokens_used: tokensDelta,
         output: log.output ?? log.message,
         error: log.level === "error" ? log.message : null,
         finished_at: new Date().toISOString(),
       });
     }
 
-    return json({ ok: true, node_id: node.id, bridge_live: true });
+    return json({ ok: true, node_id: node.id, name: node.name, bridge_live: true });
   } catch (e) {
     return json({ error: String(e) }, 500);
   }

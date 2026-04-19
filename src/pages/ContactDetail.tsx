@@ -85,9 +85,36 @@ export default function ContactDetail() {
   const [loading, setLoading] = useState(true);
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+  const [refreshingProfile, setRefreshingProfile] = useState(false);
+  const [activeScope, setActiveScope] = useState<"profesional" | "personal" | "familiar">("profesional");
 
   const { payload: headlines, loading: hLoading } = useContactHeadlines(contactId || null);
   const { podcast, segment, busy, regenerate, setFormat } = useContactPodcast(contactId || null);
+  const { profile, allContacts, contactLinks, linkContact, ignoreContact, reload: reloadProfile } =
+    useContactProfile(contactId, user?.id);
+
+  async function refreshProfile() {
+    if (!contactId || !user || refreshingProfile) return;
+    setRefreshingProfile(true);
+    const tId = toast.loading("Reanalizando perfil…", { description: "Tarda 30-90s." });
+    try {
+      const { error } = await supabase.functions.invoke("contact-analysis", {
+        body: {
+          contact_id: contactId,
+          user_id: user.id,
+          scopes: ["profesional", "personal", "familiar"],
+          include_historical: false,
+        },
+      });
+      if (error) throw error;
+      toast.success("Perfil actualizado", { id: tId });
+      await Promise.all([load(), reloadProfile()]);
+    } catch (e) {
+      toast.error("No se pudo actualizar", { id: tId, description: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setRefreshingProfile(false);
+    }
+  }
 
   useEffect(() => {
     if (!contactId || !user) return;

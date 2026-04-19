@@ -1,5 +1,6 @@
 // Daily Context Brief — generates LLM-driven contextual recommendations
-// for health and nutrition, cached 1x/day per scope. Force=true regenerates.
+// for health, nutrition, and tomorrow's plan. Cached 1x/day per scope.
+// Force=true regenerates.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
@@ -38,7 +39,7 @@ Deno.serve(async (req) => {
     const scope = (body.scope || url.searchParams.get("scope") || "health") as string;
     const force = body.force === true || url.searchParams.get("force") === "true";
 
-    if (!["health", "nutrition"].includes(scope)) {
+    if (!["health", "nutrition", "tomorrow"].includes(scope)) {
       return json({ error: "Invalid scope" }, 400);
     }
 
@@ -54,32 +55,62 @@ Deno.serve(async (req) => {
         .eq("brief_date", today)
         .maybeSingle();
       if (cached?.content) {
-        return json({
+        const payload: Record<string, unknown> = {
           content: cached.content,
           generated_at: cached.generated_at,
           cached: true,
-        });
+        };
+        if (scope === "tomorrow") {
+          try { payload.brief = JSON.parse(cached.content); } catch { /* fall through */ }
+        }
+        return json(payload);
       }
     }
 
-    // Gather context (Whoop from both sources, tasks, recent meals)
-    const [whoopJ, whoopW, tasksRes, mealsRes, prefsRes] = await Promise.all([
+    // Tomorrow date string
+    const tomorrowDate = new Date();
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const tomorrowStr = tomorrowDate.toISOString().slice(0, 10);
+
+    // Gather context (Whoop, tasks, meals, calendar for tomorrow, recent plaud)
+    const calendarFetch =
+      scope === "tomorrow"
+        ? sb.from("calendar_events")
+            .select("title, start_time, end_time, location")
+            .eq("user_id", user.id)
+            .gte("start_time", `${tomorrowStr}T00:00:00`)
+            .lte("start_time", `${tomorrowStr}T23:59:59`)
+            .order("start_time", { ascending: true })
+            .limit(15)
+        : Promise.resolve({ data: [] as any[] });
+
+    const plaudFetch =
+      scope === "tomorrow"
+        ? sb.from("plaud_transcriptions")
+            .select("title, summary, received_at")
+            .eq("user_id", user.id)
+            .order("received_at", { ascending: false })
+            .limit(5)
+        : Promise.resolve({ data: [] as any[] });
+
+    const [whoopJ, whoopW, tasksRes, mealsRes, prefsRes, calRes, plaudRes] = await Promise.all([
       sb.from("jarvis_whoop_data")
         .select("recovery_score, hrv, sleep_hours, strain, sleep_performance, resting_hr, data_date")
         .eq("user_id", user.id).order("data_date", { ascending: false }).limit(7),
       sb.from("whoop_data")
         .select("recovery_score, hrv, sleep_hours, strain, sleep_performance, resting_hr, data_date")
         .eq("user_id", user.id).order("data_date", { ascending: false }).limit(7),
-      sb.from("tasks").select("title, priority, type, completed, created_at")
+      sb.from("tasks").select("title, priority, type, completed, created_at, due_date")
         .eq("user_id", user.id).eq("completed", false)
         .in("priority", ["P0", "P1"]).order("created_at", { ascending: false }).limit(10),
       sb.from("meal_history").select("meal_type, meal_name, recipe_data, was_completed, energy_after, date")
         .eq("user_id", user.id).order("date", { ascending: false }).limit(20),
       sb.from("nutrition_preferences").select("diet_type, goals, calories_target, proteins_target, carbs_target, fats_target, restrictions, allergies")
         .eq("user_id", user.id).maybeSingle(),
+      calendarFetch,
+      plaudFetch,
     ]);
 
-    // Pick latest Whoop with metrics from either source
     const allWhoop = [...(whoopJ.data || []), ...(whoopW.data || [])]
       .filter(r => r.recovery_score != null || r.hrv != null || r.sleep_hours != null)
       .sort((a, b) => (b.data_date || "").localeCompare(a.data_date || ""));
@@ -89,18 +120,22 @@ Deno.serve(async (req) => {
     const tasks = tasksRes.data || [];
     const meals = mealsRes.data || [];
     const prefs = prefsRes.data;
+    const calEvents = (calRes as any).data || [];
+    const plaud = (plaudRes as any).data || [];
 
-    // Build prompt
     const whoopBlock = latestWhoop
       ? `RECOVERY: ${latestWhoop.recovery_score ?? "—"}%, HRV: ${latestWhoop.hrv ?? "—"}ms, SUEÑO: ${latestWhoop.sleep_hours ?? "—"}h, STRAIN: ${latestWhoop.strain ?? "—"}, FC reposo: ${latestWhoop.resting_hr ?? "—"}, fecha: ${latestWhoop.data_date}`
       : "Sin datos Whoop recientes";
 
-    const trendBlock = recentWhoop.length > 1
-      ? `Tendencia 7d: recovery promedio ${Math.round(recentWhoop.reduce((s, r) => s + (r.recovery_score || 0), 0) / recentWhoop.filter(r => r.recovery_score != null).length || 0)}%, strain promedio ${(recentWhoop.reduce((s, r) => s + Number(r.strain || 0), 0) / recentWhoop.filter(r => r.strain != null).length || 0).toFixed(1)}`
-      : "";
+    const recoveryAvg = (() => {
+      const arr = recentWhoop.filter(r => r.recovery_score != null);
+      if (!arr.length) return null;
+      return Math.round(arr.reduce((s, r) => s + (r.recovery_score || 0), 0) / arr.length);
+    })();
+    const trendBlock = recoveryAvg != null ? `Tendencia 7d recovery promedio: ${recoveryAvg}%` : "";
 
     const tasksBlock = tasks.length > 0
-      ? `Tareas críticas pendientes (${tasks.length}): ${tasks.slice(0, 5).map(t => `[${t.priority}] ${t.title}`).join("; ")}`
+      ? `Tareas críticas pendientes (${tasks.length}): ${tasks.slice(0, 5).map(t => `[${t.priority}] ${t.title}${t.due_date ? ` (vence ${t.due_date})` : ""}`).join("; ")}`
       : "Sin tareas críticas pendientes";
 
     const mealsBlock = meals.length > 0
@@ -111,38 +146,37 @@ Deno.serve(async (req) => {
       ? `Dieta: ${prefs.diet_type || "balanceada"}, objetivo: ${prefs.goals || "salud"}, target: ${prefs.calories_target}kcal/${prefs.proteins_target}P/${prefs.carbs_target}C/${prefs.fats_target}G, restricciones: ${(prefs.restrictions || []).join(", ") || "ninguna"}, alergias: ${(prefs.allergies || []).join(", ") || "ninguna"}`
       : "Sin preferencias nutricionales configuradas";
 
+    const calendarBlock = calEvents.length > 0
+      ? `Eventos mañana (${calEvents.length}): ${calEvents.map((e: any) => `${new Date(e.start_time).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} ${e.title}${e.location ? ` @ ${e.location}` : ""}`).join("; ")}`
+      : "Sin eventos en el calendario para mañana";
+
+    const plaudBlock = plaud.length > 0
+      ? `Últimas grabaciones Plaud: ${plaud.slice(0, 3).map((p: any) => `"${p.title || "sin título"}"${p.summary ? `: ${String(p.summary).slice(0, 120)}` : ""}`).join(" | ")}`
+      : "";
+
     let systemPrompt = "";
     let userPrompt = "";
+    let asJson = false;
 
     if (scope === "health") {
-      systemPrompt = `Eres el coach de salud personal de Agustín. Genera UNA recomendación contextual concreta y accionable para HOY, cruzando datos Whoop con su carga de tareas y alimentación reciente. Sé directo, sin rodeos. Máximo 4 frases. Formato: una frase de diagnóstico + recomendación de actividad física + recomendación nutricional concreta. Ejemplo: "Recovery 23% + semana intensa → hoy prioriza descanso activo, evita HIIT. Come proteína magra (pollo, pescado) y carbohidrato complejo (arroz integral, quinoa)."`;
-      userPrompt = `DATOS HOY:
-${whoopBlock}
-${trendBlock}
-
-CARGA MENTAL:
-${tasksBlock}
-
-ALIMENTACIÓN RECIENTE:
-${mealsBlock}
-
-Genera la recomendación de salud para HOY.`;
+      systemPrompt = `Eres el coach de salud personal de Agustín. Genera UNA recomendación contextual concreta y accionable para HOY, cruzando datos Whoop con su carga de tareas y alimentación reciente. Sé directo, sin rodeos. Máximo 4 frases. Formato: una frase de diagnóstico + recomendación de actividad física + recomendación nutricional concreta.`;
+      userPrompt = `DATOS HOY:\n${whoopBlock}\n${trendBlock}\n\nCARGA MENTAL:\n${tasksBlock}\n\nALIMENTACIÓN RECIENTE:\n${mealsBlock}\n\nGenera la recomendación de salud para HOY.`;
+    } else if (scope === "nutrition") {
+      systemPrompt = `Eres el nutricionista personal de Agustín. Genera un resumen contextual de su alimentación reciente cruzado con su estado físico (Whoop) y carga de la semana. Sé directo. Máximo 5 frases.`;
+      userPrompt = `ALIMENTACIÓN RECIENTE:\n${mealsBlock}\n\nPREFERENCIAS Y TARGETS:\n${prefsBlock}\n\nESTADO FÍSICO:\n${whoopBlock}\n${trendBlock}\n\nCARGA MENTAL:\n${tasksBlock}\n\nGenera el análisis nutricional contextual.`;
     } else {
-      systemPrompt = `Eres el nutricionista personal de Agustín. Genera un resumen contextual de su alimentación reciente cruzado con su estado físico (Whoop) y carga de la semana. Sé directo. Máximo 5 frases. Formato: 1 frase de patrón observado en la dieta + 1 frase de déficits/excesos detectados + 1-2 frases de recomendación concreta para los próximos días según su recovery y carga. Ejemplo: "Esta semana: déficit de proteína (~15g/día menos del target), exceso de azúcar en cenas. Con tu recovery bajo y semana intensa: prioriza hierro (espinacas, carne roja 2x/sem) y magnesio (frutos secos, plátano). Reduce azúcares simples después de las 19h."`;
-      userPrompt = `ALIMENTACIÓN RECIENTE:
-${mealsBlock}
-
-PREFERENCIAS Y TARGETS:
-${prefsBlock}
-
-ESTADO FÍSICO:
-${whoopBlock}
-${trendBlock}
-
-CARGA MENTAL:
-${tasksBlock}
-
-Genera el análisis nutricional contextual.`;
+      // tomorrow
+      asJson = true;
+      systemPrompt = `Eres POTUS, el sistema operativo personal de Agustín. Genera un brief MAÑANERO (qué le toca mañana) en JSON estricto con esta forma exacta:
+{
+  "headline": "Frase corta de qué tipo de día es mañana (≤90 chars)",
+  "calendar_summary": "Resumen de la agenda de mañana en 1 frase con hora del primer evento si lo hay",
+  "task_focus": "Cuáles son las 1-3 prioridades a sacar mañana, frase corta",
+  "plaud_context": "Si hay algo relevante en grabaciones Plaud recientes que conecte con mañana, 1 frase. Si no, cadena vacía.",
+  "closing_note": "Frase final motivadora o de aviso (≤80 chars)"
+}
+Devuelve SOLO el JSON, sin markdown ni texto extra.`;
+      userPrompt = `FECHA MAÑANA: ${tomorrowStr}\n\n${calendarBlock}\n\n${tasksBlock}\n\nESTADO FÍSICO ACTUAL:\n${whoopBlock}\n${trendBlock}\n\n${plaudBlock}\n\nGenera el brief de mañana en JSON.`;
     }
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -157,6 +191,7 @@ Genera el análisis nutricional contextual.`;
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
+        ...(asJson ? { response_format: { type: "json_object" } } : {}),
       }),
     });
 
@@ -176,6 +211,8 @@ Genera el análisis nutricional contextual.`;
       whoop: latestWhoop,
       tasks_count: tasks.length,
       meals_count: meals.length,
+      cal_count: calEvents.length,
+      plaud_count: plaud.length,
       has_prefs: !!prefs,
     };
 
@@ -188,7 +225,21 @@ Genera el análisis nutricional contextual.`;
       generated_at: new Date().toISOString(),
     }, { onConflict: "user_id,scope,brief_date" });
 
-    return json({ content, generated_at: new Date().toISOString(), cached: false });
+    const payload: Record<string, unknown> = {
+      content,
+      generated_at: new Date().toISOString(),
+      cached: false,
+    };
+    if (scope === "tomorrow") {
+      try {
+        // Strip eventual fences
+        const stripped = content.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+        payload.brief = JSON.parse(stripped);
+      } catch (e) {
+        console.error("Failed to parse tomorrow brief JSON", e);
+      }
+    }
+    return json(payload);
   } catch (e: any) {
     console.error("daily-context-brief error", e);
     return json({ error: e?.message || "Internal error" }, 500);

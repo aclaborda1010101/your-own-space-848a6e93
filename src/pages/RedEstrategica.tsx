@@ -443,6 +443,19 @@ export default function RedEstrategica() {
               {refreshing ? "Actualizando…" : "Actualizar novedades"}
             </span>
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={refreshAllProfiles}
+            disabled={refreshingAll || rows.length === 0}
+            className="h-11 rounded-full gap-2 px-4 border-primary/40 text-primary hover:bg-primary/10"
+            title="Reanaliza el perfil psicológico, emocional y de oportunidades de TODA tu red. Tarda varios minutos."
+          >
+            <Brain className={cn("w-4 h-4", refreshingAll && "animate-pulse")} />
+            <span className="hidden sm:inline">
+              {refreshingAll ? "Regenerando…" : "Regenerar perfiles"}
+            </span>
+          </Button>
         </div>
 
         {/* FILTER PILLS */}

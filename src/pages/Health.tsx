@@ -10,6 +10,7 @@ import { SleepChart } from "@/components/health/SleepChart";
 import { StrainChart } from "@/components/health/StrainChart";
 import { HrvChart } from "@/components/health/HrvChart";
 import { HealthAISummary } from "@/components/health/HealthAISummary";
+import { HealthMetricRing } from "@/components/health/HealthMetricRing";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -248,26 +249,100 @@ const Health = () => {
             </Card>
           ) : (
             <>
-              {/* Top Summary: 3 circles */}
-              <div className="flex justify-center gap-6">
-                <div className="text-center">
-                  <div className={`w-20 h-20 rounded-full flex items-center justify-center border-4 ${data.sleep_performance != null && data.sleep_performance >= 70 ? "border-primary" : data.sleep_performance != null && data.sleep_performance >= 40 ? "border-warning" : "border-muted"}`}>
-                    <span className="text-xl font-bold">{data.sleep_performance ?? "—"}%</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1.5 uppercase tracking-wide">Sueño</p>
-                </div>
-                <div className="text-center">
-                  <div className={`w-24 h-24 rounded-full flex items-center justify-center border-4 ${getRecoveryBadgeColor(data.recovery_score)} border-opacity-80`}>
-                    <span className="text-2xl font-bold">{data.recovery_score ?? "—"}%</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1.5 uppercase tracking-wide">Recuperación</p>
-                </div>
-                <div className="text-center">
-                  <div className={`w-20 h-20 rounded-full flex items-center justify-center border-4 ${data.strain != null && data.strain >= 14 ? "border-destructive" : data.strain != null && data.strain >= 10 ? "border-warning" : "border-muted"}`}>
-                    <span className="text-xl font-bold">{data.strain?.toFixed(1) ?? "—"}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1.5 uppercase tracking-wide">Esfuerzo</p>
-                </div>
+              {/* HERO: Recuperación gigante con color dinámico */}
+              <div className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-card/80 via-card/60 to-background p-6 sm:p-10 text-center">
+                <div
+                  className="absolute inset-0 opacity-30 pointer-events-none"
+                  style={{
+                    background:
+                      recoveryScore == null
+                        ? "radial-gradient(circle at 50% 30%, hsl(var(--muted) / 0.4), transparent 60%)"
+                        : recoveryScore >= 67
+                        ? "radial-gradient(circle at 50% 30%, hsl(var(--success) / 0.35), transparent 60%)"
+                        : recoveryScore >= 34
+                        ? "radial-gradient(circle at 50% 30%, hsl(var(--warning) / 0.35), transparent 60%)"
+                        : "radial-gradient(circle at 50% 30%, hsl(var(--destructive) / 0.4), transparent 60%)",
+                  }}
+                  aria-hidden
+                />
+                <p className="relative text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-2">
+                  Recuperación
+                </p>
+                <p
+                  className={cn(
+                    "relative font-serif italic font-light tabular-nums leading-none",
+                    "text-7xl sm:text-8xl",
+                    recoveryScore == null
+                      ? "text-muted-foreground"
+                      : recoveryScore >= 67
+                      ? "text-success"
+                      : recoveryScore >= 34
+                      ? "text-warning"
+                      : "text-destructive"
+                  )}
+                  style={{
+                    textShadow:
+                      recoveryScore == null
+                        ? "none"
+                        : recoveryScore >= 67
+                        ? "0 0 30px hsl(var(--success) / 0.5)"
+                        : recoveryScore >= 34
+                        ? "0 0 30px hsl(var(--warning) / 0.5)"
+                        : "0 0 30px hsl(var(--destructive) / 0.5)",
+                  }}
+                >
+                  {recoveryScore != null ? `${recoveryScore}` : "—"}
+                  <span className="text-4xl sm:text-5xl ml-1 opacity-70">%</span>
+                </p>
+                <p className="relative mt-4 text-sm sm:text-base italic text-muted-foreground max-w-xs mx-auto">
+                  {recoveryScore == null
+                    ? "Sin datos de recuperación hoy."
+                    : recoveryScore >= 67
+                    ? "Listo para empujar. Aprovecha el día."
+                    : recoveryScore >= 34
+                    ? "Equilibrio frágil. Modera la intensidad."
+                    : "Estás en rojo. Prioriza descanso y recuperación."}
+                </p>
+              </div>
+
+              {/* Métricas circulares neon: Sueño · Esfuerzo · HRV */}
+              <div className="grid grid-cols-3 gap-3 sm:gap-6 justify-items-center">
+                <HealthMetricRing
+                  percent={data.sleep_performance}
+                  value={data.sleep_performance != null ? `${data.sleep_performance}%` : "—"}
+                  label="Sueño"
+                  tone={
+                    data.sleep_performance != null && data.sleep_performance >= 70
+                      ? "primary"
+                      : data.sleep_performance != null && data.sleep_performance >= 40
+                      ? "warning"
+                      : "destructive"
+                  }
+                  hint="rendimiento"
+                  size="md"
+                />
+                <HealthMetricRing
+                  percent={data.strain != null ? Math.min(100, (data.strain / 21) * 100) : null}
+                  value={data.strain != null ? data.strain.toFixed(1) : "—"}
+                  label="Esfuerzo"
+                  tone={
+                    data.strain != null && data.strain >= 14
+                      ? "destructive"
+                      : data.strain != null && data.strain >= 10
+                      ? "warning"
+                      : "success"
+                  }
+                  hint={`/ 21`}
+                  size="md"
+                />
+                <HealthMetricRing
+                  percent={data.hrv != null ? Math.min(100, (data.hrv / 120) * 100) : null}
+                  value={data.hrv != null ? `${data.hrv}` : "—"}
+                  label="HRV"
+                  tone="accent"
+                  hint="ms"
+                  size="md"
+                />
               </div>
 
               {data.data_date && (

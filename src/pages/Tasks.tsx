@@ -30,6 +30,7 @@ import {
   CalendarCheck,
 } from "lucide-react";
 import { PageHero } from "@/components/ui/PageHero";
+import { cn } from "@/lib/utils";
 
 const typeConfig = {
   work: { icon: Briefcase, label: "Trabajo", color: "bg-primary/10 text-primary border-primary/20" },
@@ -240,57 +241,65 @@ const Tasks = () => {
 
           {/* Add Task */}
           <Card className="border-border bg-card">
-            <CardContent className="pt-6">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Input
-                  placeholder="Nueva tarea..."
-                  value={newTaskTitle}
-                  onChange={(e) => setNewTaskTitle(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
-                  className="flex-1 h-11 bg-background border-border font-mono"
-                />
-                
-                <div className="flex gap-2">
-                  {(["work", "life", "finance"] as const).map((type) => {
-                    const config = typeConfig[type];
-                    return (
-                      <Button
-                        key={type}
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setNewTaskType(type)}
-                        className={`h-11 px-3 ${newTaskType === type ? config.color : "border-border text-muted-foreground"}`}
-                      >
-                        <config.icon className="w-4 h-4" />
-                      </Button>
-                    );
-                  })}
+            <CardContent className="pt-6 space-y-3">
+              <Input
+                placeholder="Nueva tarea..."
+                value={newTaskTitle}
+                onChange={(e) => setNewTaskTitle(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
+                className="w-full h-11 bg-background border-border font-mono"
+              />
 
-                  <div className="flex items-center gap-2 ml-1">
-                    <Switch
-                      checked={newTaskPersonal}
-                      onCheckedChange={setNewTaskPersonal}
-                      className="data-[state=checked]:bg-primary"
-                    />
-                    <Lock className={`w-3.5 h-3.5 ${newTaskPersonal ? "text-primary" : "text-muted-foreground"}`} />
-                    <span className="text-xs text-muted-foreground hidden sm:inline">Personal</span>
-                  </div>
-                </div>
-
-                <Button 
-                  onClick={handleAddTask}
-                  className="h-11 bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  Añadir
-                </Button>
+              {/* Selector inline tipo: pills full-width */}
+              <div className="grid grid-cols-3 gap-2">
+                {(["work", "life", "finance"] as const).map((type) => {
+                  const config = typeConfig[type];
+                  const active = newTaskType === type;
+                  return (
+                    <Button
+                      key={type}
+                      type="button"
+                      variant="outline"
+                      onClick={() => setNewTaskType(type)}
+                      className={cn(
+                        "h-11 w-full gap-2 text-xs sm:text-sm",
+                        active
+                          ? config.color
+                          : "border-border text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <config.icon className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{config.label}</span>
+                    </Button>
+                  );
+                })}
               </div>
+
+              <div className="flex items-center justify-between gap-3 px-1">
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={newTaskPersonal}
+                    onCheckedChange={setNewTaskPersonal}
+                    className="data-[state=checked]:bg-primary"
+                  />
+                  <Lock className={`w-3.5 h-3.5 ${newTaskPersonal ? "text-primary" : "text-muted-foreground"}`} />
+                  <span className="text-xs text-muted-foreground">Personal · Privado</span>
+                </div>
+              </div>
+
+              <Button
+                onClick={handleAddTask}
+                className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Añadir tarea
+              </Button>
             </CardContent>
           </Card>
 
           {/* Task Workspace */}
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.9fr)]">
-            <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.9fr)] min-w-0">
+            <div className="grid gap-6 lg:grid-cols-2 min-w-0">
               {/* Pending */}
               <Card className="border-border bg-card">
                 <CardHeader className="pb-4">

@@ -22,7 +22,7 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
   const isWizardPage = location.pathname.startsWith('/projects/wizard/');
   
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen min-h-[100dvh] bg-background">
       {/* Sidebar - hidden on wizard pages */}
       {!isWizardPage && (
         <SidebarNew 
@@ -44,9 +44,17 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
           </div>
         )}
         
-        <main className={cn(
-          !isWizardPage && "pb-20 lg:pb-0"
-        )}>
+        <main
+          className={cn(
+            // Safe area iOS: en móvil respeta la status bar (en desktop la TopBar ya gestiona)
+            "pt-[env(safe-area-inset-top)] md:pt-0"
+          )}
+          style={
+            !isWizardPage
+              ? { paddingBottom: "calc(5rem + env(safe-area-inset-bottom))" }
+              : undefined
+          }
+        >
           {children}
         </main>
       </div>

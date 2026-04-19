@@ -37,12 +37,13 @@ export const BottomNavBar = ({ onJarvisPress, isJarvisActive = false }: BottomNa
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 lg:hidden safe-bottom"
+      className="fixed bottom-0 left-0 right-0 z-40 lg:hidden"
       aria-label="Navegación principal"
     >
       <div className="absolute top-0 left-1/2 -translate-x-1/2 h-px w-[65%] bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
 
-      <div className="relative bg-background/85 backdrop-blur-2xl border-t border-border/60 bg-scanlines">
+      {/* Background extiende hasta el borde físico inferior; padding interno respeta el home indicator */}
+      <div className="relative bg-background/95 backdrop-blur-2xl border-t border-border/60 bg-scanlines pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-end justify-around h-16 px-1">
           <NavItem item={primary[0]} active={location.pathname === primary[0].path} onClick={tap} />
           <NavItem item={primary[1]} active={location.pathname === primary[1].path} onClick={tap} />

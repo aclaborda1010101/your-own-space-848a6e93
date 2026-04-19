@@ -5281,14 +5281,18 @@ export type Database = {
       }
       openclaw_nodes: {
         Row: {
+          active_task: string | null
           created_at: string
           description: string | null
           host: string | null
           id: string
+          ip: string | null
           last_seen_at: string | null
           metadata: Json | null
           model: string | null
           name: string
+          progress: number
+          role: string | null
           status: string
           tokens_today: number
           tokens_today_date: string
@@ -5297,14 +5301,18 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          active_task?: string | null
           created_at?: string
           description?: string | null
           host?: string | null
           id?: string
+          ip?: string | null
           last_seen_at?: string | null
           metadata?: Json | null
           model?: string | null
           name: string
+          progress?: number
+          role?: string | null
           status?: string
           tokens_today?: number
           tokens_today_date?: string
@@ -5313,14 +5321,18 @@ export type Database = {
           user_id: string
         }
         Update: {
+          active_task?: string | null
           created_at?: string
           description?: string | null
           host?: string | null
           id?: string
+          ip?: string | null
           last_seen_at?: string | null
           metadata?: Json | null
           model?: string | null
           name?: string
+          progress?: number
+          role?: string | null
           status?: string
           tokens_today?: number
           tokens_today_date?: string
@@ -5506,6 +5518,7 @@ export type Database = {
           description: string | null
           finished_at: string | null
           id: string
+          logs: string | null
           node_id: string
           priority: string
           result: string | null
@@ -5521,6 +5534,7 @@ export type Database = {
           description?: string | null
           finished_at?: string | null
           id?: string
+          logs?: string | null
           node_id: string
           priority?: string
           result?: string | null
@@ -5536,6 +5550,7 @@ export type Database = {
           description?: string | null
           finished_at?: string | null
           id?: string
+          logs?: string | null
           node_id?: string
           priority?: string
           result?: string | null

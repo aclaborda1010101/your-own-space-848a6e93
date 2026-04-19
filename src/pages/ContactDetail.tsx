@@ -311,62 +311,98 @@ export default function ContactDetail() {
           onSetFormat={setFormat}
         />
 
-        {/* DETAIL */}
-        <ConversationTimeline messages={messages} contactName={contact.name} />
+        {/* DETAIL TABS — toda la información detallada */}
+        <Tabs defaultValue="resumen" className="w-full">
+          <TabsList className="grid grid-cols-5 w-full bg-card/40 backdrop-blur-md border border-border h-auto p-1">
+            <TabsTrigger value="resumen" className="text-xs sm:text-sm py-2">
+              <Sparkles className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" /> Resumen
+            </TabsTrigger>
+            <TabsTrigger value="whatsapp" className="text-xs sm:text-sm py-2">
+              <MessageCircle className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" /> WhatsApp
+            </TabsTrigger>
+            <TabsTrigger value="email" className="text-xs sm:text-sm py-2">
+              <Mail className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" /> Email
+            </TabsTrigger>
+            <TabsTrigger value="plaud" className="text-xs sm:text-sm py-2">
+              <Mic className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" /> Plaud
+            </TabsTrigger>
+            <TabsTrigger value="datos" className="text-xs sm:text-sm py-2">
+              <Brain className="w-3.5 h-3.5 mr-1.5 hidden sm:inline" /> Perfil
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Quotables */}
-        {quotables.length > 0 && (
-          <GlassCard className="p-6">
-            <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-4">
-              Momentos destacables
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {quotables.map((q) => (
-                <div key={q.id} className="border-l-2 border-primary/40 pl-4 py-1">
-                  <p className="text-sm font-serif italic leading-relaxed">"{q.content.slice(0, 240)}{q.content.length > 240 ? "…" : ""}"</p>
-                  <p className="text-[10px] text-muted-foreground/70 font-mono mt-1">
-                    {formatDistanceToNow(new Date(q.message_date), { addSuffix: true, locale: es })}
-                  </p>
+          <TabsContent value="resumen" className="mt-6 space-y-6">
+            <ConversationTimeline messages={messages} contactName={contact.name} />
+
+            {quotables.length > 0 && (
+              <GlassCard className="p-6">
+                <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-4">
+                  Momentos destacables
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {quotables.map((q) => (
+                    <div key={q.id} className="border-l-2 border-primary/40 pl-4 py-1">
+                      <p className="text-sm font-serif italic leading-relaxed">"{q.content.slice(0, 240)}{q.content.length > 240 ? "…" : ""}"</p>
+                      <p className="text-[10px] text-muted-foreground/70 font-mono mt-1">
+                        {formatDistanceToNow(new Date(q.message_date), { addSuffix: true, locale: es })}
+                      </p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </GlassCard>
-        )}
+              </GlassCard>
+            )}
 
-        {/* Mini graph placeholder */}
-        <GlassCard className="p-6">
-          <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
-            Red de contactos compartidos
-          </h3>
-          <div className="flex items-center justify-center py-8 text-muted-foreground/60">
-            <Network className="w-8 h-8 mr-3 opacity-50" />
-            <span className="text-sm">Próximamente</span>
-          </div>
-        </GlassCard>
+            <GlassCard className="p-6">
+              <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
+                Tus notas
+              </h3>
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Cosas que recordar de esta persona…"
+                className="min-h-[120px] bg-white/[0.02] border-white/[0.06]"
+              />
+              <div className="flex justify-end mt-3">
+                <Button size="sm" onClick={saveNotes} disabled={savingNotes}>
+                  {savingNotes ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Guardar notas
+                </Button>
+              </div>
+            </GlassCard>
 
-        {/* Notes */}
-        <GlassCard className="p-6">
-          <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
-            Tus notas
-          </h3>
-          <Textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Cosas que recordar de esta persona…"
-            className="min-h-[120px] bg-white/[0.02] border-white/[0.06]"
-          />
-          <div className="flex justify-end mt-3">
-            <Button size="sm" onClick={saveNotes} disabled={savingNotes}>
-              {savingNotes ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4 mr-2" />
-              )}
-              Guardar notas
-            </Button>
-          </div>
-        </GlassCard>
-      </div>
-    </div>
-  );
-}
+            <GlassCard className="p-6">
+              <h3 className="text-xs uppercase tracking-wider text-muted-foreground mb-3">
+                Red de contactos compartidos
+              </h3>
+              <div className="flex items-center justify-center py-8 text-muted-foreground/60">
+                <Network className="w-8 h-8 mr-3 opacity-50" />
+                <span className="text-sm">Próximamente</span>
+              </div>
+            </GlassCard>
+          </TabsContent>
+
+          <TabsContent value="whatsapp" className="mt-6 space-y-6">
+            <SuggestedResponses contactId={contact.id} contactName={contact.name} />
+            <WhatsAppTab contact={contact as any} />
+          </TabsContent>
+
+          <TabsContent value="email" className="mt-6">
+            <EmailTab contact={contact as any} />
+          </TabsContent>
+
+          <TabsContent value="plaud" className="mt-6">
+            <PlaudTab
+              contact={contact as any}
+              contactRecordings={plaudRecordings as any}
+              contactThreads={plaudThreads as any}
+            />
+          </TabsContent>
+
+          <TabsContent value="datos" className="mt-6">
+            <ProfileKnownData contact={contact as any} />
+          </TabsContent>
+        </Tabs>

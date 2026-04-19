@@ -153,8 +153,14 @@ export function useOpenClawHub() {
       .on("postgres_changes", { event: "*", schema: "public", table: "openclaw_task_executions" }, fetchAll)
       .subscribe();
 
+    // Polling cada 30s para garantizar telemetría viva aunque realtime se caiga.
+    const poll = window.setInterval(() => {
+      if (mounted.current) fetchAll();
+    }, 30_000);
+
     return () => {
       mounted.current = false;
+      window.clearInterval(poll);
       supabase.removeChannel(ch);
     };
   }, [user, fetchAll]);

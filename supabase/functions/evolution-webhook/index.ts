@@ -315,6 +315,66 @@ serve(async (req) => {
           }),
         }).catch((err) => console.error("generate-response-draft fire error:", err));
       }
+
+      // ============================
+      // PODCAST AUTO-ENQUEUE
+      // If total messages with this contact crosses a multiple of 100
+      // and the previous message is older than 5 minutes, enqueue a segment.
+      // ============================
+      try {
+        const { count: totalMsgs } = await supabase
+          .from("contact_messages")
+          .select("id", { count: "exact", head: true })
+          .eq("contact_id", contactId)
+          .eq("user_id", userId);
+
+        const total = totalMsgs || 0;
+        if (total > 0 && total % 100 === 0) {
+          // Check last message age (excluding current)
+          const { data: prevMsg } = await supabase
+            .from("contact_messages")
+            .select("message_date")
+            .eq("contact_id", contactId)
+            .eq("user_id", userId)
+            .neq("id", insertedMessage.id)
+            .order("message_date", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          const prevDate = prevMsg?.message_date ? new Date(prevMsg.message_date).getTime() : 0;
+          const ageMs = Date.now() - prevDate;
+          if (ageMs > 5 * 60 * 1000) {
+            // Read existing podcast format (default narrator)
+            const { data: existingPodcast } = await supabase
+              .from("contact_podcasts")
+              .select("format")
+              .eq("contact_id", contactId)
+              .eq("user_id", userId)
+              .maybeSingle();
+
+            // Don't double-enqueue if there's already a pending/processing job
+            const { data: pendingJob } = await supabase
+              .from("podcast_generation_queue")
+              .select("id")
+              .eq("contact_id", contactId)
+              .eq("user_id", userId)
+              .in("status", ["pending", "processing"])
+              .maybeSingle();
+
+            if (!pendingJob) {
+              await supabase.from("podcast_generation_queue").insert({
+                contact_id: contactId,
+                user_id: userId,
+                format: existingPodcast?.format || "narrator",
+                status: "pending",
+              });
+              console.log(`[podcast] Enqueued segment for contact ${contactId} at ${total} msgs`);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("podcast enqueue error:", e);
+      }
     }
 
     return new Response(

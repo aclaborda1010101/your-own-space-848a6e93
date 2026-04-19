@@ -6,7 +6,6 @@ import { TopBar } from "./TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
 
-import { AgentChatFloat } from "@/components/agent/AgentChatFloat";
 import { ForceRefreshButton } from "./ForceRefreshButton";
 
 interface AppLayoutProps {
@@ -57,8 +56,6 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
         <BottomNavBar />
       )}
 
-      
-      {!isLoginPage && !isWizardPage && <AgentChatFloat />}
       <ForceRefreshButton />
     </div>
   );

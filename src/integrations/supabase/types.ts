@@ -2549,6 +2549,7 @@ export type Database = {
           content: string
           created_at: string
           direction: string
+          external_id: string | null
           id: string
           message_date: string | null
           sender: string | null
@@ -2561,6 +2562,7 @@ export type Database = {
           content: string
           created_at?: string
           direction?: string
+          external_id?: string | null
           id?: string
           message_date?: string | null
           sender?: string | null
@@ -2573,6 +2575,7 @@ export type Database = {
           content?: string
           created_at?: string
           direction?: string
+          external_id?: string | null
           id?: string
           message_date?: string | null
           sender?: string | null

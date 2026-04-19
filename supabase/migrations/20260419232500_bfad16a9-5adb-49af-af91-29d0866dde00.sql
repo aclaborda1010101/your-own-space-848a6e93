@@ -1,0 +1,1 @@
+UPDATE suggested_responses SET status = 'rejected' WHERE contact_id IN ('7dc37234-7cde-410c-9ba2-0e28b421019b','b938a60a-8339-4b77-8078-291d4b290c33') AND status = 'pending';

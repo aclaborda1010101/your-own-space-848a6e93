@@ -48,6 +48,8 @@ const AICourse = React.lazy(() => import("./pages/AICourse"));
 const Coach = React.lazy(() => import("./pages/Coach"));
 const English = React.lazy(() => import("./pages/English"));
 const StrategicNetwork = React.lazy(() => import("./pages/StrategicNetwork"));
+const RedEstrategica = React.lazy(() => import("./pages/RedEstrategica"));
+const ContactDetail = React.lazy(() => import("./pages/ContactDetail"));
 const BrainsDashboard = React.lazy(() => import("./pages/BrainsDashboard"));
 const DataImport = React.lazy(() => import("./pages/DataImport"));
 const Projects = React.lazy(() => import("./pages/Projects"));
@@ -166,6 +168,9 @@ const App = () => (
                   <Route path="/openclaw/legacy" element={<ProtectedPage><OpenClaw /></ProtectedPage>} />
                   <Route path="/openclaw-preview" element={<Suspense fallback={<PageLoader />}><OpenClawPreview /></Suspense>} />
                   <Route path="/strategic-network" element={<ProtectedPage><StrategicNetwork /></ProtectedPage>} />
+                  <Route path="/strategic-network/legacy" element={<ProtectedPage><StrategicNetwork /></ProtectedPage>} />
+                  <Route path="/red-estrategica" element={<ProtectedPage><RedEstrategica /></ProtectedPage>} />
+                  <Route path="/red-estrategica/:contactId" element={<ProtectedPage><ContactDetail /></ProtectedPage>} />
                   <Route path="/brains-dashboard" element={<ProtectedPage><BrainsDashboard /></ProtectedPage>} />
                   <Route path="/health" element={<ProtectedPage><Health /></ProtectedPage>} />
                   <Route path="/sports" element={<ProtectedPage><Sports /></ProtectedPage>} />

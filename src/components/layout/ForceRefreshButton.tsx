@@ -56,7 +56,7 @@ export const ForceRefreshButton = () => {
       disabled={loading}
       title="Forzar actualización"
       className={cn(
-        "fixed bottom-24 right-4 z-50 lg:bottom-6",
+        "fixed bottom-40 right-4 z-50 lg:bottom-6 lg:right-20",
         "flex h-10 w-10 items-center justify-center rounded-full",
         "bg-muted/80 text-muted-foreground backdrop-blur-sm",
         "border border-border shadow-md",

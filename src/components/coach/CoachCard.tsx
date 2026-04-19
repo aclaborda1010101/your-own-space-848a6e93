@@ -35,7 +35,7 @@ export const CoachCard = ({ checkInData }: CoachCardProps) => {
     <>
       <CollapsibleCard
         id="coach"
-        title="JARVIS Coach"
+        title="Coach IA"
         icon={<Brain className="w-4 h-4 text-primary" />}
       >
         <div className="p-3 sm:p-4 space-y-4">

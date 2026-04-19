@@ -406,3 +406,7 @@ export default function ContactDetail() {
             <ProfileKnownData contact={contact as any} />
           </TabsContent>
         </Tabs>
+      </div>
+    </div>
+  );
+}

@@ -26,9 +26,9 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } },
     );
-    const { data: claims } = await sb.auth.getClaims(authHeader.replace("Bearer ", ""));
-    if (!claims?.claims?.sub) return json({ error: "unauthorized" }, 401);
-    const userId = claims.claims.sub as string;
+    const { data: userData, error: userErr } = await sb.auth.getUser(authHeader.replace("Bearer ", ""));
+    if (userErr || !userData?.user) return json({ error: "unauthorized" }, 401);
+    const userId = userData.user.id;
 
     const body = await req.json().catch(() => ({}));
     const node_name = body.node_name ?? "POTUS";

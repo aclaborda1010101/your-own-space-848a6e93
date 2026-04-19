@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
 import { buildAgentPrompt } from "../_shared/rag-loader.ts";
+import { JARVIS_ORCHESTRATION_RULES } from "../_shared/jarvis-orchestration-rules.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -155,17 +156,22 @@ serve(async (req) => {
     // Build system prompt using RAG
     const agentType = specialist || "coach";
     const additionalContext = `
+${JARVIS_ORCHESTRATION_RULES}
+
 PLATAFORMA: ${platform.toUpperCase()}
-${platform !== "web" ? "NOTA: El usuario escribe desde " + platform + ". Responde de forma concisa (2-3 frases max) ya que es una interfaz de chat." : ""}
+${platform !== "web" ? "NOTA: El usuario escribe desde " + platform + ". Mantén respuestas concisas (2-3 frases) — es chat." : ""}
 ${contextStr}
 
-REGLAS:
-1. Respuestas concisas (2-4 frases máximo)
-2. Tono cercano, firme y humano
-3. Sin frases hechas ni clichés motivacionales
-4. Valida antes de proponer
-5. Termina con pregunta o próximo paso claro cuando sea apropiado
-6. Si detectas que el tema es de otro especialista, menciónalo
+ESPECIALISTA INTERNO ACTIVO (no mencionar al usuario): ${specialist || "general"}
+ESPECIALISTAS DISPONIBLES (consulta interna silenciosa): ${SPECIALISTS.map(s => s.name).join(", ")}
+
+REGLAS DE ESTILO:
+1. Eres JARVIS — única identidad visible. No digas "te paso con…".
+2. Respuestas 2-4 frases por defecto.
+3. Tono cercano, firme, humano. Sin clichés ni frases hechas.
+4. Valida antes de proponer. Cierra con próximo paso si aplica.
+5. Si la petición es operativa (crear tarea, agendar, ejecutar) → delega a OpenClaw vía bloque de acción.
+6. Aplica tolerancia semántica obligatoria: nunca falles por un typo de 1-2 letras si el contexto identifica al objetivo.
 `;
 
     // Fetch dynamic knowledge from specialist_knowledge table

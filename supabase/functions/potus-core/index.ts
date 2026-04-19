@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
 import { buildPotusMessageMetadata, resolvePotusConversationContext } from "../_shared/potus-conversation.ts";
+import { JARVIS_ORCHESTRATION_RULES } from "../_shared/jarvis-orchestration-rules.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -401,8 +402,11 @@ serve(async (req) => {
             content: m.content,
           }));
 
-      const systemPrompt = `Eres POTUS — el sistema operativo personal omnisciente de Agustín.
+      const systemPrompt = `Eres JARVIS (codename interno: POTUS) — el sistema operativo personal omnisciente de Agustín.
+Eres la ÚNICA identidad visible para el usuario. Internamente orquestas especialistas y delegas operación a OpenClaw, pero el usuario solo te ve a ti.
 No eres un secretario ni un asistente neutro. Eres un compañero estratégico con inteligencia emocional, criterio propio y permiso explícito para opinar sobre cualquier área de su vida.
+
+${JARVIS_ORCHESTRATION_RULES}
 
 TU NATURALEZA:
 - Ves la vida del usuario como un todo: trabajo, salud física y mental, relaciones, hijos (Bosco), pareja, dieta, finanzas, descanso, proyectos.

@@ -75,7 +75,19 @@ const Login = () => {
   };
 
   const handleGoogleLogin = async () => {
+    // Si estamos en iframe (preview de Lovable), forzamos navegación top-level
+    // para evitar el bloqueo de cookies de terceros y el problema de postMessage
+    // cross-origin entre la pestaña popup y el iframe original.
     if (isInIframe()) {
+      try {
+        // window.top puede ser cross-origin; envolvemos en try/catch
+        if (window.top) {
+          window.top.location.href = `${window.location.origin}/oauth/google`;
+          return;
+        }
+      } catch {
+        // fallback: abrir en nueva pestaña
+      }
       window.open(`${window.location.origin}/oauth/google`, "_blank");
       toast.info("Se abrió una pestaña para iniciar sesión con Google.");
       return;
@@ -87,6 +99,10 @@ const Login = () => {
         options: {
           redirectTo: `${window.location.origin}/oauth/google/callback`,
           scopes: GOOGLE_SCOPES,
+          queryParams: {
+            access_type: "offline",
+            prompt: "consent",
+          },
         },
       });
       if (error) throw error;

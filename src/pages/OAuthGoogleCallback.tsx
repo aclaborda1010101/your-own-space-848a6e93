@@ -27,21 +27,27 @@ export default function OAuthGoogleCallback() {
 
         const session = data.session;
         if (session?.access_token && session.refresh_token) {
-          if (window.opener && !window.opener.closed) {
-            window.opener.postMessage(
-              {
-                type: "oauth:google",
-                access_token: session.access_token,
-                refresh_token: session.refresh_token,
-                provider_token: session.provider_token,
-                provider_refresh_token: session.provider_refresh_token,
-              },
-              window.location.origin
-            );
-
-            setStatus("done");
-            setTimeout(() => window.close(), 250);
-            return;
+          // Best-effort: si vinimos de un popup con opener válido (mismo origen),
+          // notificamos. Si falla por cross-origin o no hay opener, simplemente
+          // navegamos al dashboard en esta misma pestaña (caso top-level redirect).
+          try {
+            if (window.opener && !window.opener.closed) {
+              window.opener.postMessage(
+                {
+                  type: "oauth:google",
+                  access_token: session.access_token,
+                  refresh_token: session.refresh_token,
+                  provider_token: session.provider_token,
+                  provider_refresh_token: session.provider_refresh_token,
+                },
+                window.location.origin
+              );
+              setStatus("done");
+              setTimeout(() => window.close(), 250);
+              return;
+            }
+          } catch {
+            // cross-origin opener: caer al navigate normal
           }
 
           navigate("/dashboard", { replace: true });

@@ -1,171 +1,389 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&display=swap");
+/* ==========================================================================
+   JARVIS · Holo Neon Design System
+   --------------------------------------------------------------------------
+   Reemplaza el contenido de src/index.css por este archivo.
+   Todos los tokens de color están en HSL (requerido por tailwind.config.ts).
+   ========================================================================== */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* ==========================================================================
+   DESIGN TOKENS
+   Brand: #BEFF00 (lima neón) → hsl(73 100% 50%)
+   Aesthetic: Holográfico, cristal, pantalla HUD, glow sutil
+   ========================================================================== */
 
 @layer base {
   :root {
-    --background: 220 25% 10%;
-    --foreground: 210 40% 98%;
+    /* ---------- Fondo + texto base (modo dark por defecto) ---------- */
+    --background: 222 47% 5%;           /* #07090E — negro azulado muy profundo */
+    --foreground: 180 30% 96%;          /* blanco frío */
 
-    --card: 220 25% 13%;
-    --card-foreground: 210 40% 98%;
+    /* ---------- Superficies (cristal) ---------- */
+    --card: 222 40% 9%;                 /* #0E1320 */
+    --card-foreground: 180 20% 96%;
 
-    --popover: 220 25% 15%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 222 45% 7%;
+    --popover-foreground: 180 20% 96%;
 
-    --primary: 199 89% 48%;
-    --primary-foreground: 220 25% 10%;
+    /* ---------- Brand / accentos ---------- */
+    --primary: 73 100% 50%;             /* #BEFF00 lima neón */
+    --primary-foreground: 222 47% 5%;   /* texto negro sobre lima */
 
-    --secondary: 220 20% 20%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 222 35% 14%;           /* gris azulado tenue */
+    --secondary-foreground: 180 20% 96%;
 
-    --muted: 220 20% 25%;
-    --muted-foreground: 215 20% 65%;
+    --accent: 186 100% 55%;             /* cian holográfico #1FE7FF para secundarios */
+    --accent-foreground: 222 47% 5%;
 
-    --accent: 199 89% 48%;
-    --accent-foreground: 220 25% 10%;
+    --muted: 222 25% 18%;
+    --muted-foreground: 215 15% 65%;
 
-    --destructive: 0 72% 50%;
-    --destructive-foreground: 0 85% 97%;
+    /* ---------- Estados ---------- */
+    --destructive: 0 85% 60%;
+    --destructive-foreground: 0 0% 100%;
 
-    --success: 142 76% 36%;
-    --success-foreground: 142 76% 95%;
+    --success: 150 85% 55%;             /* verde lima-menta */
+    --success-foreground: 222 47% 5%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 38 92% 10%;
+    --warning: 40 100% 60%;             /* ámbar holo */
+    --warning-foreground: 222 47% 5%;
 
-    --border: 220 20% 25%;
-    --input: 220 20% 20%;
-    --ring: 199 89% 48%;
+    /* ---------- Bordes / inputs ---------- */
+    --border: 220 25% 18%;              /* borde sutil cristal */
+    --input: 222 35% 13%;
+    --ring: 73 100% 50%;                /* focus lima */
 
-    --radius: 0.75rem;
+    --radius: 1rem;                     /* más redondeado que el default */
 
-    --sidebar-background: 220 25% 8%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 199 89% 48%;
-    --sidebar-primary-foreground: 220 25% 10%;
-    --sidebar-accent: 220 20% 20%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 220 20% 20%;
-    --sidebar-ring: 199 89% 48%;
+    /* ---------- Sidebar ---------- */
+    --sidebar-background: 222 50% 4%;
+    --sidebar-foreground: 180 20% 96%;
+    --sidebar-primary: 73 100% 50%;
+    --sidebar-primary-foreground: 222 47% 5%;
+    --sidebar-accent: 222 35% 12%;
+    --sidebar-accent-foreground: 180 20% 96%;
+    --sidebar-border: 220 30% 12%;
+    --sidebar-ring: 73 100% 50%;
+    --sidebar: 222 50% 4%;
 
-    --chart-1: 199 89% 48%;
-    --chart-2: 142 76% 36%;
-    --chart-3: 38 92% 50%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    /* ---------- Charts (HUD palette) ---------- */
+    --chart-1: 73 100% 50%;             /* lima */
+    --chart-2: 186 100% 55%;            /* cian */
+    --chart-3: 280 80% 65%;             /* violeta */
+    --chart-4: 40 100% 60%;             /* ámbar */
+    --chart-5: 340 85% 65%;             /* magenta */
 
-    --sidebar: 220 25% 8%;
+    /* ---------- Fuentes ---------- */
+    --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-display: 'Space Grotesk', 'Inter', ui-sans-serif, system-ui, sans-serif;
+    --font-serif: 'Instrument Serif', ui-serif, Georgia, serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-    --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
-    --font-display: 'Inter', ui-sans-serif, system-ui, sans-serif;
-    --font-serif: 'Instrument Serif', 'Lora', ui-serif, Georgia, serif;
-    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    /* ---------- Sombras (usadas por shadow-sm/md/lg/xl...) ---------- */
+    --shadow-2xs: 0 1px 2px 0 hsl(0 0% 0% / 0.3);
+    --shadow-xs: 0 1px 3px 0 hsl(0 0% 0% / 0.35);
+    --shadow-sm: 0 2px 6px -1px hsl(0 0% 0% / 0.4), 0 0 0 1px hsl(220 25% 18% / 0.5);
+    --shadow: 0 4px 12px -2px hsl(0 0% 0% / 0.45), 0 0 0 1px hsl(220 25% 18% / 0.5);
+    --shadow-md: 0 8px 20px -4px hsl(0 0% 0% / 0.5), 0 0 0 1px hsl(220 25% 18% / 0.5);
+    --shadow-lg: 0 16px 40px -8px hsl(0 0% 0% / 0.55), 0 0 0 1px hsl(220 25% 20% / 0.6);
+    --shadow-xl: 0 24px 60px -12px hsl(0 0% 0% / 0.6), 0 0 0 1px hsl(220 25% 22% / 0.65);
+    --shadow-2xl: 0 32px 80px -16px hsl(0 0% 0% / 0.7);
 
-    --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.2);
-    --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.2);
-    --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.3), 0 1px 2px -1px hsl(0 0% 0% / 0.3);
-    --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.3), 0 1px 2px -1px hsl(0 0% 0% / 0.3);
-    --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.3), 0 2px 4px -1px hsl(0 0% 0% / 0.3);
-    --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.3), 0 4px 6px -1px hsl(0 0% 0% / 0.3);
-    --shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.3), 0 8px 10px -1px hsl(0 0% 0% / 0.3);
-    --shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.5);
+    /* ---------- Glow (usadas por .holo-glow utilities) ---------- */
+    --glow-primary: 0 0 24px hsl(73 100% 50% / 0.55), 0 0 60px hsl(73 100% 50% / 0.25);
+    --glow-accent: 0 0 24px hsl(186 100% 55% / 0.55), 0 0 60px hsl(186 100% 55% / 0.2);
+    --glow-success: 0 0 20px hsl(150 85% 55% / 0.45);
+    --glow-warning: 0 0 20px hsl(40 100% 60% / 0.45);
+    --glow-destructive: 0 0 20px hsl(0 85% 60% / 0.45);
 
-    --glow-primary: 0 0 20px hsl(199 89% 48% / 0.3);
-    --glow-success: 0 0 20px hsl(142 76% 36% / 0.3);
-    --glow-warning: 0 0 20px hsl(38 92% 50% / 0.3);
+    /* ---------- Gradientes holo (usar vía var(--gradient-...) o bg-[var(--...)]) ---------- */
+    --gradient-holo: linear-gradient(135deg, hsl(73 100% 50%) 0%, hsl(186 100% 55%) 50%, hsl(280 80% 65%) 100%);
+    --gradient-brand: linear-gradient(135deg, hsl(73 100% 50%) 0%, hsl(150 85% 55%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(222 40% 10% / 0.9) 0%, hsl(222 45% 7% / 0.7) 100%);
+    --gradient-hud: radial-gradient(ellipse at top, hsl(186 100% 55% / 0.08) 0%, transparent 50%),
+                    radial-gradient(ellipse at bottom, hsl(73 100% 50% / 0.06) 0%, transparent 50%);
 
     --tracking-normal: 0em;
     --spacing: 0.25rem;
   }
 
+  /* ---------- Light mode (si lo activas con class="light") ---------- */
   .light {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    --background: 180 20% 97%;
+    --foreground: 222 47% 8%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 222 47% 8%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
+    --popover-foreground: 222 47% 8%;
 
-    --primary: 199 89% 48%;
+    --primary: 73 85% 40%;              /* lima más oscura para contraste AA */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary: 180 20% 94%;
+    --secondary-foreground: 222 47% 8%;
 
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-
-    --accent: 199 89% 48%;
+    --accent: 186 85% 40%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 72% 50%;
-    --destructive-foreground: 0 85% 97%;
+    --muted: 180 20% 94%;
+    --muted-foreground: 222 15% 40%;
 
-    --success: 142 76% 36%;
+    --destructive: 0 75% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 150 75% 35%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 38 92% 10%;
+    --warning: 35 95% 50%;
+    --warning-foreground: 222 47% 8%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 199 89% 48%;
+    --border: 220 15% 88%;
+    --input: 220 15% 92%;
+    --ring: 73 85% 40%;
 
-    --sidebar-background: 210 40% 98%;
-    --sidebar-foreground: 222 47% 11%;
-    --sidebar-primary: 199 89% 48%;
+    --sidebar-background: 180 20% 98%;
+    --sidebar-foreground: 222 47% 8%;
+    --sidebar-primary: 73 85% 40%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 40% 96%;
-    --sidebar-accent-foreground: 222 47% 11%;
-    --sidebar-border: 214 32% 91%;
-    --sidebar-ring: 199 89% 48%;
+    --sidebar-accent: 180 20% 94%;
+    --sidebar-accent-foreground: 222 47% 8%;
+    --sidebar-border: 220 15% 88%;
+    --sidebar-ring: 73 85% 40%;
+    --sidebar: 180 20% 98%;
 
-    --chart-1: 199 89% 48%;
-    --chart-2: 142 76% 36%;
-    --chart-3: 38 92% 50%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --shadow-sm: 0 1px 3px 0 hsl(222 47% 8% / 0.08), 0 1px 2px -1px hsl(222 47% 8% / 0.08);
+    --shadow: 0 4px 10px -2px hsl(222 47% 8% / 0.08);
+    --shadow-md: 0 8px 20px -4px hsl(222 47% 8% / 0.1);
+    --shadow-lg: 0 16px 40px -8px hsl(222 47% 8% / 0.12);
+    --shadow-xl: 0 24px 60px -12px hsl(222 47% 8% / 0.14);
 
-    --sidebar: 210 40% 98%;
-
-    --shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
-    --shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
-    --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
-    --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
-    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.1), 0 2px 4px -2px hsl(0 0% 0% / 0.1);
-    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / 0.1), 0 4px 6px -4px hsl(0 0% 0% / 0.1);
-    --shadow-xl: 0 20px 25px -5px hsl(0 0% 0% / 0.1), 0 8px 10px -6px hsl(0 0% 0% / 0.1);
-    --shadow-2xl: 0 25px 50px -12px hsl(0 0% 0% / 0.25);
-
-    --glow-primary: 0 0 20px hsl(199 89% 48% / 0.2);
-    --glow-success: 0 0 20px hsl(142 76% 36% / 0.2);
-    --glow-warning: 0 0 20px hsl(38 92% 50% / 0.2);
+    --glow-primary: 0 0 20px hsl(73 85% 40% / 0.3);
+    --glow-accent: 0 0 20px hsl(186 85% 40% / 0.3);
   }
 }
+
+/* ==========================================================================
+   BASE
+   ========================================================================== */
 
 @layer base {
   * {
     @apply border-border;
   }
 
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+    /* Fondo HUD sutil siempre presente en dark mode */
+    background-image: var(--gradient-hud);
+    background-attachment: fixed;
+  }
+
+  /* Headings usan el display font */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /* Scrollbar finito + marcado */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted));
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.5);
+  }
+
+  /* Selection */
+  ::selection {
+    background: hsl(var(--primary) / 0.3);
+    color: hsl(var(--foreground));
   }
 }
 
-/* Safe area utilities for iOS */
+/* ==========================================================================
+   COMPONENTES HOLO — clases utilitarias listas para usar en .tsx
+   Úsalas así:  <div className="holo-card"> ... </div>
+   ========================================================================== */
+
+@layer components {
+  /* Tarjeta cristal — reemplaza <Card> existente o añade además de él */
+  .holo-card {
+    position: relative;
+    background: var(--gradient-card);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+  }
+  .holo-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.04) 0%, transparent 40%, hsl(var(--accent) / 0.04) 100%);
+    pointer-events: none;
+  }
+
+  /* Borde animado (anillo holográfico) */
+  .holo-ring {
+    position: relative;
+    isolation: isolate;
+  }
+  .holo-ring::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    padding: 1px;
+    background: var(--gradient-holo);
+    border-radius: inherit;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    opacity: 0.6;
+    pointer-events: none;
+  }
+
+  /* Botón lima neón */
+  .holo-btn {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    font-weight: 600;
+    border-radius: calc(var(--radius) - 0.25rem);
+    padding: 0.625rem 1.25rem;
+    box-shadow: var(--glow-primary);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  }
+  .holo-btn:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.05);
+    box-shadow: 0 0 32px hsl(var(--primary) / 0.7), 0 0 80px hsl(var(--primary) / 0.3);
+  }
+  .holo-btn:active {
+    transform: translateY(0);
+  }
+
+  /* Texto gradient holo */
+  .holo-text {
+    background: var(--gradient-holo);
+    -webkit-background-clip: text;
+            background-clip: text;
+    color: transparent;
+  }
+
+  /* Etiqueta / pill */
+  .holo-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 999px;
+    background: hsl(var(--primary) / 0.12);
+    color: hsl(var(--primary));
+    border: 1px solid hsl(var(--primary) / 0.3);
+    font-size: 0.75rem;
+    font-weight: 500;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* Punto de estado latiendo */
+  .holo-dot {
+    position: relative;
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: hsl(var(--primary));
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.7);
+    animation: holo-pulse 2s ease-out infinite;
+  }
+}
+
+/* ==========================================================================
+   UTILIDADES (glow, scanlines, grid)
+   ========================================================================== */
+
+@layer utilities {
+  .glow-primary   { box-shadow: var(--glow-primary); }
+  .glow-accent    { box-shadow: var(--glow-accent); }
+  .glow-success   { box-shadow: var(--glow-success); }
+  .glow-warning   { box-shadow: var(--glow-warning); }
+  .glow-destructive { box-shadow: var(--glow-destructive); }
+
+  .text-glow-primary { text-shadow: 0 0 12px hsl(var(--primary) / 0.6); }
+  .text-glow-accent  { text-shadow: 0 0 12px hsl(var(--accent) / 0.6); }
+
+  /* Fondo con grid de puntos (útil para secciones HUD) */
+  .bg-hud-grid {
+    background-image:
+      radial-gradient(hsl(var(--border)) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  /* Scanlines sutiles (pantalla CRT) */
+  .bg-scanlines {
+    background-image:
+      repeating-linear-gradient(
+        0deg,
+        hsl(var(--primary) / 0.03) 0px,
+        hsl(var(--primary) / 0.03) 1px,
+        transparent 1px,
+        transparent 3px
+      );
+  }
+}
+
+/* ==========================================================================
+   ANIMACIONES (referenciadas desde tailwind.config.ts)
+   ========================================================================== */
+
+@keyframes holo-pulse {
+  0%   { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.7); }
+  70%  { box-shadow: 0 0 0 12px hsl(var(--primary) / 0); }
+  100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
+}
+
+@keyframes holo-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes holo-scan {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+/* ==========================================================================
+   SAFE AREA iOS (sin cambios respecto al original)
+   ========================================================================== */
+
 .safe-top {
   padding-top: env(safe-area-inset-top, 0px);
   padding-top: -webkit-env(safe-area-inset-top, 0px);

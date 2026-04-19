@@ -63,6 +63,7 @@ const Onboarding = React.lazy(() => import("./pages/Onboarding"));
 const Install = React.lazy(() => import("./pages/Install"));
 const PrivacyPolicy = React.lazy(() => import("./pages/PrivacyPolicy"));
 const AICosts = React.lazy(() => import("./pages/AICosts"));
+const IntelligenceInbox = React.lazy(() => import("./pages/IntelligenceInbox"));
 
 // --- Loading fallback ---
 const PageLoader = () => (
@@ -181,6 +182,7 @@ const App = () => (
                   <Route path="/start-day" element={<ProtectedPage><StartDay /></ProtectedPage>} />
                   <Route path="/tasks" element={<ProtectedPage><Tasks /></ProtectedPage>} />
                   <Route path="/logs" element={<ProtectedPage><Logs /></ProtectedPage>} />
+                  <Route path="/intelligence/inbox" element={<ProtectedPage><IntelligenceInbox /></ProtectedPage>} />
                   <Route path="/calendar" element={<ProtectedPage><CalendarPage /></ProtectedPage>} />
                   <Route path="/analytics" element={<ProtectedPage><Analytics /></ProtectedPage>} />
                   <Route path="/challenges" element={<ProtectedPage><Challenges /></ProtectedPage>} />

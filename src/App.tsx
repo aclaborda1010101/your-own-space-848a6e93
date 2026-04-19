@@ -28,6 +28,7 @@ const Communications = React.lazy(() => import("./pages/Communications"));
 const Health = React.lazy(() => import("./pages/Health"));
 const OpenClaw = React.lazy(() => import("./pages/OpenClaw"));
 const OpenClawPreview = React.lazy(() => import("./pages/OpenClaw"));
+const OpenClawHub = React.lazy(() => import("./pages/OpenClawHub"));
 const Sports = React.lazy(() => import("./pages/Sports"));
 const Settings = React.lazy(() => import("./pages/Settings"));
 const Tasks = React.lazy(() => import("./pages/Tasks"));

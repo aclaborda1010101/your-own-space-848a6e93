@@ -26,7 +26,10 @@ import {
   Loader2,
   Lock,
   Sparkles,
+  Flame,
+  CalendarCheck,
 } from "lucide-react";
+import { PageHero } from "@/components/ui/PageHero";
 
 const typeConfig = {
   work: { icon: Briefcase, label: "Trabajo", color: "bg-primary/10 text-primary border-primary/20" },
@@ -169,55 +172,72 @@ const Tasks = () => {
     );
   }
 
+  const p0Count = pendingTasks.filter((t: any) => t.priority === "P0").length;
+  const completedToday = completedTasks.filter((t: any) => {
+    if (!t.completed_at) return false;
+    const d = new Date(t.completed_at);
+    const today = new Date();
+    return d.toDateString() === today.toDateString();
+  }).length;
+
   return (
         <main className="p-4 lg:p-6 space-y-6">
           <Breadcrumbs />
-          
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                <CheckSquare className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">Tareas</h1>
-                <p className="text-sm text-muted-foreground font-mono">{pendingTasks.length} PENDIENTES</p>
-              </div>
-            </div>
 
-            <div className="flex gap-2 flex-wrap">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSuggestionsOpen(true)}
-                className="border-primary/30 text-primary hover:bg-primary/10 gap-1.5"
-              >
-                <Sparkles className="w-4 h-4" />
-                Sugeridas
-                {suggestionsCount > 0 && (
-                  <Badge className="ml-1 h-5 min-w-[20px] px-1.5 text-xs bg-primary text-primary-foreground">
-                    {suggestionsCount}
-                  </Badge>
-                )}
-              </Button>
-              <ShareDialog resourceType="task" resourceName="Todas las tareas" />
-              <Button
-                variant={view === "today" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setView("today")}
-                className={view === "today" ? "bg-primary text-primary-foreground" : "border-border"}
-              >
-                Hoy
-              </Button>
-              <Button
-                variant={view === "week" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setView("week")}
-                className={view === "week" ? "bg-primary text-primary-foreground" : "border-border"}
-              >
-                Semana
-              </Button>
-            </div>
+          <PageHero
+            eyebrow="Foco del día"
+            eyebrowIcon={<Sparkles className="w-3 h-3" />}
+            title={
+              <>
+                Tus <span className="italic font-serif text-primary">tareas</span>
+              </>
+            }
+            subtitle="Prioriza, ejecuta y convierte tareas en bloques de calendario sin fricción."
+            actions={
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSuggestionsOpen(true)}
+                  className="border-primary/30 text-primary hover:bg-primary/10 gap-1.5 rounded-full"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Sugeridas
+                  {suggestionsCount > 0 && (
+                    <Badge className="ml-1 h-5 min-w-[20px] px-1.5 text-xs bg-primary text-primary-foreground">
+                      {suggestionsCount}
+                    </Badge>
+                  )}
+                </Button>
+                <ShareDialog resourceType="task" resourceName="Todas las tareas" />
+                <div className="flex items-center gap-1 p-1 rounded-full bg-card/40 backdrop-blur-xl border border-border/60">
+                  <Button
+                    size="sm"
+                    variant={view === "today" ? "default" : "ghost"}
+                    onClick={() => setView("today")}
+                    className="rounded-full h-8"
+                  >
+                    Hoy
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={view === "week" ? "default" : "ghost"}
+                    onClick={() => setView("week")}
+                    className="rounded-full h-8"
+                  >
+                    Semana
+                  </Button>
+                </div>
+              </>
+            }
+            stats={[
+              { label: "Pendientes", value: pendingTasks.length, icon: <CheckSquare className="w-4 h-4" />, tone: "primary" },
+              { label: "Críticas P0", value: p0Count, hint: "máxima prioridad", icon: <Flame className="w-4 h-4" />, tone: "destructive" },
+              { label: "Hechas hoy", value: completedToday, icon: <CalendarCheck className="w-4 h-4" />, tone: "success" },
+              { label: "Sugeridas IA", value: suggestionsCount, hint: "por revisar", icon: <Sparkles className="w-4 h-4" />, tone: "accent" },
+            ]}
+          />
+
           </div>
 
           {/* Add Task */}

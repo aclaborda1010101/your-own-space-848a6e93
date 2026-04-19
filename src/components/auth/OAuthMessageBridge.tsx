@@ -69,11 +69,14 @@ export default function OAuthMessageBridge() {
       }
 
       toast.success("Conectado con Google");
+
+      const target = getSafeRedirectTarget(data.redirectTo, "") || consumeRedirectTarget("/dashboard");
+      navigate(target, { replace: true });
     };
 
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, []);
+  }, [navigate]);
 
   return null;
 }

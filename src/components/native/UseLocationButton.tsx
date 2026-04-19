@@ -41,9 +41,9 @@ export function UseLocationButton({
   const handleClick = async () => {
     setBusy(true);
     try {
-      if (geo.permission === "prompt" || geo.permission === "unknown") {
+      if (geo.permission !== "granted") {
         const granted = await geo.requestPermission();
-        if (!granted && geo.permission === "denied") {
+        if (!granted) {
           toast.error("Permiso de ubicación denegado");
           return;
         }

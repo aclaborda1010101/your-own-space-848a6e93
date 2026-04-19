@@ -107,3 +107,6 @@ verify_jwt = false
 
 [functions.jarvis-ia-kids]
 verify_jwt = false
+
+[functions.openclaw-heartbeat]
+verify_jwt = false

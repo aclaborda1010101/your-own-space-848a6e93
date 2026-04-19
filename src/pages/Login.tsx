@@ -77,6 +77,17 @@ const Login = () => {
     // Persist target so the OAuth callback (which loses location.state) can resume it.
     persistRedirectTarget(redirectTarget);
 
+    // Native (Capacitor): usar in-app browser + deep link
+    if (isNative()) {
+      setLoading(true);
+      try {
+        await signInWithGoogleNative();
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (isInIframe()) {
       try {
         if (window.top) {

@@ -182,14 +182,19 @@ export const BottomNavBar = ({ onJarvisPress, isJarvisActive = false }: BottomNa
             <button
               onClick={() => {
                 selection();
-                setMenuOpen(true);
+                navigate("/menu");
               }}
               className={cn(
                 "relative flex flex-col items-center justify-center gap-0.5 py-2 px-3 rounded-xl transition-all touch-manipulation min-w-[60px]",
-                menuOpen ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                location.pathname === "/menu"
+                  ? "text-primary"
+                  : "text-muted-foreground hover:text-foreground",
               )}
               aria-label="Abrir menú"
             >
+              {location.pathname === "/menu" && (
+                <span className="absolute top-0 left-1/2 -translate-x-1/2 h-[2px] w-6 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.8)]" />
+              )}
               <MenuIcon className="w-5 h-5" />
               <span className="text-[10px] font-mono font-semibold uppercase tracking-wider">
                 Menú

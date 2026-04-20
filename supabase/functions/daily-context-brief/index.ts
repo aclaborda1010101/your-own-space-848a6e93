@@ -72,17 +72,38 @@ Deno.serve(async (req) => {
     tomorrowDate.setDate(tomorrowDate.getDate() + 1);
     const tomorrowStr = tomorrowDate.toISOString().slice(0, 10);
 
-    // Gather context (Whoop, tasks, meals, calendar for tomorrow, recent plaud)
+    // Gather context — calendar comes from iCloud (CalDAV) via icloud-calendar edge function.
+    // No existe tabla `calendar_events`; el calendario real está en iCloud del usuario.
+    const fetchTomorrowFromICloud = async (): Promise<{ events: any[]; status: "ok" | "disconnected" | "error" }> => {
+      try {
+        const startISO = `${tomorrowStr}T00:00:00.000Z`;
+        const endISO = `${tomorrowStr}T23:59:59.999Z`;
+        const icResp = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/icloud-calendar`, {
+          method: "POST",
+          headers: {
+            "Authorization": authHeader,
+            "Content-Type": "application/json",
+            "apikey": Deno.env.get("SUPABASE_ANON_KEY")!,
+          },
+          body: JSON.stringify({ action: "fetch", startDate: startISO, endDate: endISO }),
+        });
+        if (!icResp.ok) {
+          console.error("[daily-context-brief] icloud-calendar status", icResp.status);
+          return { events: [], status: "error" };
+        }
+        const icData = await icResp.json();
+        if (icData?.connected === false) return { events: [], status: "disconnected" };
+        return { events: Array.isArray(icData?.events) ? icData.events : [], status: "ok" };
+      } catch (err) {
+        console.error("[daily-context-brief] icloud fetch failed", err);
+        return { events: [], status: "error" };
+      }
+    };
+
     const calendarFetch =
       scope === "tomorrow"
-        ? sb.from("calendar_events")
-            .select("title, start_time, end_time, location")
-            .eq("user_id", user.id)
-            .gte("start_time", `${tomorrowStr}T00:00:00`)
-            .lte("start_time", `${tomorrowStr}T23:59:59`)
-            .order("start_time", { ascending: true })
-            .limit(15)
-        : Promise.resolve({ data: [] as any[] });
+        ? fetchTomorrowFromICloud()
+        : Promise.resolve({ events: [] as any[], status: "ok" as const });
 
     const plaudFetch =
       scope === "tomorrow"

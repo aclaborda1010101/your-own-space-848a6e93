@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Bot, Send, Loader2, RefreshCw, Mic, MicOff, Radio, Square } from "lucide-react";
+import { Bot, Send, Loader2, RefreshCw, Mic, MicOff, Radio, Square, Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -34,8 +34,10 @@ export function JarvisChat({ variant = "page", autoProactive }: JarvisChatProps)
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [hasInit, setHasInit] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const shouldAutoProactive = autoProactive ?? variant === "floating";
 

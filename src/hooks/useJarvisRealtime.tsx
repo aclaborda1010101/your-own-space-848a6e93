@@ -226,30 +226,29 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
         
         case 'get_today_summary': {
           const today = new Date().toISOString().split('T')[0];
-          
-          const [{ data: tasks }, { data: checkIn }] = await Promise.all([
-            supabase.from('tasks').select('title, completed, type').gte('created_at', today),
-            supabase.from('check_ins').select('*').eq('date', today).maybeSingle(),
+          const [{ data: todos }, { data: checkIn }, { data: whoop }] = await Promise.all([
+            sb.from('todos').select('title, is_completed, priority').eq('user_id', userId).gte('created_at', today),
+            sb.from('check_ins').select('*').eq('user_id', userId).eq('date', today).maybeSingle(),
+            sb.from('whoop_data').select('recovery_score, sleep_hours, strain').eq('user_id', userId).eq('data_date', today).maybeSingle(),
           ]);
-          
-          const completed = tasks?.filter(t => t.completed).length || 0;
-          const pending = tasks?.filter(t => !t.completed).length || 0;
-          
+          const completed = todos?.filter((t: any) => t.is_completed).length || 0;
+          const pending = todos?.filter((t: any) => !t.is_completed).length || 0;
           return JSON.stringify({
             date: today,
             tasksCompleted: completed,
             tasksPending: pending,
             checkIn: checkIn ? { energy: checkIn.energy, mood: checkIn.mood, focus: checkIn.focus } : null,
+            whoop: whoop || null,
           });
         }
-        
+
         case 'create_event': {
-          // Call icloud-calendar to create event
           const eventDate = new Date().toISOString().split('T')[0];
           const startDateTime = new Date(`${eventDate}T${args.time}:00`);
           const endDateTime = new Date(startDateTime.getTime() + (args.duration as number) * 60 * 1000);
-          
+          const { data: sess } = await supabase.auth.getSession();
           const { data, error } = await supabase.functions.invoke('icloud-calendar', {
+            headers: { Authorization: `Bearer ${sess?.session?.access_token}` },
             body: {
               action: 'create',
               title: args.title,
@@ -258,109 +257,59 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
               description: args.description || '',
             },
           });
-          
           if (error) throw error;
           return JSON.stringify({ success: true, event: data });
         }
-        
+
         case 'log_observation': {
-          const today = new Date().toISOString().split('T')[0];
-          const userId = (await supabase.auth.getUser()).data.user?.id;
-          
-          const { data: existing } = await supabase
-            .from('daily_observations')
-            .select('id, observations')
-            .eq('user_id', userId)
-            .eq('date', today)
-            .maybeSingle();
-          
-          const newObs = args.observation as string;
-          const combined = existing?.observations 
-            ? `${existing.observations}\n${newObs}` 
-            : newObs;
-          
-          if (existing) {
-            await supabase
-              .from('daily_observations')
-              .update({ observations: combined })
-              .eq('id', existing.id);
-          } else {
-            await supabase
-              .from('daily_observations')
-              .insert({ user_id: userId, date: today, observations: newObs });
-          }
-          
+          const obs = args.observation as string;
+          const area = (args.area as string) || 'general';
+          const { error } = await sb.from('bosco_observations').insert({
+            user_id: userId,
+            observation: obs,
+            area,
+            date: new Date().toISOString().split('T')[0],
+          });
+          if (error) throw error;
           return JSON.stringify({ success: true, message: 'Observación registrada' });
         }
-        
+
         case 'get_my_stats': {
           const today = new Date();
           const weekAgo = new Date(today);
           weekAgo.setDate(weekAgo.getDate() - 7);
-          
-          const [{ data: pomodoros }, { data: tasks }, { data: checkIns }] = await Promise.all([
-            supabase.from('pomodoro_sessions')
-              .select('id')
-              .gte('created_at', weekAgo.toISOString()),
-            supabase.from('tasks')
-              .select('id, completed')
-              .gte('created_at', weekAgo.toISOString()),
-            supabase.from('check_ins')
-              .select('date')
-              .gte('date', weekAgo.toISOString().split('T')[0])
-              .order('date', { ascending: false }),
+          const [{ data: todos }, { data: checkIns }] = await Promise.all([
+            sb.from('todos').select('id, is_completed').eq('user_id', userId).gte('created_at', weekAgo.toISOString()),
+            sb.from('check_ins').select('date').eq('user_id', userId).gte('date', weekAgo.toISOString().split('T')[0]),
           ]);
-          
-          const streak = checkIns?.length || 0;
-          const tasksCompleted = tasks?.filter(t => t.completed).length || 0;
-          const totalTasks = tasks?.length || 0;
-          const pomodoroCount = pomodoros?.length || 0;
-          
+          const tasksCompleted = todos?.filter((t: any) => t.is_completed).length || 0;
+          const totalTasks = todos?.length || 0;
           return JSON.stringify({
-            weeklyStreak: streak,
-            pomodoroSessions: pomodoroCount,
+            weeklyCheckIns: checkIns?.length || 0,
             tasksCompleted,
             totalTasks,
             completionRate: totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0,
           });
         }
-        
+
         case 'ask_about_habits': {
-          const { data: insights } = await supabase
-            .from('habit_insights')
-            .select('insight_type, title, description, created_at')
-            .order('created_at', { ascending: false })
-            .limit(5);
-          
-          if (!insights?.length) {
-            return JSON.stringify({ 
-              message: 'Aún no hay suficientes datos para generar insights sobre hábitos.',
-              suggestion: 'Continúe usando la app durante unos días más.' 
-            });
-          }
-          
-          return JSON.stringify({
-            question: args.question,
-            insights: insights.map(i => ({
-              type: i.insight_type,
-              title: i.title,
-              description: i.description,
-            })),
-          });
+          const { data: learnings } = await sb.from('agent_learnings')
+            .select('category, learning_text, confidence')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false }).limit(8);
+          return JSON.stringify({ question: args.question, insights: learnings || [] });
         }
-        
+
         case 'delete_event': {
+          const { data: sess } = await supabase.auth.getSession();
           const { data, error } = await supabase.functions.invoke('icloud-calendar', {
-            body: {
-              action: 'delete',
-              title: args.event_title,
-            },
+            headers: { Authorization: `Bearer ${sess?.session?.access_token}` },
+            body: { action: 'delete', title: args.event_title },
           });
-          
           if (error) throw error;
           return JSON.stringify({ success: true, deleted: args.event_title });
         }
-        
+
         default:
           return JSON.stringify({ error: `Función ${name} no implementada` });
       }

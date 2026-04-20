@@ -1,53 +1,65 @@
 
 
-## Diagnóstico confirmado
+El usuario lo ha clavado: el problema raíz es que **muchos contactos antiguos no tienen `wa_id` rellenado**, así que cuando llega un mensaje de WhatsApp, el webhook no los encuentra por teléfono y acaba creando duplicados o metiendo el mensaje en el sitio equivocado.
 
-Ayer hice una fusión equivocada: el contacto "Dani" duplicado que metí dentro de **Adolfo Alvaro Benito** era en realidad **Daniel de Carvajal**. Resultado:
+Necesito:
+1. Detectar cuántos contactos tienen teléfono "humano" pero `wa_id` vacío.
+2. Rellenar `wa_id` automáticamente desde los teléfonos que ya tenemos guardados (campo `phone_numbers`, `metadata.phones`, etc).
+3. Después de eso, fusionar los duplicados que el webhook ya creó (contactos sin nombre o con `pushName` genérico que en realidad son una persona ya existente).
+4. Limpiar caches de IA contaminadas (`contact_headlines`) para los afectados.
+5. Simplificar el webhook para que sea **estrictamente por teléfono**, sin fuzzy matching de nombre.
 
-1. El número `34655442802` (que es de Daniel Carvajal) está mal asignado al contacto Adolfo.
-2. Los mensajes recientes de Daniel sobre **Farmamatch** ("grupo de farmamatch", "lo monto ahora", "que tal", del 6, 7 y 20 de abril 2026) están dentro de la ficha de Adolfo.
-3. La ficha de Daniel Carvajal (`0c157af8-a512-4a82-b533-688d13f20f99`) se quedó sin wa_id y sin esos mensajes.
-4. Cualquier mensaje nuevo que entre desde el WhatsApp de Daniel se sigue metiendo en Adolfo.
+## Plan
 
-Los mensajes históricos de Adolfo (Toledo, luxpurple, 2022-enero 2026) **sí son suyos** y se quedan donde están.
+### 1. Diagnóstico exprés
+Antes de tocar nada, lanzo dos consultas para saber el tamaño del problema:
+- Cuántos contactos tienen `phone_numbers` no vacío pero `wa_id IS NULL`.
+- Cuántos contactos "fantasma" hay (creados por webhook con nombre tipo número o pushName corto) que tienen `wa_id` que coincide con teléfono de un contacto real.
 
-## Plan de reparación
+### 2. Backfill masivo de `wa_id`
+Migración SQL que para cada contacto sin `wa_id`:
+- Coge el primer teléfono válido de `phone_numbers` (o de `metadata->>phone`).
+- Lo normaliza (solo dígitos, prefijo país si falta).
+- Lo guarda en `wa_id` siempre que no colisione con otro contacto que ya lo tenga.
 
-### 1. Identificar exactamente qué mensajes son de Daniel y cuáles de Adolfo
-Criterio:
-- Todos los mensajes con `external_id IS NOT NULL` (los 7 que entraron por Evolution el 20-abril) → **Daniel**.
-- Todos los mensajes con `sender = 'Dani'` → **Daniel**.
-- Todos los mensajes outgoing que mencionen "farmamatch" → **Daniel**.
-- Resto (mensajes con `sender = 'Adolfo Alvaro Benito'`, "luxpurple", "Toledo", grupos antiguos) → **Adolfo, se queda**.
+Si hay colisión (otro contacto ya tiene ese `wa_id`), no sobrescribe; lo marca para revisión manual en una tabla de log temporal.
 
-### 2. Mover esos mensajes de Adolfo → Daniel Carvajal
-Migración SQL puntual que reasigna `contact_id` de los mensajes mal ubicados al id de Daniel Carvajal (`0c157af8-a512-4a82-b533-688d13f20f99`).
+### 3. Fusión automática de duplicados creados por el webhook
+Para los casos en los que el webhook ya creó un "Dani" / "Juan" / número suelto que coincide con un contacto real:
+- Detectar pares: contacto A real (con teléfono) + contacto B fantasma (con `wa_id` igual al teléfono de A).
+- Mover los mensajes de B → A.
+- Mover el `wa_id` a A (si no lo tenía).
+- Borrar el contacto fantasma B.
+- Recalcular `last_contact` de A.
 
-### 3. Mover el wa_id al dueño correcto
-- Quitar `wa_id = '34655442802'` de Adolfo.
-- Ponerlo en Daniel de Carvajal.
-- Así el `evolution-webhook` rutea los próximos mensajes al contacto correcto.
+### 4. Invalidar caches contaminadas
+- Borrar `contact_headlines` de todos los contactos tocados en pasos 2 y 3, para que se regeneren con los datos correctos la próxima vez que se abran.
 
-### 4. Recalcular `last_contact` de ambos
-El trigger ya lo hace al insertar, pero aquí hago un UPDATE manual para los dos contactos basado en sus mensajes reales.
+### 5. Endurecer el webhook (`evolution-webhook`)
+Cambiar la lógica de matching a **estrictamente por teléfono**:
+- 1º `wa_id` exacto.
+- 2º últimos 9 dígitos del `wa_id` contra `wa_id` y contra `phone_numbers`.
+- 3º búsqueda en `phone_numbers` con normalización.
+- Si no hay match por teléfono → **crear contacto nuevo siempre**, nunca por nombre.
 
-### 5. Endurecer el webhook para que esto no vuelva a pasar
-El bug raíz: cuando llega un mensaje de un wa_id nuevo, el webhook hace fuzzy-match por nombre ("Dani" → "Adolfo Alvaro Benito" o similar) y mete los mensajes ahí en vez de crear contacto nuevo. Dos cambios:
-- **Match estricto por nombre solo si es exacto** (sin contains "Dani" → "Daniel" → "Daniela").
-- Si no hay match exacto y el `pushName` es genérico tipo "Dani", crear contacto nuevo en vez de fusionar.
+Eliminar todo el bloque de fuzzy match por `pushName`. El nombre solo se usa para rellenar `name` al crear el contacto nuevo, jamás para fusionar con uno existente.
 
 ### 6. Validación
-- Comprobar que la ficha de Adolfo en `/red-estrategica/0fcf785d...` ya no tiene los mensajes de Farmamatch.
-- Comprobar que Daniel de Carvajal ahora tiene wa_id y esos 7 mensajes recientes.
-- Mandar un mensaje de prueba a Daniel desde WhatsApp y verificar que aterriza en Daniel, no en Adolfo.
+- Verificar que en Red Estratégica los contactos clave (Adolfo, Daniel, etc.) muestran `last_contact` actualizado y sin sugerencias de otra persona.
+- Mandar un mensaje de prueba desde un número conocido y comprobar que aterriza en el contacto correcto sin duplicar.
 
-## Archivos a tocar
-- Nueva migración SQL para reasignar mensajes y mover wa_id.
-- `supabase/functions/evolution-webhook/index.ts` para endurecer el matching de contactos.
+## Archivos que toco
+
+- Nueva migración SQL para:
+  - Backfill de `wa_id` desde `phone_numbers`.
+  - Fusión de duplicados detectados.
+  - Limpieza de `contact_headlines` afectadas.
+- `supabase/functions/evolution-webhook/index.ts` para quitar el fuzzy match por nombre.
 
 ## Resultado esperado
-- Adolfo vuelve a su histórico real (Toledo, luxpurple, grupos viejos).
-- Daniel de Carvajal recupera su wa_id y sus mensajes recientes de Farmamatch.
-- El próximo mensaje del 34655442802 entra correctamente en Daniel.
-- El webhook deja de fusionar contactos por coincidencias parciales de nombre.
+
+- Todos los contactos antiguos con teléfono pasan a tener `wa_id` correcto.
+- Los duplicados que ya se habían creado se fusionan en su contacto real.
+- Cualquier mensaje futuro entra por teléfono al contacto correcto, sin merges raros.
+- Las sugerencias de IA dejan de mezclar conversaciones de personas distintas.
 

@@ -22,6 +22,7 @@ import {
   RefreshCw,
   Brain,
   Plus,
+  Mic,
 } from "lucide-react";
 import { toast } from "sonner";
 

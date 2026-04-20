@@ -17,8 +17,8 @@ interface FunctionCall {
   arguments: string;
 }
 
-// OpenAI Realtime model — must match supabase/functions/jarvis-voice/index.ts
-const OPENAI_REALTIME_MODEL = 'gpt-4o-realtime-preview-2024-12-17';
+// OpenAI Realtime GA model — must match supabase/functions/jarvis-voice/index.ts
+const OPENAI_REALTIME_MODEL = 'gpt-realtime';
 
 export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
   const { onTranscript, onResponse, onStateChange } = options;

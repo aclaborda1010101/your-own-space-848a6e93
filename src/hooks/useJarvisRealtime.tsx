@@ -667,34 +667,14 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       dc.onopen = () => {
         console.log('[JARVIS] Data channel open - ready for conversation!');
         
-        // Configure session with JARVIS persona and tools
+        // Use the rich instructions returned by edge function (with user context injected)
+        const richInstructions: string = data.instructions || `Eres JARVIS, superagente personal con acceso completo a la app. Habla en castellano, tono mayordomo de élite, conciso y resolutivo.`;
+
         sendEvent({
           type: 'session.update',
           session: {
             type: 'realtime',
-            instructions: `Eres JARVIS, el asistente personal de IA de alta gama. Hablas español con un tono profesional pero cercano, como el JARVIS de Iron Man.
-
-Tu rol principal es ayudar al usuario a gestionar su día a día:
-- Crear y gestionar tareas
-- Consultar y crear eventos en el calendario
-- Proporcionar resúmenes diarios
-- Dar insights sobre productividad y hábitos
-
-Siempre:
-- Sé conciso y directo
-- Usa un tono confiable y eficiente
-- Confirma las acciones realizadas
-- Ofrece sugerencias proactivas cuando sea apropiado
-
-Cuando el usuario pida crear una tarea, usa la función create_task.
-Cuando pida ver tareas pendientes, usa list_pending_tasks.
-Cuando pida completar una tarea, usa complete_task.
-Cuando pida un resumen del día, usa get_today_summary.
-Cuando pida crear un evento o cita, usa create_event.
-Cuando pida registrar una observación o nota, usa log_observation.
-Cuando pregunte sobre sus estadísticas o rendimiento, usa get_my_stats.
-Cuando pregunte sobre sus hábitos o patrones, usa ask_about_habits.
-Cuando pida eliminar o cancelar un evento, usa delete_event.`,
+            instructions: richInstructions,
             audio: {
               input: {
                 transcription: { model: 'whisper-1' },
@@ -708,101 +688,125 @@ Cuando pida eliminar o cancelar un evento, usa delete_event.`,
               output: { voice: 'alloy' },
             },
             tools: [
+              // ── tareas ─────────────────────────────────────────────
               {
-                type: 'function',
-                name: 'create_task',
-                description: 'Crea una nueva tarea para el usuario',
+                type: 'function', name: 'create_task',
+                description: 'Crea una nueva tarea (todo) del usuario',
                 parameters: {
                   type: 'object',
                   properties: {
                     title: { type: 'string', description: 'Título de la tarea' },
-                    type: { type: 'string', enum: ['work', 'personal', 'health', 'learning'], description: 'Tipo de tarea' },
-                    priority: { type: 'string', enum: ['low', 'medium', 'high'], description: 'Prioridad de la tarea' },
-                    duration: { type: 'number', description: 'Duración estimada en minutos' },
+                    priority: { type: 'number', description: 'Prioridad 1 (baja) a 5 (urgente)' },
+                    due_date: { type: 'string', description: 'Fecha límite YYYY-MM-DD (opcional)' },
                   },
-                  required: ['title', 'type', 'priority', 'duration'],
+                  required: ['title'],
                 },
               },
               {
-                type: 'function',
-                name: 'complete_task',
-                description: 'Marca una tarea como completada buscando por título',
+                type: 'function', name: 'complete_task',
+                description: 'Marca como completada una tarea buscando por título',
+                parameters: { type: 'object', properties: { task_title: { type: 'string' } }, required: ['task_title'] },
+              },
+              {
+                type: 'function', name: 'list_pending_tasks',
+                description: 'Lista las tareas pendientes',
+                parameters: { type: 'object', properties: {} },
+              },
+              // ── contactos ──────────────────────────────────────────
+              {
+                type: 'function', name: 'search_contacts',
+                description: 'Busca contactos del usuario con matching difuso (tolera typos y nombres parciales). ÚSALO siempre que el usuario mencione una persona.',
+                parameters: { type: 'object', properties: { query: { type: 'string', description: 'Nombre o parte del nombre' } }, required: ['query'] },
+              },
+              {
+                type: 'function', name: 'create_contact',
+                description: 'Crea un nuevo contacto',
                 parameters: {
                   type: 'object',
                   properties: {
-                    task_title: { type: 'string', description: 'Título o parte del título de la tarea a completar' },
+                    name: { type: 'string' }, company: { type: 'string' }, role: { type: 'string' },
+                    email: { type: 'string' }, phone: { type: 'string' }, notes: { type: 'string' },
                   },
-                  required: ['task_title'],
+                  required: ['name'],
+                },
+              },
+              // ── proyectos ──────────────────────────────────────────
+              {
+                type: 'function', name: 'search_projects',
+                description: 'Busca proyectos/clientes del usuario por nombre o empresa',
+                parameters: { type: 'object', properties: { query: { type: 'string' } } },
+              },
+              // ── memoria ────────────────────────────────────────────
+              {
+                type: 'function', name: 'search_memories',
+                description: 'Busca en la memoria persistente del asistente (preferencias, decisiones, hechos previos)',
+                parameters: { type: 'object', properties: { query: { type: 'string' } } },
+              },
+              // ── comunicaciones ─────────────────────────────────────
+              {
+                type: 'function', name: 'get_emails',
+                description: 'Obtiene emails (por defecto solo no leídos)',
+                parameters: { type: 'object', properties: { unread: { type: 'boolean' } } },
+              },
+              {
+                type: 'function', name: 'get_whatsapp_recent',
+                description: 'Obtiene los últimos mensajes de WhatsApp',
+                parameters: { type: 'object', properties: {} },
+              },
+              // ── delegación a especialistas ─────────────────────────
+              {
+                type: 'function', name: 'ask_specialist',
+                description: 'Delega una consulta profunda al gateway de especialistas (coach, nutrición, inglés, finanzas, salud, retail, secretaria, bosco). Úsalo para preguntas que requieran experticia de dominio.',
+                parameters: {
+                  type: 'object',
+                  properties: { question: { type: 'string', description: 'La pregunta completa para el especialista' } },
+                  required: ['question'],
+                },
+              },
+              // ── query genérica ─────────────────────────────────────
+              {
+                type: 'function', name: 'query_table',
+                description: 'Consulta genérica filtrada por user_id. Tablas permitidas: todos, people_contacts, business_projects, check_ins, whoop_data, jarvis_emails_cache, whatsapp_messages, bosco_observations, bosco_interactions, transcriptions, specialist_memory, jarvis_memory, pomodoro_sessions, challenges, challenge_logs, agent_chat_messages, ai_news.',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    table: { type: 'string' },
+                    filters: { type: 'object', description: 'Pares columna=valor para filtrar' },
+                    limit: { type: 'number' },
+                  },
+                  required: ['table'],
+                },
+              },
+              // ── resumen / stats ───────────────────────────────────
+              { type: 'function', name: 'get_today_summary', description: 'Resumen del día (tareas, check-in, WHOOP)', parameters: { type: 'object', properties: {} } },
+              { type: 'function', name: 'get_my_stats', description: 'Estadísticas de productividad de la última semana', parameters: { type: 'object', properties: {} } },
+              { type: 'function', name: 'ask_about_habits', description: 'Insights y aprendizajes detectados sobre los hábitos del usuario', parameters: { type: 'object', properties: { question: { type: 'string' } } } },
+              // ── observaciones / calendario ────────────────────────
+              {
+                type: 'function', name: 'log_observation',
+                description: 'Registra una observación o nota',
+                parameters: {
+                  type: 'object',
+                  properties: { observation: { type: 'string' }, area: { type: 'string', description: 'Área: general, bosco, salud, trabajo, etc.' } },
+                  required: ['observation'],
                 },
               },
               {
-                type: 'function',
-                name: 'list_pending_tasks',
-                description: 'Lista las tareas pendientes del usuario',
-                parameters: { type: 'object', properties: {} },
-              },
-              {
-                type: 'function',
-                name: 'get_today_summary',
-                description: 'Obtiene un resumen del día actual incluyendo tareas y check-in',
-                parameters: { type: 'object', properties: {} },
-              },
-              {
-                type: 'function',
-                name: 'create_event',
-                description: 'Crea un evento o cita en el calendario',
+                type: 'function', name: 'create_event',
+                description: 'Crea un evento en el calendario (iCloud)',
                 parameters: {
                   type: 'object',
                   properties: {
-                    title: { type: 'string', description: 'Título del evento' },
-                    time: { type: 'string', description: 'Hora del evento en formato HH:MM' },
-                    duration: { type: 'number', description: 'Duración en minutos' },
-                    description: { type: 'string', description: 'Descripción opcional del evento' },
+                    title: { type: 'string' }, time: { type: 'string', description: 'HH:MM' },
+                    duration: { type: 'number', description: 'minutos' }, description: { type: 'string' },
                   },
                   required: ['title', 'time', 'duration'],
                 },
               },
               {
-                type: 'function',
-                name: 'log_observation',
-                description: 'Registra una observación o nota del día',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    observation: { type: 'string', description: 'La observación o nota a registrar' },
-                  },
-                  required: ['observation'],
-                },
-              },
-              {
-                type: 'function',
-                name: 'get_my_stats',
-                description: 'Obtiene estadísticas de productividad del usuario de la última semana',
-                parameters: { type: 'object', properties: {} },
-              },
-              {
-                type: 'function',
-                name: 'ask_about_habits',
-                description: 'Consulta insights sobre los hábitos y patrones del usuario',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    question: { type: 'string', description: 'Pregunta específica sobre los hábitos' },
-                  },
-                  required: ['question'],
-                },
-              },
-              {
-                type: 'function',
-                name: 'delete_event',
-                description: 'Elimina o cancela un evento del calendario',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    event_title: { type: 'string', description: 'Título del evento a eliminar' },
-                  },
-                  required: ['event_title'],
-                },
+                type: 'function', name: 'delete_event',
+                description: 'Elimina/cancela un evento del calendario',
+                parameters: { type: 'object', properties: { event_title: { type: 'string' } }, required: ['event_title'] },
               },
             ],
           },

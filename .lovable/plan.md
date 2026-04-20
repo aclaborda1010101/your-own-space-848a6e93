@@ -1,61 +1,48 @@
 
 
-## Qué está pasando
+## Qué quieres
 
-He encontrado los **dos problemas exactos**:
+En la lista de tareas pendientes, poder **eliminar una tarea** rápido (por si se ha colado una que no toca, o te has equivocado al crearla), sin tener que entrar a editarla.
 
-### 1) Las tareas se crean solas — culpable: `contact-analysis`
-Cuando tú (o el sistema) abre/analiza un contacto, la edge function `contact-analysis` ejecuta al final un bloque "syncedTasks" que coge las `acciones_pendientes` del perfil generado por la IA (Adolfo, IVA, Guadalupe, Cristo, etc.) y **las inserta directamente como `tasks`**, saltándose por completo la bandeja de inteligencia.
+## Estado actual
 
-Por eso ves en `/tasks` cosas tipo *"Confirmar si el perro de Alicia se recuperó"*, *"Devolver el dinero de más"*, *"Cuadrar cita pendiente para verse tras su regreso de Barcelona"* — son sugerencias de la IA aplicadas como hechos.
+He revisado `src/components/tasks/SwipeableTask.tsx` y `src/pages/Tasks.tsx`:
 
-Lo correcto es que esas mismas acciones entren en `suggestions` con `status='pending'`, que es lo que ya pinta `IntelligenceInbox` (pestaña "Bandeja de inteligencia").
+- En **móvil** ya existe: deslizas la tarea a la izquierda y aparece el botón "Eliminar" (gestión por swipe).
+- En **desktop** (que es donde estás ahora, viewport 1157px) **no hay botón visible de borrar**: solo se ve el checkbox a la izquierda y, al hacer hover, los botones de **editar** (lápiz) y **convertir a bloque** (calendario). El borrado por swipe en desktop no es descubrible y, con ratón, no es práctico.
 
-### 2) En el menú móvil no aparece "Bandeja inteligencia"
-En `SidebarNew.tsx` (desktop) sí está la entrada `Brain → /intelligence/inbox`, pero en `src/pages/MobileMenu.tsx` la ruta no se incluye en ninguna sección. Por eso desde el móvil no puedes llegar a validarlas.
+Por eso percibes que "no se pueden borrar".
 
 ## Plan
 
-### A) Cortar la creación automática de tareas y redirigirla a la Bandeja
-En `supabase/functions/contact-analysis/index.ts` (líneas ~1280-1325):
-- Sustituir el `insert` en `tasks` por un `insert` en `suggestions` con:
-  - `suggestion_type: 'task'`
-  - `status: 'pending'`
-  - `content`: `{ title, type, priority, contact_id, contact_name, source: 'contact-analysis', pretexto, ambito }`
-  - `confidence`: la que venga del perfil (o 0.7 por defecto)
-  - `reasoning`: `pretexto` del perfil
-- Mantener el chequeo de duplicados pero contra `suggestions` (mismo contacto + título normalizado + status pending/accepted) para no spamear.
-- Resultado: lo que antes caía en `/tasks` aparece en `/intelligence/inbox` esperando tu Aceptar/Rechazar, y solo al aceptar se crea la `task` real (lógica que ya existe en `useSuggestions.acceptTask`).
+### 1) Añadir botón de borrar visible en desktop
+En `src/components/tasks/SwipeableTask.tsx`, dentro del bloque de acciones que ya aparece en hover (donde están "editar" y "convertir a bloque"):
 
-### B) Limpiar lo que ya hay metido sin tu validación
-Migración SQL puntual:
-- Identificar las tareas no completadas creadas por `contact-analysis` (`source = 'manual'` con `contact_id` no nulo, `created_at` reciente, sin pasar por `suggestions`). Como `source` no las distingue, usaremos un criterio conservador:
-  - `completed = false`
-  - `contact_id IS NOT NULL`
-  - `priority = 'P1' AND duration = 15` (firma exacta del bloque de auto-sync)
-  - `created_at >= '2026-04-01'`
-- Para cada una: insertarla en `suggestions` como `pending` (para que no se pierda el trabajo del LLM, las puedas revisar) y borrarla de `tasks`.
-- Reporte final con cuántas movidas / por contacto.
+- Añadir un tercer botón **Trash2** (rojo, `text-destructive`), al final del grupo.
+- Click → abre un `AlertDialog` de confirmación ("¿Eliminar esta tarea? Esta acción no se puede deshacer.") con Cancelar / Eliminar.
+- Al confirmar → llama al `onDelete(task.id)` que ya existe (mismo flujo que el swipe), con la misma animación de salida (`isExiting`) para que desaparezca suave.
 
-> Si prefieres "borrarlas y olvidar" en vez de moverlas a la bandeja, dímelo y lo hago así. Mi recomendación es moverlas para que decidas tú.
+Mantengo intacto el swipe en móvil (sigue funcionando igual).
 
-### C) Añadir "Bandeja inteligencia" al menú móvil
-En `src/pages/MobileMenu.tsx`, sección **Principal**, justo debajo de "Tareas":
-- Nuevo item: `{ icon: Brain, label: "Bandeja inteligencia", path: "/intelligence/inbox", meta: "<N> sugerencias pendientes", badge: pendingCount }`
-- Añadir un nuevo `count` (`suggestionsPending`) al `useEffect` de carga (`select count from suggestions where user_id = uid and status = 'pending'`).
+### 2) Coherencia visual
+- El botón usa el mismo tamaño (`h-7 w-7`) y estilo `ghost` que los otros dos iconos de acción.
+- Solo visible en `sm:` hacia arriba (`hidden sm:flex` ya aplicado al contenedor de acciones), para no duplicar con el swipe en móvil.
+- Tooltip/`title="Eliminar tarea"` para accesibilidad.
 
-### D) Confirmar que no queda otro insert silencioso
-He visto otros tres puntos que también insertan tareas sin validación:
-- `email-intelligence/index.ts` (line 187): mete hasta 3 tasks por email automáticamente.
-- `process-transcription/index.ts` (line 515): tasks desde transcripciones.
-- `jarvis-agent/index.ts` (line 269): el agente conversacional (esta es legítima — la pides tú al chat).
+### 3) Confirmación obligatoria
+Uso `AlertDialog` (ya disponible en `@/components/ui/alert-dialog`) en vez de borrado directo, porque borrar con un click suelto en desktop es peligroso (un mal click y adiós tarea). El swipe móvil ya tiene su propio gesto deliberado, así que ahí no hace falta.
 
-Propuesta: aplicar el mismo cambio (→ `suggestions`) a `email-intelligence` y `process-transcription` por consistencia. `jarvis-agent` se queda igual (es acción explícita tuya por chat).
+## Ficheros que tocaré
 
-## Resultado esperado
+- `src/components/tasks/SwipeableTask.tsx` — añadir botón Trash + AlertDialog de confirmación.
 
-- `/tasks` deja de llenarse solo de "preguntar por el perro" y similares.
-- Todo lo que la IA infiere de WhatsApp/email/análisis de contacto cae en `/intelligence/inbox` con confianza + razón + Aceptar/Rechazar.
-- Desde el móvil, en el menú, sale "Bandeja inteligencia" con badge del pendiente.
-- Las tareas basura ya creadas se mueven a la bandeja para que las valides en bloque (o se borran si lo prefieres).
+## Lo que NO toco
+
+- `useTasks.deleteTask` ya existe y funciona — lo reutilizo.
+- No toco la lógica de swipe móvil.
+- No toco la bandeja de inteligencia (eso ya quedó arreglado en la iteración anterior).
+
+## Resultado
+
+En desktop, al pasar el ratón por encima de cualquier tarea pendiente, verás tres botones: editar (lápiz), convertir a bloque (calendario) y **eliminar (papelera roja)**. Click → confirmas → fuera.
 

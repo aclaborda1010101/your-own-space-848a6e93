@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
             name: r.name,
             wa_id: r.desired_wa,
             phone_numbers: r.phones,
-            source: "mac_csv_import",
+            metadata: { source: "mac_csv_import" },
           };
           toCreate.push(newRow);
           // marcar para no duplicar en el resto del bucle

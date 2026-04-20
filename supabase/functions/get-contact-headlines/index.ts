@@ -110,12 +110,49 @@ serve(async (req) => {
       .map((m) => parseDate(m.message_date))
       .find((d): d is Date => !!d) || null;
 
-    const payload = await generateHeadlines(
+    // Cargar últimas decisiones del usuario sobre asuntos previos para este contacto
+    const { data: dismissalsData } = await supabase
+      .from("contact_headline_dismissals")
+      .select("signature, original_title, decision, decided_at")
+      .eq("user_id", userId)
+      .eq("contact_id", contactId)
+      .order("decided_at", { ascending: false })
+      .limit(15);
+    const dismissals = (dismissalsData || []) as Array<{
+      signature: string;
+      original_title: string;
+      decision: string;
+    }>;
+    const dismissedSignatures = new Set(dismissals.map((d) => d.signature));
+
+    let payload = await generateHeadlines(
       contact?.name || "el contacto",
       contact?.category || "otro",
       messagesText,
       latestMessageDate,
+      dismissals,
     );
+
+    // Si el LLM repite un asunto ya descartado/hecho, forzar fallback
+    const candidateTitle = payload?.pending?.title || "";
+    if (candidateTitle && candidateTitle !== "Sin asunto vivo") {
+      const candidateSig = await generateSignature(candidateTitle);
+      if (dismissedSignatures.has(candidateSig)) {
+        console.log(`[headlines] LLM repitió asunto descartado: "${candidateTitle}" — forzando fallback`);
+        payload = {
+          ...payload,
+          pending: {
+            ...payload.pending,
+            title: "Sin asunto vivo",
+            who_owes: "nadie",
+            is_event: false,
+            event_date: null,
+            expires_at: null,
+            freshness_status: "stale",
+          },
+        };
+      }
+    }
 
     await upsertHeadlines(supabase, contactId, userId, payload, total);
     return jsonResp({ ok: true, cached: false, payload });

@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Button } from "@/components/ui/button";
 import { Upload, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { parseMacContactsCSV, type ParsedMacContact } from "@/lib/contacts-csv-mac";
+import { convertContactsXlsxToCSVText } from "@/lib/xlsx-utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -34,7 +35,8 @@ export function ImportMacContactsDialog() {
     if (!f) return;
     setLoading(true);
     try {
-      const text = await f.text();
+      const isXlsx = /\.xlsx$/i.test(f.name);
+      const text = isXlsx ? await convertContactsXlsxToCSVText(f) : await f.text();
       const contacts = parseMacContactsCSV(text);
       if (contacts.length === 0) {
         toast.error("No se encontraron contactos en el CSV");

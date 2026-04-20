@@ -1,96 +1,61 @@
 
+
 ## Qué está pasando
 
-He encontrado la causa principal de lo de Adolfo:
+He encontrado los **dos problemas exactos**:
 
-- El contacto que estás viendo ahora mismo es `Adolfo Alvaro Benito` (`0fcf...`) y su `last_contact` está en `2026-03-10`.
-- Pero los WhatsApp más nuevos no están entrando ahí: están entrando en **otro contacto duplicado** llamado `AAB` (`069c...`) con el **mismo `wa_id` `34627460836`** y mensajes hasta `2026-03-27`.
-- Por eso la app no “miente”: está leyendo bien el registro equivocado. El problema real es de **duplicados / enlace roto de mensajes**.
-- Además, esto no es solo Adolfo: he visto **158 `wa_id` duplicados** en `people_contacts`, así que hay más casos iguales.
-- La “raya blanca” muy probablemente viene de la combinación de:
-  - líneas de 1px del layout (`TopBar` / `BottomNavBar`),
-  - `backdrop-blur`,
-  - y cabeceras sticky dentro del detalle del contacto.
+### 1) Las tareas se crean solas — culpable: `contact-analysis`
+Cuando tú (o el sistema) abre/analiza un contacto, la edge function `contact-analysis` ejecuta al final un bloque "syncedTasks" que coge las `acciones_pendientes` del perfil generado por la IA (Adolfo, IVA, Guadalupe, Cristo, etc.) y **las inserta directamente como `tasks`**, saltándose por completo la bandeja de inteligencia.
 
-## Plan de arreglo
+Por eso ves en `/tasks` cosas tipo *"Confirmar si el perro de Alicia se recuperó"*, *"Devolver el dinero de más"*, *"Cuadrar cita pendiente para verse tras su regreso de Barcelona"* — son sugerencias de la IA aplicadas como hechos.
 
-### 1) Reparar Adolfo y los duplicados ya rotos en base de datos
-Haré una migración de saneamiento que:
+Lo correcto es que esas mismas acciones entren en `suggestions` con `status='pending'`, que es lo que ya pinta `IntelligenceInbox` (pestaña "Bandeja de inteligencia").
 
-- detecte grupos de contactos con el mismo `wa_id`,
-- elija un **contacto canónico** por grupo,
-- mueva al canónico todos los registros relacionados de tablas con `contact_id`,
-- recalcule:
-  - `last_contact = max(contact_messages.message_date)`
-  - `wa_message_count = count(contact_messages)`
-- elimine los duplicados “fantasma”.
+### 2) En el menú móvil no aparece "Bandeja inteligencia"
+En `SidebarNew.tsx` (desktop) sí está la entrada `Brain → /intelligence/inbox`, pero en `src/pages/MobileMenu.tsx` la ruta no se incluye en ninguna sección. Por eso desde el móvil no puedes llegar a validarlas.
 
-Para Adolfo, conservaré el contacto humano correcto (`Adolfo Alvaro Benito`) y moveré ahí los mensajes que ahora están en `AAB`, para que tu ruta actual siga funcionando.
+## Plan
 
-### 2) Blindar el webhook para que no vuelva a pasar
-Ahora mismo `evolution-webhook` resuelve contactos con `.maybeSingle()` sobre `wa_id` / `last9` / `phone_numbers`. Con duplicados, eso puede fallar o elegir mal y acabar creando o usando otro contacto.
+### A) Cortar la creación automática de tareas y redirigirla a la Bandeja
+En `supabase/functions/contact-analysis/index.ts` (líneas ~1280-1325):
+- Sustituir el `insert` en `tasks` por un `insert` en `suggestions` con:
+  - `suggestion_type: 'task'`
+  - `status: 'pending'`
+  - `content`: `{ title, type, priority, contact_id, contact_name, source: 'contact-analysis', pretexto, ambito }`
+  - `confidence`: la que venga del perfil (o 0.7 por defecto)
+  - `reasoning`: `pretexto` del perfil
+- Mantener el chequeo de duplicados pero contra `suggestions` (mismo contacto + título normalizado + status pending/accepted) para no spamear.
+- Resultado: lo que antes caía en `/tasks` aparece en `/intelligence/inbox` esperando tu Aceptar/Rechazar, y solo al aceptar se crea la `task` real (lógica que ya existe en `useSuggestions.acceptTask`).
 
-Lo cambiaré para que:
+### B) Limpiar lo que ya hay metido sin tu validación
+Migración SQL puntual:
+- Identificar las tareas no completadas creadas por `contact-analysis` (`source = 'manual'` con `contact_id` no nulo, `created_at` reciente, sin pasar por `suggestions`). Como `source` no las distingue, usaremos un criterio conservador:
+  - `completed = false`
+  - `contact_id IS NOT NULL`
+  - `priority = 'P1' AND duration = 15` (firma exacta del bloque de auto-sync)
+  - `created_at >= '2026-04-01'`
+- Para cada una: insertarla en `suggestions` como `pending` (para que no se pierda el trabajo del LLM, las puedas revisar) y borrarla de `tasks`.
+- Reporte final con cuántas movidas / por contacto.
 
-- nunca asuma unicidad si hay varias filas,
-- cargue varios candidatos,
-- elija uno de forma determinista con prioridad:
-  1. favorito / red estratégica,
-  2. nombre humano válido frente a alias basura (`AAB`, número, etc.),
-  3. más historial real,
-  4. contacto más antiguo o más completo.
-- si detecta duplicados claros del mismo número, los consolide o al menos escriba siempre en el canónico.
+> Si prefieres "borrarlas y olvidar" en vez de moverlas a la bandeja, dímelo y lo hago así. Mi recomendación es moverlas para que decidas tú.
 
-### 3) Añadir una reparación masiva reutilizable
-Como hay bastantes contactos afectados, dejaré una vía segura para re-ejecutar la limpieza:
+### C) Añadir "Bandeja inteligencia" al menú móvil
+En `src/pages/MobileMenu.tsx`, sección **Principal**, justo debajo de "Tareas":
+- Nuevo item: `{ icon: Brain, label: "Bandeja inteligencia", path: "/intelligence/inbox", meta: "<N> sugerencias pendientes", badge: pendingCount }`
+- Añadir un nuevo `count` (`suggestionsPending`) al `useEffect` de carga (`select count from suggestions where user_id = uid and status = 'pending'`).
 
-- migración de saneamiento inicial,
-- y una edge function/admin repair para recalcular contactos dañados sin depender de importaciones manuales.
+### D) Confirmar que no queda otro insert silencioso
+He visto otros tres puntos que también insertan tareas sin validación:
+- `email-intelligence/index.ts` (line 187): mete hasta 3 tasks por email automáticamente.
+- `process-transcription/index.ts` (line 515): tasks desde transcripciones.
+- `jarvis-agent/index.ts` (line 269): el agente conversacional (esta es legítima — la pides tú al chat).
 
-Así no nos quedamos parcheando contacto por contacto.
-
-### 4) Corregir la UI del “último contacto” y del timeline
-Después del merge, ajustaré la carga del detalle para que quede consistente:
-
-- el KPI “Último contacto” debe reflejar el `last_contact` recalculado,
-- la pestaña/resumen debe mostrar ya los mensajes recientes al estar todos bajo el mismo `contact_id`,
-- revisaré si hace falta refrescar `contact_headlines` / timeline cache para que no siga enseñando contexto viejo.
-
-### 5) Quitar la raya blanca / flicker visual
-Haré una pasada visual en estas piezas:
-
-- `TopBar` → línea holográfica de 1px inferior,
-- `BottomNavBar` → línea superior + `bg-scanlines` + blur,
-- `ConversationTimeline` → header sticky con blur,
-- `ContactDetail` → capas blur ambientales.
-
-La corrección será conservadora: quitar o aislar las líneas decorativas problemáticas, reducir blur donde provoque artefactos, y asegurar `overflow/z-index` para que no aparezcan parpadeos.
-
-## Detalle técnico
-
-Tablas con `contact_id` que tendré en cuenta en el merge:
-- `contact_messages`
-- `contact_headlines`
-- `contact_headline_dismissals`
-- `contact_podcasts`
-- `contact_refresh_state`
-- `emails`
-- `interactions`
-- `suggested_responses`
-- `suggestions`
-- `suggestion_feedback`
-- `tasks`
-- `contact_aliases`
-
-Regla de recálculo final:
-```text
-last_contact = MAX(contact_messages.message_date)
-wa_message_count = COUNT(contact_messages WHERE source IN whatsapp/whatsapp_backup según histórico)
-```
+Propuesta: aplicar el mismo cambio (→ `suggestions`) a `email-intelligence` y `process-transcription` por consistencia. `jarvis-agent` se queda igual (es acción explícita tuya por chat).
 
 ## Resultado esperado
 
-- Adolfo dejará de salir como “hace un mes” y pasará a mostrar la fecha real reciente.
-- Los WhatsApp recientes dejarán de quedar partidos entre `Adolfo Alvaro Benito` y `AAB`.
-- Los demás contactos duplicados por teléfono quedarán saneados.
-- La raya blanca desaparecerá o quedará localizada y neutralizada en el layout.
+- `/tasks` deja de llenarse solo de "preguntar por el perro" y similares.
+- Todo lo que la IA infiere de WhatsApp/email/análisis de contacto cae en `/intelligence/inbox` con confianza + razón + Aceptar/Rechazar.
+- Desde el móvil, en el menú, sale "Bandeja inteligencia" con badge del pendiente.
+- Las tareas basura ya creadas se mueven a la bandeja para que las valides en bloque (o se borran si lo prefieres).
+

@@ -17,6 +17,8 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const MADRID_TZ = "Europe/Madrid";
 const AMBIGUOUS_RELATIVE_RE = /\b(hoy|ayer|mañana|anoche|esta mañana|esta tarde|esta noche|este finde|este fin de semana|la semana pasada|este sábado|este domingo|este lunes|este martes|este miércoles|este jueves|este viernes|el sábado pasado|el domingo pasado|el lunes pasado|el martes pasado|el miércoles pasado|el jueves pasado|el viernes pasado|el sábado|el domingo|el lunes|el martes|el miércoles|el jueves|el viernes)\b/i;
+// Palabras que delatan un evento puntual fechable (si pasa → caduca)
+const EVENT_KEYWORDS_RE = /\b(partido|partidazo|final|semifinal|cuartos|concierto|festival|reuni[oó]n|meeting|cita|cena|comida|almuerzo|brunch|desayuno|copas?|caf[eé]|vuelo|tren|viaje|escapada|reserva|entradas?|tickets?|boda|cumple(?:años)?|aniversario|evento|charla|webinar|presentaci[oó]n|entrevista|llamada programada|videollamada|visita|quedada|finde|fin de semana|partida|torneo|carrera|maratón)\b/i;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -59,9 +61,11 @@ serve(async (req) => {
       .eq("user_id", userId)
       .maybeSingle();
 
+    const cachedExpired = isCachedPayloadExpired(cached?.payload);
     const needsRegen =
       force ||
       !cached ||
+      cachedExpired ||
       total - (cached.message_count_at_generation || 0) >= INVALIDATION_DELTA;
 
     if (!needsRegen && cached) {
@@ -204,8 +208,43 @@ function stripAmbiguousRelativeTail(text: string): string {
 
 function sanitizePayload(payload: any, fallbackMentionDate: Date | null) {
   const safe = payload && typeof payload === "object" ? payload : emptyPayload();
-  const safeTitle = typeof safe.pending?.title === "string" ? safe.pending.title.trim() : "Nada pendiente";
+  const rawTitle = typeof safe.pending?.title === "string" ? safe.pending.title.trim() : "Nada pendiente";
   const safeMention = typeof safe.pending?.last_mentioned === "string" ? safe.pending.last_mentioned.trim() : "—";
+
+  // Detect explicit event_date from model, else infer from title text
+  const modelEventDate = parseDate(safe.pending?.event_date);
+  const inferredEventDate = modelEventDate ?? extractDateFromText(rawTitle);
+  const looksLikeEvent =
+    Boolean(safe.pending?.is_event) ||
+    EVENT_KEYWORDS_RE.test(rawTitle) ||
+    !!inferredEventDate;
+
+  const now = new Date();
+  let freshness: "active" | "expiring" | "expired" | "stale" = "active";
+  let expiresAtIso: string | null = null;
+
+  if (inferredEventDate) {
+    // Event lasts the day; expires at end of that local day
+    const endOfDay = new Date(inferredEventDate);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+    expiresAtIso = endOfDay.toISOString();
+    if (endOfDay.getTime() < now.getTime()) freshness = "expired";
+    else if (endOfDay.getTime() - now.getTime() < 24 * 3600 * 1000) freshness = "expiring";
+  } else if (looksLikeEvent) {
+    // Event-shaped title without parsable date: 7-day soft expiry
+    expiresAtIso = new Date(now.getTime() + 7 * 24 * 3600 * 1000).toISOString();
+  } else if (fallbackMentionDate) {
+    // Conversational decay: stale after 14 days without new evidence
+    const ageDays = (now.getTime() - fallbackMentionDate.getTime()) / (24 * 3600 * 1000);
+    if (ageDays > 14) freshness = "stale";
+  }
+
+  // Rewrite title if expired: turn into past-tense memory and demote
+  let finalTitle = containsAmbiguousRelativeDate(rawTitle) ? stripAmbiguousRelativeTail(rawTitle) : rawTitle;
+  if (freshness === "expired") {
+    const dateLabel = inferredEventDate ? formatShortAbsoluteDate(inferredEventDate) : "ya pasó";
+    finalTitle = `Sin asunto vivo · evento del ${dateLabel} ya cerrado`;
+  }
 
   return {
     health: {
@@ -215,12 +254,16 @@ function sanitizePayload(payload: any, fallbackMentionDate: Date | null) {
       trend: typeof safe.health?.trend === "string" ? safe.health.trend : "Sin tendencia detectable",
     },
     pending: {
-      title: containsAmbiguousRelativeDate(safeTitle) ? stripAmbiguousRelativeTail(safeTitle) : safeTitle,
+      title: finalTitle,
       who_owes: typeof safe.pending?.who_owes === "string" ? safe.pending.who_owes : "—",
       last_mentioned:
         containsAmbiguousRelativeDate(safeMention) && fallbackMentionDate
           ? `mencionado el ${formatShortAbsoluteDate(fallbackMentionDate)}`
           : safeMention || (fallbackMentionDate ? `mencionado el ${formatShortAbsoluteDate(fallbackMentionDate)}` : "—"),
+      is_event: looksLikeEvent,
+      event_date: inferredEventDate ? inferredEventDate.toISOString() : null,
+      expires_at: expiresAtIso,
+      freshness_status: freshness,
     },
     topics: {
       tone_emoji: typeof safe.topics?.tone_emoji === "string" ? safe.topics.tone_emoji : "🤔",
@@ -229,6 +272,48 @@ function sanitizePayload(payload: any, fallbackMentionDate: Date | null) {
       tone_evolution: typeof safe.topics?.tone_evolution === "string" ? safe.topics.tone_evolution : "Sin evolución detectable",
     },
   };
+}
+
+function isCachedPayloadExpired(payload: any): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const exp = payload?.pending?.expires_at;
+  if (!exp || typeof exp !== "string") return false;
+  const ms = Date.parse(exp);
+  if (Number.isNaN(ms)) return false;
+  return ms < Date.now();
+}
+
+// Heuristic date extractor for Spanish: "20 de abril", "domingo 20 de abril", "20/04", "20-04-2026"
+const MONTHS_ES: Record<string, number> = {
+  enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5,
+  julio: 6, agosto: 7, septiembre: 8, setiembre: 8, octubre: 9, noviembre: 10, diciembre: 11,
+};
+function extractDateFromText(text: string): Date | null {
+  if (!text) return null;
+  const lower = text.toLowerCase();
+
+  // dd de <mes> [de yyyy]
+  const m1 = lower.match(/\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)(?:\s+de\s+(\d{4}))?\b/);
+  if (m1) {
+    const day = parseInt(m1[1], 10);
+    const month = MONTHS_ES[m1[2]];
+    const year = m1[3] ? parseInt(m1[3], 10) : new Date().getUTCFullYear();
+    const d = new Date(Date.UTC(year, month, day));
+    if (d.getUTCDate() === day) return d;
+  }
+  // dd/mm[/yyyy] or dd-mm[-yyyy]
+  const m2 = lower.match(/\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/);
+  if (m2) {
+    const day = parseInt(m2[1], 10);
+    const month = parseInt(m2[2], 10) - 1;
+    let year = m2[3] ? parseInt(m2[3], 10) : new Date().getUTCFullYear();
+    if (year < 100) year += 2000;
+    if (month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+      const d = new Date(Date.UTC(year, month, day));
+      if (d.getUTCDate() === day && d.getUTCMonth() === month) return d;
+    }
+  }
+  return null;
 }
 
 function emptyPayload() {
@@ -243,6 +328,10 @@ function emptyPayload() {
       title: "Nada pendiente",
       who_owes: "—",
       last_mentioned: "—",
+      is_event: false,
+      event_date: null,
+      expires_at: null,
+      freshness_status: "active",
     },
     topics: {
       tone_emoji: "🤔",
@@ -286,7 +375,12 @@ REGLA CRÍTICA DE FECHAS:
 - Si dentro de un mensaje aparece una referencia relativa como "mañana", "ayer", "el sábado" o "el domingo", interprétala SIEMPRE respecto a la fecha absoluta de esa línea, no respecto al día actual.
 - NO devuelvas en el título ni en last_mentioned expresiones ambiguas como "ayer", "mañana", "el sábado", "el pasado domingo".
 - Reescribe siempre con fecha absoluta o con una formulación neutra y atemporal.
-- Ejemplos correctos: "entradas para el partido del domingo 20 de abril", "comida con Min", "mencionado el 12 abr 2026".`;
+- Ejemplos correctos: "entradas para el partido del domingo 20 de abril", "comida con Min", "mencionado el 12 abr 2026".
+
+REGLA CRÍTICA DE EVENTOS PASADOS:
+- Si el asunto pendiente se refiere a un evento puntual (partido, concierto, vuelo, cita, reserva, cena, reunión, viaje, entrega) cuya fecha YA ES ANTERIOR a "Hoy real del sistema", ese evento ESTÁ CERRADO. NUNCA lo devuelvas como acción a hacer ni como CTA.
+- En ese caso devuelve title = "Sin asunto vivo" (o un asunto NUEVO posterior si existe), who_owes = "nadie", is_event = false.
+- Solo marca is_event = true cuando el evento esté en el futuro o sin fecha cerrada. Si pones is_event = true rellena event_date en formato ISO (YYYY-MM-DD) con la fecha real del evento.`;
 
   const userPrompt = `Hoy real del sistema: ${todayLabel}
 Contacto: ${contactName} (categoría: ${category})
@@ -352,15 +446,23 @@ Devuelve análisis con esta forma exacta llamando a la función emit_headlines.`
                     properties: {
                       title: {
                         type: "string",
-                        description: "Asunto pendiente concreto, sin fechas relativas ambiguas; si hay fecha, usar fecha absoluta o frase neutra.",
+                        description: "Asunto pendiente VIVO (futuro o sin cerrar). Si el único asunto es un evento ya pasado, devuelve 'Sin asunto vivo'. Sin fechas relativas ambiguas; si hay fecha, fecha absoluta.",
                       },
                       who_owes: {
                         type: "string",
-                        description: '"tú", "él/ella" o "nadie"',
+                        description: '"tú", "él/ella" o "nadie". Si no hay asunto vivo, "nadie".',
                       },
                       last_mentioned: {
                         type: "string",
                         description: 'Fecha breve absoluta, ej: "mencionado el 12 abr 2026". Nunca usar "ayer", "mañana" o "el sábado".',
+                      },
+                      is_event: {
+                        type: "boolean",
+                        description: "true SOLO si el asunto es un evento puntual con fecha futura o sin fecha cerrada. false si el evento ya pasó o no es un evento.",
+                      },
+                      event_date: {
+                        type: "string",
+                        description: "Si is_event=true y conoces la fecha, formato ISO YYYY-MM-DD. Si no aplica, cadena vacía.",
                       },
                     },
                     required: ["title", "who_owes", "last_mentioned"],

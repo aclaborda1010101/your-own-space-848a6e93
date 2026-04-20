@@ -333,39 +333,63 @@ export default function ContactDetail() {
         </GlassCard>
 
         {/* JARVIS SUGIERE — bloque protagonista */}
-        {headlines && (
-          <JarvisSuggestionHero
-            headline={
-              <>
-                {headlines.pending.title.split(/(:|—|·)/)[0]}{" "}
-                <span className="text-success">{headlines.pending.who_owes}</span>.{" "}
-                {headlines.health.trend && (
-                  <span className="text-foreground/80">{headlines.health.trend}</span>
-                )}
-              </>
-            }
-            pretext={headlines.pending.last_mentioned}
-            context={`${headlines.health.relationship_type} — salud relacional ${headlines.health.score}/10 (${headlines.health.label}).`}
-            confidence={Math.round((headlines.health.score / 10) * 100)}
-            priority={healthScore < 4 ? "alta" : healthScore < 7 ? "media" : "baja"}
-            detectedAgo={
-              contact.last_contact
-                ? formatDistanceToNowStrict(new Date(contact.last_contact), { locale: es })
-                : undefined
-            }
-            tags={[
-              contact.category || "personal",
-              totalMessages > 1000 ? "histórico denso" : "activo",
-            ]}
-            onAccept={() => navigate(`/tasks?contact=${contact.id}&suggest=1`)}
-            acceptLabel="Aceptar y agendar"
-            onEvidence={() => {
-              const el = document.getElementById("contact-tabs");
-              el?.scrollIntoView({ behavior: "smooth" });
-            }}
-            evidenceLabel={`Ver evidencia (${totalMessages.toLocaleString("es")} mensajes)`}
-          />
-        )}
+        {headlines && (() => {
+          const fresh = headlines.pending.freshness_status ?? "active";
+          const isExpired = fresh === "expired";
+          const isExpiring = fresh === "expiring";
+          const isStale = fresh === "stale";
+          return (
+            <JarvisSuggestionHero
+              headline={
+                isExpired ? (
+                  <span className="text-muted-foreground">
+                    Sin asunto vivo · el evento anterior ya pasó.{" "}
+                    {headlines.health.trend && (
+                      <span className="text-foreground/70">{headlines.health.trend}</span>
+                    )}
+                  </span>
+                ) : (
+                  <>
+                    {headlines.pending.title.split(/(:|—|·)/)[0]}{" "}
+                    <span className="text-success">{headlines.pending.who_owes}</span>.{" "}
+                    {headlines.health.trend && (
+                      <span className="text-foreground/80">{headlines.health.trend}</span>
+                    )}
+                  </>
+                )
+              }
+              pretext={
+                isExpired
+                  ? "Recomendación caducada · movida a historial"
+                  : isExpiring
+                  ? "⏳ Caduca en las próximas horas · " + headlines.pending.last_mentioned
+                  : isStale
+                  ? "Sin evidencia reciente · " + headlines.pending.last_mentioned
+                  : headlines.pending.last_mentioned
+              }
+              context={`${headlines.health.relationship_type} — salud relacional ${headlines.health.score}/10 (${headlines.health.label}).`}
+              confidence={Math.round((headlines.health.score / 10) * 100)}
+              priority={isExpired ? "baja" : healthScore < 4 ? "alta" : healthScore < 7 ? "media" : "baja"}
+              detectedAgo={
+                contact.last_contact
+                  ? formatDistanceToNowStrict(new Date(contact.last_contact), { locale: es })
+                  : undefined
+              }
+              tags={[
+                contact.category || "personal",
+                totalMessages > 1000 ? "histórico denso" : "activo",
+                ...(isExpired ? ["caducada"] : isExpiring ? ["caduca hoy"] : isStale ? ["sin novedades"] : []),
+              ]}
+              onAccept={isExpired ? undefined : () => navigate(`/tasks?contact=${contact.id}&suggest=1`)}
+              acceptLabel={isExpired ? undefined : "Aceptar y agendar"}
+              onEvidence={() => {
+                const el = document.getElementById("contact-tabs");
+                el?.scrollIntoView({ behavior: "smooth" });
+              }}
+              evidenceLabel={`Ver evidencia (${totalMessages.toLocaleString("es")} mensajes)`}
+            />
+          );
+        })()}
 
         {/* KPI STRIP — datos crudos tipo fichero */}
         <ContactKpiStrip
@@ -445,8 +469,22 @@ export default function ContactDetail() {
                 <HeadlineCard
                   label="Asunto pendiente"
                   icon={<AlertCircle className="w-4 h-4" />}
-                  accent="warning"
-                  value={headlines.pending.title}
+                  accent={headlines.pending.freshness_status === "expired" ? "primary" : "warning"}
+                  value={
+                    <span>
+                      {headlines.pending.freshness_status === "expired" && (
+                        <span className="inline-block mr-2 px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px] uppercase tracking-wider align-middle">
+                          caducada
+                        </span>
+                      )}
+                      {headlines.pending.freshness_status === "expiring" && (
+                        <span className="inline-block mr-2 px-1.5 py-0.5 rounded bg-warning/20 text-warning text-[10px] uppercase tracking-wider align-middle">
+                          caduca hoy
+                        </span>
+                      )}
+                      {headlines.pending.title}
+                    </span>
+                  }
                   line2={`Mover ficha: ${headlines.pending.who_owes}`}
                   line3={`Última mención: ${headlines.pending.last_mentioned}`}
                 />

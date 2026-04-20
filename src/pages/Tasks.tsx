@@ -299,7 +299,7 @@ const Tasks = () => {
 
           {/* Task Workspace */}
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.9fr)] min-w-0">
-            <div className="grid gap-6 grid-cols-1 min-w-0">
+            <div className="grid gap-6 lg:grid-cols-2 min-w-0">
               {/* Pending */}
               <Card className="border-border bg-card">
                 <CardHeader className="pb-4">

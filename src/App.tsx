@@ -22,7 +22,6 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { WebSocketInitializer } from "./components/WebSocketInitializer";
 import { UserSettingsProvider } from "./hooks/useUserSettings";
 import { NativeBootstrap } from "./components/native/NativeBootstrap";
-import { NativePushProvider } from "./hooks/useNativePushNotifications";
 
 // --- Lazy imports for protected pages ---
 
@@ -70,7 +69,6 @@ const PrivacyPolicy = React.lazy(() => import("./pages/PrivacyPolicy"));
 const AICosts = React.lazy(() => import("./pages/AICosts"));
 const IntelligenceInbox = React.lazy(() => import("./pages/IntelligenceInbox"));
 const MobileMenu = React.lazy(() => import("./pages/MobileMenu"));
-const JarvisPage = React.lazy(() => import("./pages/JarvisPage"));
 
 // --- Loading fallback ---
 const PageLoader = () => (
@@ -152,7 +150,6 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <AuthProvider>
-              <NativePushProvider>
               <OAuthMessageBridge />
               <Suspense fallback={<PageLoader />}>
                 <Routes>
@@ -170,7 +167,7 @@ const App = () => (
                   <Route path="/chat" element={<ProtectedPage><Chat /></ProtectedPage>} />
                   <Route path="/chat-simple" element={<ProtectedPage><ChatSimple /></ProtectedPage>} />
                   <Route path="/potus" element={<Navigate to="/chat" replace />} />
-                  <Route path="/jarvis" element={<ProtectedPage><JarvisPage /></ProtectedPage>} />
+                  <Route path="/jarvis" element={<Navigate to="/chat" replace />} />
                   <Route path="/communications" element={<ProtectedPage><Communications /></ProtectedPage>} />
                   {/* OpenClaw: la home de OpenClaw es ahora el Hub real (TITAN/POTUS) */}
                   <Route path="/openclaw" element={<ProtectedPage><OpenClawHub /></ProtectedPage>} />
@@ -227,7 +224,6 @@ const App = () => (
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
-              </NativePushProvider>
             </AuthProvider>
           </BrowserRouter>
         </TooltipProvider>

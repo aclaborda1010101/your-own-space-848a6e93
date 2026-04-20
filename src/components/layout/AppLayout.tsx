@@ -3,7 +3,6 @@ import { useLocation } from "react-router-dom";
 import { BottomNavBar } from "./BottomNavBar";
 import { SidebarNew } from "./SidebarNew";
 import { TopBar } from "./TopBar";
-import { AgentChatFloat } from "@/components/agent/AgentChatFloat";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +37,7 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
         !isWizardPage && (sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")
       )}>
         {!isWizardPage && (
-          <div className="hidden lg:block">
+          <div className="hidden md:block">
             <TopBar onMenuClick={openSidebar} />
           </div>
         )}
@@ -61,13 +60,6 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
       {/* Bottom nav - hidden on login and wizard pages */}
       {!isLoginPage && !isWizardPage && (
         <BottomNavBar />
-      )}
-
-      {/* JARVIS floating chat - solo desktop. En móvil/iPad se accede por /jarvis (página completa) */}
-      {!isLoginPage && !isWizardPage && (
-        <div className="hidden lg:block">
-          <AgentChatFloat />
-        </div>
       )}
     </div>
   );

@@ -1,30 +1,43 @@
 
 
-## Diagnóstico: la preview SÍ está cargando
+El usuario quiere un botón "Actualizar" en la fila de acciones del header del expediente del contacto (junto a Llamar / WhatsApp / Recordatorio), que dispare la actualización del perfil con los últimos WhatsApp/emails. Ya existe `refreshProfile()` en `ContactDetail.tsx` pero como botón aparte arriba — hay que **moverlo / replicarlo en la barra de acciones rápidas** para que sea consistente con los otros tres.
 
-He revisado:
-- **Logs del dev server**: Vite arrancó OK y la última compilación a las 03:31:58 fue exitosa (HMR updates a `App.tsx`, `MobileMenu.tsx`, `Tasks.tsx`). No hay errores activos.
-- **Archivos críticos**: `JarvisPage.tsx` y `useNativePushNotifications.tsx` existen y están bien.
-- **Console logs y network**: sin errores ni peticiones fallidas.
-- **Session replay (hace ~1 minuto)**: navegaste a `/`, el viewport renderizó, moviste el ratón sobre la UI y un elemento se hizo visible (`display: block`). Eso confirma que React montó y la app está corriendo.
+Voy a leer la zona exacta del header para confirmar dónde están los botones Llamar / WhatsApp / Recordatorio antes de proponer.
 
-### Posibles causas de lo que ves
+Confirmado por el contexto: en `ContactDetail.tsx` el header ya renderiza botones de "call/WhatsApp/reminder/refresh" pero el de refresh está separado visualmente. La queja es que **no aparece al mismo nivel ni con el mismo estilo** que los otros tres.
 
-1. **Caché del navegador** mostrando una versión vieja con el error de sintaxis que hubo a las 03:28:45 (ya resuelto a las 03:28:51).
-2. **Service worker / cache-buster**: el guardia de freshness puede estar reseteando.
-3. **Pantalla de boot fallback** (`Cargando JARVIS...`) si React no terminó de montar antes del auto-retry de 12s.
+## Plan
 
-### Plan de acción
+### Cambio único: barra de acciones unificada en el header del contacto
 
-1. Pulsa el botón flotante **"Forzar actualización"** (icono refrescar abajo a la derecha) — limpia service workers, caches y recarga con cache-buster.
-2. Si no aparece, recarga manual con **Cmd+Shift+R** (hard refresh).
-3. Si sigue en blanco tras eso, hazme captura de la pantalla actual y de la consola del navegador (F12 → Console) para ver el error real.
+En `src/pages/ContactDetail.tsx`, en la fila de botones del header (donde están **Llamar**, **WhatsApp**, **Recordatorio**), añadir como **cuarto botón** "Actualizar" con el mismo estilo (icono `RefreshCw` + label corto), que:
 
-### Si después de eso sigue sin cargar
+1. Llama a la función `refreshProfile()` que ya existe (invoca `contact-analysis` para ese contacto).
+2. Muestra spinner mientras corre (`isRefreshing` ya existe).
+3. Toast "Actualizando con últimos WhatsApp y emails…" → al terminar, recarga la ficha con `load()` para que se vean los nuevos hitos / mensajes / sentimiento.
+4. Eliminar el botón duplicado de "Actualizar perfil" que está suelto arriba a la derecha (el que añadimos en la iteración anterior), para que **sólo exista uno** y esté integrado en la barra.
 
-Implementaré:
-- Revisión de `JarvisPage.tsx` y `App.tsx` por si quedó algún import roto del cambio anterior.
-- Verificar que la ruta `/` (Index) no rompe por algún cambio colateral en `AppLayout`.
+### Detalle de implementación
 
-No toco código todavía porque **no hay evidencia de fallo en build ni en runtime**. Necesito que pruebes el force-refresh primero.
+- Añadir `RefreshCw` al import de `lucide-react` si no está.
+- Insertar el `<Button>` en el mismo contenedor flex que los otros tres, mismo `size`, mismo `variant`.
+- El handler ya es `refreshProfile` (no se duplica lógica). Esa función ya invoca `contact-analysis` con el `contact_id`, que internamente reanaliza con los últimos `contact_messages` (WhatsApp) y emails cacheados.
+- Quitar el botón flotante / suelto que estaba antes en el header.
+
+### Archivos a tocar
+
+Sólo **uno**:
+- `src/pages/ContactDetail.tsx` — añadir el botón "Actualizar" en la fila de acciones, eliminar el botón duplicado, asegurar `disabled={isRefreshing}` y spinner.
+
+Sin migraciones, sin edge functions nuevas (la lógica `contact-analysis` ya está creada y devuelve perfil refrescado con últimos WhatsApp + emails).
+
+### Lo que verás después
+
+En el expediente de cualquier contacto, en la cabecera verás cuatro botones uniformes en línea:
+
+```text
+[ 📞 Llamar ]  [ 💬 WhatsApp ]  [ ⏰ Recordatorio ]  [ 🔄 Actualizar ]
+```
+
+Al pulsar "Actualizar": spinner en el icono, toast informativo, y al terminar la ficha recarga con los últimos mensajes/correos integrados en perfil, hitos y timeline.
 

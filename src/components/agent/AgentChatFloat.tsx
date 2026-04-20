@@ -33,16 +33,6 @@ export function AgentChatFloat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // External toggle via window event (from BottomNavBar JARVIS button)
-  useEffect(() => {
-    const handler = () => {
-      setMinimized(false);
-      setOpen(prev => !prev);
-    };
-    window.addEventListener('jarvis:toggle', handler);
-    return () => window.removeEventListener('jarvis:toggle', handler);
-  }, []);
-
   const toggleProactive = useCallback(() => {
     setProactiveEnabled(prev => {
       const next = !prev;

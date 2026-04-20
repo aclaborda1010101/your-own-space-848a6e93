@@ -223,7 +223,7 @@ export default function MobileMenu() {
     <div className="min-h-screen bg-background pb-24">
       <meta name="description" content="JARVIS OS · Panel de control con accesos rápidos, módulos, datos y sistema." />
 
-      <div className="mx-auto w-full max-w-md md:max-w-none px-4 md:px-6 lg:px-8 pt-5">
+      <div className="mx-auto max-w-md px-4 pt-5">
         {/* Header */}
         <header className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">

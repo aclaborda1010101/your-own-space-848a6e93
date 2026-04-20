@@ -282,20 +282,38 @@ REGLAS DE ESTILO:
     }
 
     // Save user message and response to potus_chat
-    await Promise.all([
+    const [userMsgRes, asstMsgRes] = await Promise.all([
       supabase.from("potus_chat").insert({
         user_id,
         message,
         role: "user",
         platform,
-      }),
+      }).select("id").single(),
       supabase.from("potus_chat").insert({
         user_id,
         message: response,
         role: "assistant",
         platform,
-      }),
+      }).select("id").single(),
     ]);
+
+    // Fire-and-forget: enqueue both messages for jarvis_history_chunks ingestion
+    try {
+      const jobs = [];
+      if (userMsgRes.data?.id) jobs.push({
+        user_id, source_type: "jarvis_chat", source_id: userMsgRes.data.id,
+        source_table: "potus_chat", status: "pending",
+      });
+      if (asstMsgRes.data?.id) jobs.push({
+        user_id, source_type: "jarvis_chat", source_id: asstMsgRes.data.id,
+        source_table: "potus_chat", status: "pending",
+      });
+      if (jobs.length > 0) {
+        supabase.from("jarvis_ingestion_jobs").insert(jobs).then(() => {});
+      }
+    } catch (e) {
+      console.warn("[Gateway] enqueue ingest failed:", e);
+    }
 
     // Save memory if message is substantial
     if (message.length > 30) {

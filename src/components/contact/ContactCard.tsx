@@ -1,5 +1,4 @@
 import { GlassCard } from "@/components/ui/GlassCard";
-import { HealthMeter } from "./HealthMeter";
 import {
   Briefcase,
   Heart,
@@ -9,6 +8,7 @@ import {
   MessageSquarePlus,
   Sparkles,
   X,
+  MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -22,18 +22,18 @@ interface ContactCardData {
   health_score: number;
   last_topic: string | null;
   has_podcast: boolean;
-  /** ISO string del último contacto (opcional para cálculo de días sin contactar) */
+  /** ISO string del último contacto */
   last_contact?: string | null;
+  /** Nº de mensajes WhatsApp acumulados */
+  wa_message_count?: number | null;
 }
 
 interface ContactCardProps {
   contact: ContactCardData;
   onClick: () => void;
-  /** Si se pasa, muestra una X discreta arriba a la derecha para sacar de la red */
   onRemove?: () => void;
 }
 
-/** Devuelve días enteros desde el último contacto (o null si nunca). */
 function daysSince(iso: string | null | undefined): number | null {
   if (!iso) return null;
   const d = new Date(iso).getTime();
@@ -41,37 +41,13 @@ function daysSince(iso: string | null | undefined): number | null {
   return Math.floor((Date.now() - d) / 86_400_000);
 }
 
-/** Chip compacto de recencia. */
-function recencyChip(days: number | null) {
-  if (days == null)
-    return {
-      label: "—",
-      tone: "muted" as const,
-      tip: "No tenemos registro de la última interacción.",
-    };
-  if (days <= 7)
-    return {
-      label: `✓ ${days}d`,
-      tone: "success" as const,
-      tip: `Relación activa: hace ${days} ${days === 1 ? "día" : "días"}.`,
-    };
-  if (days <= 30)
-    return {
-      label: `${days}d`,
-      tone: "default" as const,
-      tip: `Última interacción hace ${days} días. Mantente al tanto.`,
-    };
-  if (days <= 90)
-    return {
-      label: `⚠ ${days}d`,
-      tone: "warning" as const,
-      tip: `En riesgo de enfriarse: ${days} días sin hablar.`,
-    };
-  return {
-    label: `💤 ${days}d`,
-    tone: "destructive" as const,
-    tip: `Relación dormida: ${days} días sin contacto.`,
-  };
+function recencyLabel(days: number | null): { text: string; tone: "success" | "default" | "warning" | "destructive" | "muted"; tip: string } {
+  if (days == null) return { text: "Sin registro", tone: "muted", tip: "No tenemos registro de la última interacción." };
+  if (days === 0) return { text: "Hoy", tone: "success", tip: "Hablasteis hoy." };
+  if (days <= 7) return { text: `Hace ${days}d`, tone: "success", tip: `Relación activa: hace ${days} ${days === 1 ? "día" : "días"}.` };
+  if (days <= 30) return { text: `Hace ${days}d`, tone: "default", tip: `Última interacción hace ${days} días.` };
+  if (days <= 90) return { text: `Hace ${days}d`, tone: "warning", tip: `En riesgo de enfriarse: ${days} días sin hablar.` };
+  return { text: `Hace ${days}d`, tone: "destructive", tip: `Relación dormida: ${days} días sin contacto.` };
 }
 
 const CATEGORY_META: Record<
@@ -82,6 +58,25 @@ const CATEGORY_META: Record<
   personal: { icon: Heart, label: "Personal", cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
   familiar: { icon: Users, label: "Familia", cls: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
 };
+
+/** Devuelve clases tonales según rango del score (mismo lenguaje que los KPIs). */
+function scoreTone(score: number) {
+  if (score >= 7) return {
+    box: "bg-success/15 border-success/40 text-success shadow-[0_0_20px_-6px_hsl(var(--success)/0.5)]",
+    border: "hover:border-success/40",
+    label: "Sana",
+  };
+  if (score >= 4) return {
+    box: "bg-warning/15 border-warning/40 text-warning shadow-[0_0_20px_-6px_hsl(var(--warning)/0.5)]",
+    border: "hover:border-warning/40",
+    label: "Atención",
+  };
+  return {
+    box: "bg-destructive/15 border-destructive/40 text-destructive shadow-[0_0_20px_-6px_hsl(var(--destructive)/0.5)]",
+    border: "hover:border-destructive/40",
+    label: "Crítica",
+  };
+}
 
 export function ContactCard({ contact, onClick, onRemove }: ContactCardProps) {
   const navigate = useNavigate();
@@ -98,19 +93,18 @@ export function ContactCard({ contact, onClick, onRemove }: ContactCardProps) {
     .join("");
 
   const days = daysSince(contact.last_contact);
-  const rec = recencyChip(days);
+  const rec = recencyLabel(days);
   const needsFollowUp = days != null && days > 14 && !!contact.last_topic;
+  const tone = scoreTone(contact.health_score);
+  const score = Math.round(contact.health_score);
+  const msgs = contact.wa_message_count || 0;
 
-  const recToneCls =
-    rec.tone === "success"
-      ? "bg-success/10 text-success border-success/30"
-      : rec.tone === "warning"
-      ? "bg-warning/10 text-warning border-warning/30"
-      : rec.tone === "destructive"
-      ? "bg-destructive/10 text-destructive border-destructive/30"
-      : rec.tone === "muted"
-      ? "bg-muted/20 text-muted-foreground border-muted/30"
-      : "bg-card/50 text-foreground/80 border-border/60";
+  const recDotCls =
+    rec.tone === "success" ? "bg-success" :
+    rec.tone === "warning" ? "bg-warning" :
+    rec.tone === "destructive" ? "bg-destructive" :
+    rec.tone === "muted" ? "bg-muted-foreground/40" :
+    "bg-foreground/40";
 
   const handleDraft = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -131,7 +125,10 @@ export function ContactCard({ contact, onClick, onRemove }: ContactCardProps) {
   return (
     <GlassCard
       hover
-      className="p-4 cursor-pointer group relative"
+      className={cn(
+        "p-5 cursor-pointer group relative border transition-all duration-200",
+        tone.border,
+      )}
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -159,20 +156,21 @@ export function ContactCard({ contact, onClick, onRemove }: ContactCardProps) {
         </Tooltip>
       )}
 
-      <div className="flex items-start gap-3">
-        {/* Avatar */}
+      {/* Cabecera: avatar + nombre/categoría + score grande */}
+      <div className="flex items-start gap-4">
+        {/* Avatar grande */}
         <div className="shrink-0">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/30 to-primary/10 border border-primary/20 flex items-center justify-center text-sm font-semibold font-display text-foreground">
+          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary/30 to-primary/5 border border-primary/20 flex items-center justify-center text-base font-semibold font-display text-foreground">
             {initials || "?"}
           </div>
         </div>
 
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <h3 className="font-display font-semibold text-base text-foreground truncate pr-6">
+        {/* Nombre + chip categoría */}
+        <div className="flex-1 min-w-0 pt-0.5">
+          <h3 className="font-display font-semibold text-base text-foreground truncate pr-8 leading-tight">
             {contact.name}
           </h3>
-          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+          <div className="mt-2">
             <span
               className={cn(
                 "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium whitespace-nowrap",
@@ -182,50 +180,25 @@ export function ContactCard({ contact, onClick, onRemove }: ContactCardProps) {
               <Icon className="w-3 h-3" />
               {meta.label}
             </span>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium whitespace-nowrap font-mono",
-                    recToneCls,
-                  )}
-                >
-                  {rec.label}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="max-w-[220px] text-xs">
-                <p className="font-medium mb-1">Recencia de contacto</p>
-                <p className="text-muted-foreground leading-relaxed">{rec.tip}</p>
-              </TooltipContent>
-            </Tooltip>
-
-            {contact.has_podcast && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 border border-primary/30 text-[10px] text-primary">
-                    <Headphones className="w-3 h-3" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  Tiene podcast generado
-                </TooltipContent>
-              </Tooltip>
-            )}
           </div>
         </div>
 
-        {/* Health: anillo compacto sin label inferior */}
+        {/* Score grande tipo KPI */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="shrink-0 w-12 flex items-center justify-center">
-              <HealthMeter score={contact.health_score} size="sm" showLabel={false} />
+            <div
+              className={cn(
+                "shrink-0 w-14 h-14 rounded-2xl border flex items-center justify-center font-display font-semibold text-3xl leading-none",
+                tone.box,
+              )}
+            >
+              {score}
             </div>
           </TooltipTrigger>
           <TooltipContent side="left" className="max-w-[220px] text-xs">
-            <p className="font-medium mb-1">Salud relacional: {contact.health_score}/10</p>
+            <p className="font-medium mb-1">Salud relacional: {score}/10 · {tone.label}</p>
             <p className="text-muted-foreground leading-relaxed">
-              Calculada con frecuencia de contacto, recencia, sentimiento de las conversaciones e historial de interacciones.
+              Calculada con frecuencia de contacto, recencia, sentimiento de conversaciones e historial.
               <br />
               <span className="text-destructive">0–3</span> crítica · <span className="text-warning">4–6</span> atención · <span className="text-success">7–10</span> sana
             </p>
@@ -233,14 +206,52 @@ export function ContactCard({ contact, onClick, onRemove }: ContactCardProps) {
         </Tooltip>
       </div>
 
+      {/* Meta-fila: recencia + mensajes + podcast */}
+      <div className="mt-4 pt-3 border-t border-border/40 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center gap-1.5">
+              <span className={cn("w-1.5 h-1.5 rounded-full", recDotCls)} />
+              <span className="font-mono">{rec.text}</span>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs max-w-[220px]">
+            {rec.tip}
+          </TooltipContent>
+        </Tooltip>
+
+        {msgs > 0 && (
+          <span className="inline-flex items-center gap-1">
+            <MessageCircle className="w-3 h-3" />
+            <span className="font-mono">{msgs > 999 ? `${(msgs / 1000).toFixed(1)}k` : msgs}</span>
+          </span>
+        )}
+
+        {contact.has_podcast && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex items-center gap-1 text-primary">
+                <Headphones className="w-3 h-3" />
+                <span>Podcast</span>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs">
+              Tiene podcast generado
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
+
+      {/* Contexto / último tema */}
       {contact.last_topic && (
-        <p className="mt-3 text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-          {contact.last_topic}
+        <p className="mt-3 text-xs text-muted-foreground/90 italic line-clamp-2 leading-relaxed">
+          “{contact.last_topic}”
         </p>
       )}
 
+      {/* Acciones de seguimiento */}
       {needsFollowUp && (
-        <div className="mt-3 flex items-center justify-between gap-2 pt-3 border-t border-border/40">
+        <div className="mt-4 flex items-center justify-between gap-2 pt-3 border-t border-border/40">
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/30 text-[10px] font-medium">
             <Sparkles className="w-3 h-3" />
             Seguimiento

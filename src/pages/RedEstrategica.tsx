@@ -23,8 +23,21 @@ import {
   Brain,
   Plus,
   Mic,
+  ChevronDown,
+  Check,
+  Heart,
+  Filter,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 interface Row {
   id: string;
@@ -102,6 +115,59 @@ function Kpi({ label, value, hint, icon, tone = "primary" }: KpiProps) {
       <div className="font-display text-3xl font-semibold leading-none">{value}</div>
       {hint && <div className="text-xs text-muted-foreground mt-1.5">{hint}</div>}
     </GlassCard>
+  );
+}
+
+interface FilterOption { value: string; label: string; }
+interface FilterDropdownProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: FilterOption[];
+}
+
+function FilterDropdown({ icon, label, value, onChange, options }: FilterDropdownProps) {
+  const current = options.find((o) => o.value === value) ?? options[0];
+  const isActive = value !== "all";
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className={cn(
+            "h-9 px-3 rounded-full border bg-card/40 backdrop-blur-xl text-xs font-medium inline-flex items-center gap-2 transition-all",
+            isActive
+              ? "border-primary/50 text-primary bg-primary/10 shadow-[0_0_16px_-4px_hsl(var(--primary)/0.4)]"
+              : "border-border/60 text-muted-foreground hover:border-primary/40 hover:text-foreground",
+          )}
+        >
+          <span className="opacity-80">{icon}</span>
+          <span>{label}:</span>
+          <span className={cn("font-semibold", isActive ? "text-primary" : "text-foreground")}>
+            {current.label}
+          </span>
+          <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[200px]">
+        <DropdownMenuLabel className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+          {label}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
+          {options.map((o) => (
+            <DropdownMenuRadioItem
+              key={o.value}
+              value={o.value}
+              className="text-sm cursor-pointer pl-8"
+            >
+              {value === o.value && <Check className="w-3.5 h-3.5 absolute left-2 text-primary" />}
+              {o.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -387,6 +453,7 @@ export default function RedEstrategica() {
     last_topic: r.context,
     has_podcast: podcastIds.has(r.id),
     last_contact: r.last_contact,
+    wa_message_count: r.wa_message_count,
   }));
 
   const hasActiveFilters =
@@ -448,9 +515,9 @@ export default function RedEstrategica() {
           />
         </div>
 
-        {/* SEARCH + VIEW */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[260px]">
+        {/* LÍNEA 1: Search + View toggle + Add (full width) */}
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 min-w-0">
             <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Buscar contacto…"
@@ -459,12 +526,13 @@ export default function RedEstrategica() {
               className="pl-11 h-11 bg-card/40 backdrop-blur-xl border-border/60 focus:border-primary/50 rounded-full"
             />
           </div>
-          <div className="flex items-center gap-1 p-1 rounded-full bg-card/40 backdrop-blur-xl border border-border/60">
+          <div className="flex items-center gap-1 p-1 rounded-full bg-card/40 backdrop-blur-xl border border-border/60 shrink-0">
             <Button
               size="sm"
               variant={view === "cards" ? "default" : "ghost"}
               onClick={() => setView("cards")}
               className="h-9 w-9 p-0 rounded-full"
+              aria-label="Vista tarjetas"
             >
               <LayoutGrid className="w-4 h-4" />
             </Button>
@@ -473,6 +541,7 @@ export default function RedEstrategica() {
               variant={view === "list" ? "default" : "ghost"}
               onClick={() => setView("list")}
               className="h-9 w-9 p-0 rounded-full"
+              aria-label="Vista lista"
             >
               <List className="w-4 h-4" />
             </Button>
@@ -481,95 +550,111 @@ export default function RedEstrategica() {
             size="sm"
             variant="default"
             onClick={() => setAddOpen(true)}
-            className="h-11 rounded-full gap-2 px-4"
+            className="h-11 rounded-full gap-2 px-4 shrink-0"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Añadir contacto</span>
           </Button>
+        </div>
+
+        {/* LÍNEA 2: Acciones pesadas (grid 3 cols, ancho completo) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Button
-            size="sm"
             variant="outline"
             onClick={refreshHeadlines}
             disabled={refreshing || rows.length === 0}
-            className="h-11 rounded-full gap-2 px-4"
+            className="h-11 rounded-full gap-2 px-4 w-full justify-center"
             title="Regenera el análisis de IA (salud, pendientes, temas) de los contactos de tu red"
           >
             <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
-            <span className="hidden sm:inline">
-              {refreshing ? "Actualizando…" : "Actualizar novedades"}
-            </span>
+            <span>{refreshing ? "Actualizando…" : "Actualizar novedades"}</span>
           </Button>
           <Button
-            size="sm"
             variant="outline"
             onClick={refreshAllProfiles}
             disabled={refreshingAll || rows.length === 0}
-            className="h-11 rounded-full gap-2 px-4 border-primary/40 text-primary hover:bg-primary/10"
+            className="h-11 rounded-full gap-2 px-4 w-full justify-center border-primary/40 text-primary hover:bg-primary/10"
             title="Reanaliza el perfil psicológico, emocional y de oportunidades de TODA tu red. Tarda varios minutos."
           >
             <Brain className={cn("w-4 h-4", refreshingAll && "animate-pulse")} />
-            <span className="hidden sm:inline">
-              {refreshingAll ? "Regenerando…" : "Regenerar perfiles"}
-            </span>
+            <span>{refreshingAll ? "Regenerando…" : "Regenerar perfiles"}</span>
           </Button>
           <Button
-            size="sm"
             variant="outline"
             onClick={reimportMultimedia}
             disabled={reimporting}
-            className="h-11 rounded-full gap-2 px-4"
+            className="h-11 rounded-full gap-2 px-4 w-full justify-center"
             title="Re-importa los últimos 21 días desde Evolution para recuperar audios, imágenes y PDFs que se descartaron."
           >
             <Mic className={cn("w-4 h-4", reimporting && "animate-pulse")} />
-            <span className="hidden sm:inline">
-              {reimporting ? "Re-importando…" : "Re-importar multimedia"}
-            </span>
+            <span>{reimporting ? "Re-importando…" : "Re-importar multimedia"}</span>
           </Button>
         </div>
 
-        {/* FILTER PILLS */}
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70 mr-1">Relación</span>
-            <Pill active={rel === "all"} onClick={() => setRel("all")}>Todas</Pill>
-            <Pill active={rel === "profesional"} onClick={() => setRel("profesional")}>Profesional</Pill>
-            <Pill active={rel === "personal"} onClick={() => setRel("personal")}>Personal</Pill>
-            <Pill active={rel === "familiar"} onClick={() => setRel("familiar")}>Familia</Pill>
-            <Pill active={rel === "otro"} onClick={() => setRel("otro")}>Otro</Pill>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70 mr-1">Salud</span>
-            <Pill active={health === "all"} onClick={() => setHealth("all")}>Toda</Pill>
-            <Pill tone="warning" active={health === "critical"} onClick={() => setHealth("critical")}>Crítica</Pill>
-            <Pill tone="warning" active={health === "attention"} onClick={() => setHealth("attention")}>Atención</Pill>
-            <Pill tone="success" active={health === "ok"} onClick={() => setHealth("ok")}>Sana</Pill>
-            <Pill tone="success" active={health === "strong"} onClick={() => setHealth("strong")}>Fuerte</Pill>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70 mr-1">Actividad</span>
-            <Pill active={activity === "all"} onClick={() => setActivity("all")}>Toda</Pill>
-            <Pill active={activity === "week"} onClick={() => setActivity("week")}>7 días</Pill>
-            <Pill active={activity === "month"} onClick={() => setActivity("month")}>30 días</Pill>
-            <Pill tone="warning" active={activity === "dormant"} onClick={() => setActivity("dormant")}>Dormidos</Pill>
-            <span className="w-px h-4 bg-border/60 mx-1" />
-            <Pill tone="primary" active={hasPodcast === "yes"} onClick={() => setHasPodcast(hasPodcast === "yes" ? "all" : "yes")}>
-              <span className="flex items-center gap-1"><Headphones className="w-3 h-3" /> Con podcast</span>
-            </Pill>
-          </div>
+        {/* LÍNEA 3: Filtros como dropdowns en una fila */}
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterDropdown
+            icon={<Users className="w-3.5 h-3.5" />}
+            label="Relación"
+            value={rel}
+            onChange={(v) => setRel(v as RelFilter)}
+            options={[
+              { value: "all", label: "Todas" },
+              { value: "profesional", label: "Profesional" },
+              { value: "personal", label: "Personal" },
+              { value: "familiar", label: "Familia" },
+              { value: "otro", label: "Otro" },
+            ]}
+          />
+          <FilterDropdown
+            icon={<Heart className="w-3.5 h-3.5" />}
+            label="Salud"
+            value={health}
+            onChange={(v) => setHealth(v as HealthFilter)}
+            options={[
+              { value: "all", label: "Toda" },
+              { value: "critical", label: "Crítica" },
+              { value: "attention", label: "Atención" },
+              { value: "ok", label: "Sana" },
+              { value: "strong", label: "Fuerte" },
+            ]}
+          />
+          <FilterDropdown
+            icon={<Activity className="w-3.5 h-3.5" />}
+            label="Actividad"
+            value={activity}
+            onChange={(v) => setActivity(v as ActivityFilter)}
+            options={[
+              { value: "all", label: "Toda" },
+              { value: "week", label: "Últimos 7 días" },
+              { value: "month", label: "Últimos 30 días" },
+              { value: "dormant", label: "Dormidos (>30d)" },
+            ]}
+          />
+          <FilterDropdown
+            icon={<Headphones className="w-3.5 h-3.5" />}
+            label="Podcast"
+            value={hasPodcast}
+            onChange={(v) => setHasPodcast(v as "all" | "yes" | "no")}
+            options={[
+              { value: "all", label: "Todos" },
+              { value: "yes", label: "Con podcast" },
+              { value: "no", label: "Sin podcast" },
+            ]}
+          />
+          <div className="flex-1" />
+          <span className="text-xs text-muted-foreground font-mono">
+            {cards.length} de {rows.length}
+          </span>
           {hasActiveFilters && (
-            <div className="flex items-center gap-2 pt-1">
-              <span className="text-xs text-muted-foreground font-mono">
-                {cards.length} de {rows.length}
-              </span>
-              <button
-                onClick={() => {
-                  setSearch(""); setRel("all"); setHealth("all"); setActivity("all"); setHasPodcast("all");
-                }}
-                className="text-xs text-primary hover:underline"
-              >
-                Limpiar filtros
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                setSearch(""); setRel("all"); setHealth("all"); setActivity("all"); setHasPodcast("all");
+              }}
+              className="text-xs text-primary hover:underline"
+            >
+              Limpiar filtros
+            </button>
           )}
         </div>
 

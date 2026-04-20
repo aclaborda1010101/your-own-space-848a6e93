@@ -190,12 +190,20 @@ async function persistToCRM(
 
   console.log(`[WhatsApp CRM] Message persisted: ${insertedMessage.id} (${direction}) from ${senderName}`);
 
-  // Update last_contact on people_contacts
-  await supabase
+  // Update last_contact on people_contacts (NULL-safe)
+  const { data: curContact } = await supabase
     .from("people_contacts")
-    .update({ last_contact: messageDate })
+    .select("last_contact")
     .eq("id", contactId)
-    .lt("last_contact", messageDate);
+    .maybeSingle();
+  const curMs = curContact?.last_contact ? new Date(curContact.last_contact as string).getTime() : 0;
+  const newMs = new Date(messageDate).getTime();
+  if (!curContact?.last_contact || newMs > curMs) {
+    await supabase
+      .from("people_contacts")
+      .update({ last_contact: messageDate })
+      .eq("id", contactId);
+  }
 
   // Only trigger intelligence for incoming messages
   if (direction === "incoming") {

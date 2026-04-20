@@ -1,43 +1,37 @@
 
 
-El usuario quiere un botón "Actualizar" en la fila de acciones del header del expediente del contacto (junto a Llamar / WhatsApp / Recordatorio), que dispare la actualización del perfil con los últimos WhatsApp/emails. Ya existe `refreshProfile()` en `ContactDetail.tsx` pero como botón aparte arriba — hay que **moverlo / replicarlo en la barra de acciones rápidas** para que sea consistente con los otros tres.
+## Plan: Fix bottom nav JARVIS button + hide TopBar on tablet
 
-Voy a leer la zona exacta del header para confirmar dónde están los botones Llamar / WhatsApp / Recordatorio antes de proponer.
+### Issue 1: JARVIS button opens POTUS chat instead of original floating JARVIS
 
-Confirmado por el contexto: en `ContactDetail.tsx` el header ya renderiza botones de "call/WhatsApp/reminder/refresh" pero el de refresh está separado visualmente. La queja es que **no aparece al mismo nivel ni con el mismo estilo** que los otros tres.
+Currently `BottomNavBar` navigates to `/chat`, which renders `PotusChatMvp` (POTUS — a different agent). The original floating JARVIS lives in `src/components/agent/AgentChatFloat.tsx` and is NOT mounted anywhere in the app right now.
 
-## Plan
+**Fix:**
+- Mount `<AgentChatFloat />` globally inside `AppLayout` (so it's available on every page like before).
+- Add internal open/close state to `AgentChatFloat` controlled via a tiny event bus (`window.dispatchEvent(new CustomEvent('jarvis:open'))`) so the bottom nav can trigger it without prop drilling.
+- Change `BottomNavBar.handleJarvis` to dispatch that event instead of navigating to `/chat`. No more redirect to POTUS.
+- Keep `/chat` route untouched (POTUS still accessible from menu if needed).
 
-### Cambio único: barra de acciones unificada en el header del contacto
+### Issue 2: TopBar visible on iPad/tablet + content not full width
 
-En `src/pages/ContactDetail.tsx`, en la fila de botones del header (donde están **Llamar**, **WhatsApp**, **Recordatorio**), añadir como **cuarto botón** "Actualizar" con el mismo estilo (icono `RefreshCw` + label corto), que:
+Current breakpoints in `AppLayout`:
+- `TopBar`: `hidden md:block` → shows from 768px (iPad shows it ❌)
+- Sidebar padding: `lg:pl-72` → only from 1024px (iPad has no sidebar ✓)
+- `BottomNavBar`: `lg:hidden` → shows on iPad ✓
 
-1. Llama a la función `refreshProfile()` que ya existe (invoca `contact-analysis` para ese contacto).
-2. Muestra spinner mientras corre (`isRefreshing` ya existe).
-3. Toast "Actualizando con últimos WhatsApp y emails…" → al terminar, recarga la ficha con `load()` para que se vean los nuevos hitos / mensajes / sentimiento.
-4. Eliminar el botón duplicado de "Actualizar perfil" que está suelto arriba a la derecha (el que añadimos en la iteración anterior), para que **sólo exista uno** y esté integrado en la barra.
+So on iPad we get **both** the TopBar AND the bottom nav, which is wrong. The TopBar should only appear when the desktop sidebar appears (≥ lg).
 
-### Detalle de implementación
+**Fix:**
+- Change TopBar wrapper from `hidden md:block` → `hidden lg:block` in `AppLayout.tsx`. Now mobile + tablet both get the clean full-width layout with only the bottom nav, matching the mobile experience exactly.
+- `MobileMenu` page (`/menu`) already uses full width — no change needed there, just verify it stretches now that TopBar is gone on iPad.
 
-- Añadir `RefreshCw` al import de `lucide-react` si no está.
-- Insertar el `<Button>` en el mismo contenedor flex que los otros tres, mismo `size`, mismo `variant`.
-- El handler ya es `refreshProfile` (no se duplica lógica). Esa función ya invoca `contact-analysis` con el `contact_id`, que internamente reanaliza con los últimos `contact_messages` (WhatsApp) y emails cacheados.
-- Quitar el botón flotante / suelto que estaba antes en el header.
+### Files to edit
 
-### Archivos a tocar
+1. `src/components/layout/AppLayout.tsx` — change `hidden md:block` → `hidden lg:block` on the TopBar wrapper, and mount `<AgentChatFloat />` (excluded on login/wizard).
+2. `src/components/layout/BottomNavBar.tsx` — `handleJarvis` dispatches `window.dispatchEvent(new CustomEvent('jarvis:toggle'))` instead of `navigate('/chat')`.
+3. `src/components/agent/AgentChatFloat.tsx` — add a `useEffect` listener for `'jarvis:toggle'` that toggles the panel open.
 
-Sólo **uno**:
-- `src/pages/ContactDetail.tsx` — añadir el botón "Actualizar" en la fila de acciones, eliminar el botón duplicado, asegurar `disabled={isRefreshing}` y spinner.
-
-Sin migraciones, sin edge functions nuevas (la lógica `contact-analysis` ya está creada y devuelve perfil refrescado con últimos WhatsApp + emails).
-
-### Lo que verás después
-
-En el expediente de cualquier contacto, en la cabecera verás cuatro botones uniformes en línea:
-
-```text
-[ 📞 Llamar ]  [ 💬 WhatsApp ]  [ ⏰ Recordatorio ]  [ 🔄 Actualizar ]
-```
-
-Al pulsar "Actualizar": spinner en el icono, toast informativo, y al terminar la ficha recarga con los últimos mensajes/correos integrados en perfil, hitos y timeline.
+### Out of scope
+- Don't touch POTUS routes/components.
+- Don't change desktop (lg+) behaviour — sidebar + TopBar remain unchanged.
 

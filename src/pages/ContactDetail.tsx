@@ -393,10 +393,20 @@ export default function ContactDetail() {
           const isExpiring = fresh === "expiring";
           const isStale = fresh === "stale";
           const hasLivePending = !isExpired && !isStale && headlines.pending.title !== "Sin asunto vivo";
+          // Fallback: si headlines no tiene asunto vivo pero el perfil tiene proxima_accion,
+          // úsala como asunto vivo para evitar la incoherencia visual.
+          const useNextActionFallback = !hasLivePending && !!nextAction?.que;
           return (
             <JarvisSuggestionHero
               headline={
-                !hasLivePending ? (
+                useNextActionFallback ? (
+                  <>
+                    {String(nextAction.que).split(/(:|—|·)/)[0]}{" "}
+                    {headlines.health.trend && (
+                      <span className="text-foreground/80">{headlines.health.trend}</span>
+                    )}
+                  </>
+                ) : !hasLivePending ? (
                   <span className="text-muted-foreground">
                     Sin asunto vivo · la recomendación anterior ya pasó o perdió vigencia.{" "}
                     {headlines.health.trend && (
@@ -414,7 +424,9 @@ export default function ContactDetail() {
                 )
               }
               pretext={
-                !hasLivePending
+                useNextActionFallback
+                  ? `Sugerencia desde perfil · canal: ${nextAction.canal || "—"}`
+                  : !hasLivePending
                   ? "Recomendación caducada · movida a historial"
                   : isExpiring
                   ? "⏳ Caduca en las próximas horas · " + headlines.pending.last_mentioned
@@ -424,7 +436,7 @@ export default function ContactDetail() {
               }
               context={`${headlines.health.relationship_type} — salud relacional ${headlines.health.score}/10 (${headlines.health.label}).`}
               confidence={Math.round((headlines.health.score / 10) * 100)}
-              priority={!hasLivePending ? "baja" : healthScore < 4 ? "alta" : healthScore < 7 ? "media" : "baja"}
+              priority={useNextActionFallback ? "media" : !hasLivePending ? "baja" : healthScore < 4 ? "alta" : healthScore < 7 ? "media" : "baja"}
               detectedAgo={
                 contact.last_contact
                   ? formatDistanceToNowStrict(new Date(contact.last_contact), { locale: es })
@@ -433,10 +445,10 @@ export default function ContactDetail() {
               tags={[
                 contact.category || "personal",
                 totalMessages > 1000 ? "histórico denso" : "activo",
-                ...(isExpired ? ["caducada"] : isExpiring ? ["caduca hoy"] : isStale ? ["sin novedades"] : []),
+                ...(useNextActionFallback ? ["desde perfil"] : isExpired ? ["caducada"] : isExpiring ? ["caduca hoy"] : isStale ? ["sin novedades"] : []),
               ]}
-              onAccept={!hasLivePending ? undefined : () => navigate(`/tasks?contact=${contact.id}&suggest=1`)}
-              acceptLabel={!hasLivePending ? undefined : "Aceptar y agendar"}
+              onAccept={(!hasLivePending && !useNextActionFallback) ? undefined : () => navigate(`/tasks?contact=${contact.id}&suggest=1`)}
+              acceptLabel={(!hasLivePending && !useNextActionFallback) ? undefined : "Aceptar y agendar"}
               onEvidence={() => {
                 const el = document.getElementById("contact-tabs");
                 el?.scrollIntoView({ behavior: "smooth" });

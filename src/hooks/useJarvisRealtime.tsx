@@ -67,61 +67,161 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
     }
   }, []);
 
-  // Execute a function call and return the result
+  // Execute a function call and return the result — SUPERAGENT POWERS
   const executeFunction = useCallback(async (name: string, args: Record<string, unknown>): Promise<string> => {
     console.log('[JARVIS] Executing function:', name, args);
-    
+    const sb = supabase as any;
+
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+      if (!userId) return JSON.stringify({ error: 'No autenticado' });
+
       switch (name) {
         case 'create_task': {
-          const { data, error } = await supabase
-            .from('tasks')
+          const { data, error } = await sb
+            .from('todos')
             .insert({
               title: args.title as string,
-              type: args.type as string,
-              priority: args.priority as string,
-              duration: args.duration as number,
-              completed: false,
-              user_id: (await supabase.auth.getUser()).data.user?.id,
+              priority: typeof args.priority === 'number' ? args.priority : 3,
+              due_date: (args.due_date as string) || null,
+              is_completed: false,
+              user_id: userId,
             })
             .select()
             .single();
-          
           if (error) throw error;
           return JSON.stringify({ success: true, task: data });
         }
-        
+
         case 'complete_task': {
           const searchTitle = (args.task_title as string).toLowerCase();
-          const { data: tasks } = await supabase
-            .from('tasks')
-            .select('id, title')
-            .eq('completed', false)
-            .ilike('title', `%${searchTitle}%`)
-            .limit(1);
-          
-          if (!tasks?.length) {
-            return JSON.stringify({ success: false, message: 'No se encontró la tarea' });
-          }
-          
-          const { error } = await supabase
-            .from('tasks')
-            .update({ completed: true, completed_at: new Date().toISOString() })
-            .eq('id', tasks[0].id);
-          
+          const { data: tasks } = await sb
+            .from('todos').select('id, title')
+            .eq('user_id', userId).eq('is_completed', false)
+            .ilike('title', `%${searchTitle}%`).limit(1);
+          if (!tasks?.length) return JSON.stringify({ success: false, message: 'No se encontró la tarea' });
+          const { error } = await sb.from('todos').update({ is_completed: true }).eq('id', tasks[0].id);
           if (error) throw error;
           return JSON.stringify({ success: true, task: tasks[0].title });
         }
-        
+
         case 'list_pending_tasks': {
-          const { data: tasks } = await supabase
-            .from('tasks')
-            .select('title, type, priority, duration')
-            .eq('completed', false)
-            .order('created_at', { ascending: false })
-            .limit(10);
-          
+          const { data: tasks } = await sb
+            .from('todos').select('id, title, priority, due_date')
+            .eq('user_id', userId).eq('is_completed', false)
+            .order('priority', { ascending: false }).limit(20);
           return JSON.stringify({ tasks: tasks || [] });
+        }
+
+        // ── SUPERAGENT: contactos ─────────────────────────────────────
+        case 'search_contacts': {
+          const term = String(args.query || '').trim();
+          if (!term) return JSON.stringify({ contacts: [] });
+          // Try fuzzy RPC first
+          const { data: fuzzy } = await sb.rpc('search_contacts_fuzzy', {
+            p_user_id: userId, p_search_term: term, p_limit: 8,
+          });
+          let ids = (fuzzy || []).map((r: any) => r.id);
+          if (!ids.length) {
+            const { data: ilike } = await sb.from('people_contacts')
+              .select('id').eq('user_id', userId).ilike('name', `%${term}%`).limit(8);
+            ids = (ilike || []).map((r: any) => r.id);
+          }
+          if (!ids.length) return JSON.stringify({ contacts: [], note: 'Sin coincidencias' });
+          const { data: full } = await sb.from('people_contacts')
+            .select('id, name, company, role, email, phone, notes, last_interaction_at')
+            .in('id', ids);
+          return JSON.stringify({ contacts: full || [] });
+        }
+
+        case 'create_contact': {
+          const { data, error } = await sb.from('people_contacts').insert({
+            user_id: userId,
+            name: args.name as string,
+            company: args.company || null,
+            role: args.role || null,
+            email: args.email || null,
+            phone: args.phone || null,
+            notes: args.notes || null,
+          }).select().single();
+          if (error) throw error;
+          return JSON.stringify({ success: true, contact: data });
+        }
+
+        // ── SUPERAGENT: proyectos ─────────────────────────────────────
+        case 'search_projects': {
+          const term = String(args.query || '').trim();
+          let q = sb.from('business_projects')
+            .select('id, name, company, status, sector, estimated_value, updated_at')
+            .eq('user_id', userId);
+          if (term) q = q.or(`name.ilike.%${term}%,company.ilike.%${term}%`);
+          const { data } = await q.order('updated_at', { ascending: false }).limit(15);
+          return JSON.stringify({ projects: data || [] });
+        }
+
+        // ── SUPERAGENT: memorias ──────────────────────────────────────
+        case 'search_memories': {
+          const { data } = await sb.rpc('get_jarvis_context', { p_user_id: userId, p_limit: 30 });
+          const term = String(args.query || '').toLowerCase();
+          const filtered = term
+            ? (data || []).filter((m: any) => m.content?.toLowerCase().includes(term))
+            : (data || []);
+          return JSON.stringify({ memories: filtered.slice(0, 15) });
+        }
+
+        // ── SUPERAGENT: emails / whatsapp ─────────────────────────────
+        case 'get_emails': {
+          const onlyUnread = args.unread !== false;
+          let q = sb.from('jarvis_emails_cache')
+            .select('from_addr, subject, preview, synced_at, is_read')
+            .eq('user_id', userId);
+          if (onlyUnread) q = q.eq('is_read', false);
+          const { data } = await q.order('synced_at', { ascending: false }).limit(15);
+          return JSON.stringify({ emails: data || [] });
+        }
+
+        case 'get_whatsapp_recent': {
+          const { data } = await sb.from('whatsapp_messages')
+            .select('from_name, from_number, body, created_at, direction')
+            .eq('user_id', userId).order('created_at', { ascending: false }).limit(20);
+          return JSON.stringify({ messages: data || [] });
+        }
+
+        // ── SUPERAGENT: delegación a especialistas ────────────────────
+        case 'ask_specialist': {
+          const question = String(args.question || '');
+          const { data: sess } = await supabase.auth.getSession();
+          const accessToken = sess?.session?.access_token;
+          const { data, error } = await supabase.functions.invoke('jarvis-gateway', {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            body: {
+              message: question,
+              user_id: userId,
+              platform: 'web',
+            },
+          });
+          if (error) return JSON.stringify({ error: error.message });
+          return JSON.stringify({ specialist: data?.specialist, answer: data?.response });
+        }
+
+        // ── SUPERAGENT: query genérica de cualquier tabla ─────────────
+        case 'query_table': {
+          const table = String(args.table || '');
+          const filters = (args.filters as Record<string, any>) || {};
+          const limit = Math.min(Number(args.limit || 10), 50);
+          const ALLOWED = new Set([
+            'todos', 'people_contacts', 'business_projects', 'check_ins', 'whoop_data',
+            'jarvis_emails_cache', 'whatsapp_messages', 'bosco_observations', 'bosco_interactions',
+            'transcriptions', 'specialist_memory', 'jarvis_memory', 'pomodoro_sessions',
+            'challenges', 'challenge_logs', 'agent_chat_messages', 'ai_news',
+          ]);
+          if (!ALLOWED.has(table)) return JSON.stringify({ error: `Tabla no permitida: ${table}` });
+          let q = sb.from(table).select('*').eq('user_id', userId);
+          for (const [k, v] of Object.entries(filters)) q = q.eq(k, v);
+          const { data, error } = await q.limit(limit);
+          if (error) return JSON.stringify({ error: error.message });
+          return JSON.stringify({ rows: data || [] });
         }
         
         case 'get_today_summary': {

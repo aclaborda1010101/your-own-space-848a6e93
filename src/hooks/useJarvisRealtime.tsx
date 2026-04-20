@@ -832,8 +832,8 @@ Cuando pida eliminar o cancelar un evento, usa delete_event.`,
       }
       
       console.log('[JARVIS] Sending offer to OpenAI Realtime API...');
-      // WebRTC SDP exchange endpoint with model parameter and Accept header
-      const apiResponse = await fetch(`https://api.openai.com/v1/realtime?model=${encodeURIComponent(OPENAI_REALTIME_MODEL)}`, {
+      // GA WebRTC SDP exchange endpoint: /v1/realtime/calls
+      const apiResponse = await fetch(`https://api.openai.com/v1/realtime/calls?model=${encodeURIComponent(OPENAI_REALTIME_MODEL)}`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${ephemeralKey}`,

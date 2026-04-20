@@ -43,15 +43,45 @@ serve(async (req) => {
       });
     }
 
-    const textContent =
+    // ── Detect message type (text vs media) ──
+    let textContent: string | null =
       message?.conversation ||
       message?.extendedTextMessage?.text ||
       null;
 
+    type MediaKind = "audio" | "image" | "document" | "video" | null;
+    let mediaKind: MediaKind = null;
+    let mediaCaption = "";
+    let mediaFileName = "";
+    let mediaMimeType = "";
+
     if (!textContent) {
-      return new Response(JSON.stringify({ ok: true, skipped: "no_text" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (message?.audioMessage) {
+        mediaKind = "audio";
+        mediaMimeType = message.audioMessage.mimetype || "audio/ogg";
+        textContent = "[⏳ Procesando audio…]";
+      } else if (message?.imageMessage) {
+        mediaKind = "image";
+        mediaCaption = message.imageMessage.caption || "";
+        mediaMimeType = message.imageMessage.mimetype || "image/jpeg";
+        textContent = "[⏳ Procesando imagen…]";
+      } else if (message?.documentMessage || message?.documentWithCaptionMessage) {
+        const doc = message.documentMessage || message.documentWithCaptionMessage?.message?.documentMessage;
+        mediaKind = "document";
+        mediaCaption = doc?.caption || "";
+        mediaFileName = doc?.fileName || "documento";
+        mediaMimeType = doc?.mimetype || "application/octet-stream";
+        textContent = `[⏳ Procesando documento: ${mediaFileName}…]`;
+      } else if (message?.videoMessage) {
+        mediaKind = "video";
+        mediaCaption = message.videoMessage.caption || "";
+        mediaMimeType = message.videoMessage.mimetype || "video/mp4";
+        textContent = mediaCaption ? `[🎬 Vídeo] ${mediaCaption}` : "[🎬 Vídeo recibido]";
+      } else {
+        return new Response(JSON.stringify({ ok: true, skipped: "no_text" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const remoteJid = key.remoteJid || "";

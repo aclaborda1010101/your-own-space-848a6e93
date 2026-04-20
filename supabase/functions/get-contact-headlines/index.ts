@@ -17,6 +17,8 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 const MADRID_TZ = "Europe/Madrid";
 const AMBIGUOUS_RELATIVE_RE = /\b(hoy|ayer|mañana|anoche|esta mañana|esta tarde|esta noche|este finde|este fin de semana|la semana pasada|este sábado|este domingo|este lunes|este martes|este miércoles|este jueves|este viernes|el sábado pasado|el domingo pasado|el lunes pasado|el martes pasado|el miércoles pasado|el jueves pasado|el viernes pasado|el sábado|el domingo|el lunes|el martes|el miércoles|el jueves|el viernes)\b/i;
+// Palabras que delatan un evento puntual fechable (si pasa → caduca)
+const EVENT_KEYWORDS_RE = /\b(partido|partidazo|final|semifinal|cuartos|concierto|festival|reuni[oó]n|meeting|cita|cena|comida|almuerzo|brunch|desayuno|copas?|caf[eé]|vuelo|tren|viaje|escapada|reserva|entradas?|tickets?|boda|cumple(?:años)?|aniversario|evento|charla|webinar|presentaci[oó]n|entrevista|llamada programada|videollamada|visita|quedada|finde|fin de semana|partida|torneo|carrera|maratón)\b/i;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {

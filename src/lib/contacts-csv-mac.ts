@@ -36,6 +36,34 @@ export function normalizePhone(raw: string): string | null {
   return digits;
 }
 
+/**
+ * Extrae todos los teléfonos plausibles de un texto libre (campo Nota).
+ * Busca:
+ *  - +<código>NNNNN... (con o sin espacios)
+ *  - 9 dígitos sueltos que empiecen por 6/7/9 (móvil/fijo ES)
+ */
+export function extractPhonesFromText(text: string): string[] {
+  if (!text) return [];
+  const found = new Set<string>();
+
+  // 1) Internacionales con +
+  const intl = text.matchAll(/\+\d[\d\s().-]{7,18}\d/g);
+  for (const m of intl) {
+    const n = normalizePhone(m[0]);
+    if (n) found.add(n);
+  }
+
+  // 2) Bloques de 9+ dígitos seguidos (con espacios o guiones intercalados)
+  //    Se exige que empiece por 6/7/9 (ES) para evitar fechas/números.
+  const local = text.matchAll(/(?:^|[^\d+])([679](?:[\s.-]?\d){8})(?!\d)/g);
+  for (const m of local) {
+    const n = normalizePhone(m[1]);
+    if (n) found.add(n);
+  }
+
+  return Array.from(found);
+}
+
 /** Parser CSV simple que respeta comillas y comas internas. */
 function parseCSVLine(line: string): string[] {
   const out: string[] = [];
@@ -133,11 +161,17 @@ export function parseMacContactsCSV(text: string): ParsedMacContact[] {
       cols[iOtro],
     ].filter(p => p && p.trim());
 
+    const noteRaw = (cols[iNota] || "").trim();
+
+    // Sacar teléfonos también de la nota (casos donde el móvil está allí)
+    const phonesFromNote = extractPhonesFromText(noteRaw);
+
     const phonesNormalized = Array.from(
       new Set(
-        phonesRaw
-          .map(normalizePhone)
-          .filter((p): p is string => !!p)
+        [
+          ...phonesRaw.map(normalizePhone).filter((p): p is string => !!p),
+          ...phonesFromNote,
+        ]
       )
     );
 
@@ -159,7 +193,7 @@ export function parseMacContactsCSV(text: string): ParsedMacContact[] {
       phones: phonesRaw.map(p => p.trim()),
       phonesNormalized,
       emails,
-      notes: (cols[iNota] || "").trim() || null,
+      notes: noteRaw || null,
       birthday: (cols[iCumple] || "").trim() || null,
     });
   }

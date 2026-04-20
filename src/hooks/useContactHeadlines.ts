@@ -12,6 +12,10 @@ export interface HeadlinesPayload {
     title: string;
     who_owes: string;
     last_mentioned: string;
+    is_event?: boolean;
+    event_date?: string | null;
+    expires_at?: string | null;
+    freshness_status?: "active" | "expiring" | "expired" | "stale";
   };
   topics: {
     tone_emoji: string;

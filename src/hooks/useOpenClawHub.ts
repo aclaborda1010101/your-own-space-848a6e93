@@ -67,18 +67,21 @@ export interface OCExecution {
   finished_at: string | null;
 }
 
+// Seeds mínimos: solo se insertan si NO existe ningún nodo con ese name
+// para el usuario. Los heartbeats reales (launchd → openclaw-heartbeat)
+// sobreescriben model/host/ip/status/last_seen_at.
 const SEED_NODES = [
   {
     name: "POTUS",
-    host: "potus.bridge",
-    model: "gemini-2.5-pro",
+    host: null,
+    model: null,
     description: "Bridge ejecutivo (Telegram MoltBot, decisiones rápidas).",
     status: "idle",
   },
   {
     name: "TITAN",
-    host: "mac-mini-titan.local",
-    model: "gpt-5",
+    host: null,
+    model: null,
     description: "Nodo principal de cómputo (Mac Mini M4 Pro).",
     status: "idle",
   },

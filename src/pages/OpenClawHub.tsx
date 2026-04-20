@@ -130,14 +130,27 @@ export default function OpenClawHub() {
                     <Badge variant="outline" className="text-[10px] uppercase tracking-wider font-mono">
                       {(n as any).role ?? "—"}
                     </Badge>
-                    {!isOnlineLike && (
-                      <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
-                        Simulado
-                      </Badge>
-                    )}
+                    {(() => {
+                      const bridgeLive = Boolean((n as any).metadata?.bridge_live);
+                      if (bridgeLive || ls === "online") {
+                        return (
+                          <Badge className="text-[10px] uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border-emerald-500/30">
+                            Online
+                          </Badge>
+                        );
+                      }
+                      if (ls === "unknown") {
+                        return (
+                          <Badge variant="secondary" className="text-[10px] uppercase tracking-wider">
+                            Sin datos
+                          </Badge>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                   <p className="text-xs text-muted-foreground font-mono">
-                    {(n as any).ip ?? n.host ?? "sin IP"}
+                    {(n as any).ip ?? n.host ?? "N/A"}
                   </p>
                   <div className="flex items-center gap-1.5 pt-0.5">
                     <Badge variant="secondary" className="text-[10px] uppercase tracking-wider font-mono">

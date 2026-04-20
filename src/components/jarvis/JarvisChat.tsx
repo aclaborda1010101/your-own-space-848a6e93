@@ -397,6 +397,26 @@ export function JarvisChat({ variant = "page", autoProactive }: JarvisChatProps)
             )}
           </Button>
 
+          {/* File upload */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileUpload}
+            accept="image/*,application/pdf,text/*,.csv,.json,.md,.txt,.log,.yaml,.yml,.xml,.tsv"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-10 w-10 shrink-0"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading || streaming || realtime.isActive}
+            title="Adjuntar archivo para análisis"
+          >
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+          </Button>
+
           {/* Realtime toggle */}
           <Button
             type="button"

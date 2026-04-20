@@ -62,6 +62,9 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
       {!isLoginPage && !isWizardPage && (
         <BottomNavBar />
       )}
+
+      {/* JARVIS floating chat - available globally except on login/wizard */}
+      {!isLoginPage && !isWizardPage && <AgentChatFloat />}
     </div>
   );
 };

@@ -9,6 +9,7 @@ import {
 } from "@/components/tasks/TaskWorkspaceDetail";
 import { ShareDialog } from "@/components/sharing/ShareDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,7 @@ import {
   Sparkles,
   Flame,
   CalendarCheck,
+  ChevronDown,
 } from "lucide-react";
 import { PageHero } from "@/components/ui/PageHero";
 import { cn } from "@/lib/utils";
@@ -55,6 +57,7 @@ const Tasks = () => {
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [taskWorkspaces, setTaskWorkspaces] = useState<Record<string, TaskWorkspaceRecord>>({});
+  const [completedOpen, setCompletedOpen] = useState(false);
 
   const { 
     pendingTasks, 
@@ -299,8 +302,8 @@ const Tasks = () => {
 
           {/* Task Workspace */}
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.9fr)] min-w-0">
-            <div className="grid gap-6 lg:grid-cols-2 min-w-0">
-              {/* Pending */}
+            <div className="space-y-6 min-w-0">
+              {/* Pending - full width */}
               <Card className="border-border bg-card">
                 <CardHeader className="pb-4">
                   <CardTitle className="text-lg font-semibold text-foreground font-mono">
@@ -347,48 +350,63 @@ const Tasks = () => {
                 </CardContent>
               </Card>
 
-              {/* Completed */}
+              {/* Completed - collapsible accordion */}
               <Card className="border-border bg-card">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-lg font-semibold text-foreground font-mono">
-                    COMPLETADAS ({completedTasks.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {completedTasks.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-8">
-                      No hay tareas completadas
-                    </p>
-                  ) : (
-                    completedTasks.slice(0, 10).map((task) => {
-                      const TypeIcon = typeConfig[task.type].icon;
-                      return (
-                        <button
-                          key={task.id}
-                          type="button"
-                          onClick={() => handleSelectTask(task)}
-                          className="flex w-full items-start gap-3 rounded-lg border border-border p-3 text-left opacity-60 transition hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary/40"
-                        >
-                          <Checkbox
-                            checked={task.completed}
-                            onCheckedChange={() => toggleComplete(task.id)}
-                            className="mt-1 border-primary data-[state=checked]:bg-primary"
-                          />
+                <Collapsible open={completedOpen} onOpenChange={setCompletedOpen}>
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between px-6 py-4 hover:bg-muted/40 transition-colors rounded-t-lg"
+                    >
+                      <CardTitle className="text-lg font-semibold text-foreground font-mono">
+                        COMPLETADAS ({completedTasks.length})
+                      </CardTitle>
+                      <ChevronDown
+                        className={cn(
+                          "w-5 h-5 text-muted-foreground transition-transform duration-200",
+                          completedOpen && "rotate-180"
+                        )}
+                      />
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-3 pt-0">
+                      {completedTasks.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-8">
+                          No hay tareas completadas
+                        </p>
+                      ) : (
+                        completedTasks.slice(0, 10).map((task) => {
+                          const TypeIcon = typeConfig[task.type].icon;
+                          return (
+                            <button
+                              key={task.id}
+                              type="button"
+                              onClick={() => handleSelectTask(task)}
+                              className="flex w-full items-start gap-3 rounded-lg border border-border p-3 text-left opacity-60 transition hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary/40"
+                            >
+                              <Checkbox
+                                checked={task.completed}
+                                onCheckedChange={() => toggleComplete(task.id)}
+                                className="mt-1 border-primary data-[state=checked]:bg-primary"
+                              />
 
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-muted-foreground line-through">{task.title}</p>
-                            <div className="flex flex-wrap items-center gap-2 mt-2">
-                              <Badge variant="outline" className="text-xs border-border text-muted-foreground">
-                                <TypeIcon className="w-3 h-3 mr-1" />
-                                {typeConfig[task.type].label}
-                              </Badge>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })
-                  )}
-                </CardContent>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-muted-foreground line-through">{task.title}</p>
+                                <div className="flex flex-wrap items-center gap-2 mt-2">
+                                  <Badge variant="outline" className="text-xs border-border text-muted-foreground">
+                                    <TypeIcon className="w-3 h-3 mr-1" />
+                                    {typeConfig[task.type].label}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </CardContent>
+                  </CollapsibleContent>
+                </Collapsible>
               </Card>
             </div>
 

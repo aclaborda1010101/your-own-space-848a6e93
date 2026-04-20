@@ -1,81 +1,99 @@
 
-## Plan: corregir ahora mismo el “36 días” falso en toda la red
 
-### Qué voy a hacer
-Haré dos cosas en el mismo trabajo:
+The user wants:
+1. Mobile/iPad JARVIS button (BottomNavBar + QuickActions) currently routes to `/chat` which renders `PotusChatMvp`. Wrong — should go to JARVIS chat.
+2. Web (desktop): JARVIS must be a **floating** widget (like the old `AgentChatFloat` / `JarvisFloatingPanel`).
+3. Mobile/iPad: floating widget hidden, instead a **dedicated full page** with the same JARVIS chat (same component reused).
+4. Remove POTUS chat pages (`/chat` currently = Potus, `/potus-chat`) — obsolete.
+5. Remove "Comunicaciones" from the menu permanently.
+6. Inside JARVIS chat: add a mic button → Whisper STT (already have `speech-to-text` edge function + `useVoiceRecognition`).
+7. Optional: real-time voice via OpenAI Realtime (already have `useJarvisRealtime` + `jarvis-voice` edge function) — integrated inside the chat.
 
-1. **Arreglo definitivo del bug**
-   - `evolution-webhook` hoy guarda mensajes pero no está manteniendo bien `people_contacts.last_contact`.
-   - `send-whatsapp` guarda salientes pero tampoco actualiza `last_contact`.
-   - `whatsapp-webhook` sí intenta hacerlo, pero usa una condición que falla cuando `last_contact` es `NULL`.
-   - Resultado: la UI de `/red-estrategica` sigue enseñando 36d aunque hayas hablado ayer.
+Let me check current wiring quickly to be precise.
 
-2. **Reparación masiva de tus datos actuales**
-   - Haré un backfill para recalcular `last_contact` desde `contact_messages.message_date` y ponerlo bien en todos tus contactos activos.
-   - Así no solo queda arreglado hacia futuro: también se corrige lo que ya está mal ahora.
+Findings:
+- `BottomNavBar.tsx` → `handleJarvis` navigates to `/chat`.
+- `QuickActions.tsx` → "JARVIS" button navigates to `/chat`.
+- `/chat` route renders `Chat.tsx` → `PotusChatMvp` (wrong).
+- `PotusFloatingChat` is the floating widget but uses `PotusCompactChat` (Potus, not Jarvis).
+- Existing JARVIS floating widget candidates: `AgentChatFloat` (streams `jarvis-agent`, has history `agent_chat_messages`) and `JarvisFloatingPanel` (voice + chat with `useJarvisCoach`/`useJarvisVoice`).
+- Existing JARVIS hooks: `useJarvisRealtimeVoice`, `useJarvisRealtime`, `useVoiceRecognition` (Whisper via Groq), `speech-to-text` and `jarvis-stt` (OpenAI Whisper) edge functions.
+- `MenuVisibilityCard` lists "POTUS" → /chat and "Comunicaciones" → /communications.
+- `MobileMenu.tsx` likely also lists them.
+- `App.tsx` has routes for `/chat`, `/potus-chat`, `/communications`, plus `ChatSimple`.
 
-### Evidencia que he encontrado en el código
-- `src/components/contact/ContactCard.tsx` calcula el chip usando `contact.last_contact`.
-- `src/pages/RedEstrategica.tsx` también filtra y calcula actividad con `last_contact`.
-- `supabase/functions/evolution-webhook/index.ts` inserta el mensaje pero no veo actualización de `people_contacts.last_contact`.
-- `supabase/functions/send-whatsapp/index.ts` persiste salientes y tampoco actualiza `last_contact`.
-- `supabase/functions/whatsapp-webhook/index.ts` hace:
-  `update({ last_contact: messageDate }).lt("last_contact", messageDate)`
-  y eso deja fuera filas con `last_contact = null`.
-- `contact-profiles-refresh-all` solo toca `updated_at`; no arregla la recencia.
+## Plan
 
-### Cambios concretos
-#### 1) Persistencia correcta de recencia
-Actualizaré:
-- `supabase/functions/evolution-webhook/index.ts`
-- `supabase/functions/send-whatsapp/index.ts`
-- `supabase/functions/whatsapp-webhook/index.ts`
+### 1. New unified JARVIS chat component
+Create `src/components/jarvis/JarvisChat.tsx` — a single self-contained chat UI that works in two layout modes:
+- `variant="floating"` → used by desktop floating widget
+- `variant="page"` → fills viewport, used on mobile/iPad full page
 
-Con una regla robusta:
-- si `last_contact` es `NULL`, se rellena
-- si el nuevo `message_date` es más reciente, se actualiza
-- si el mensaje es antiguo, no pisa un valor más nuevo
+Features inside:
+- Text input + send
+- Mic button → uses `useVoiceRecognition` (Whisper) to transcribe, fills input or auto-sends
+- Toggle "Modo voz en tiempo real" → uses `useJarvisRealtime` (OpenAI Realtime) for live conversation
+- Markdown rendering of responses
+- Streams from `jarvis-agent` edge function (reuse current pattern from `AgentChatFloat`)
+- Persists in `agent_chat_messages` (existing table)
 
-#### 2) Reparación masiva inmediata
-Haré una actualización de datos para:
-- recorrer tus contactos activos de la red/favoritos
-- calcular `MAX(contact_messages.message_date)` por contacto
-- guardar ese valor en `people_contacts.last_contact`
+### 2. New floating wrapper for desktop only
+`src/components/jarvis/JarvisFloatingChat.tsx`:
+- Renders FAB + popup (similar shape to `PotusFloatingChat`)
+- **Hidden on mobile/iPad** via `lg:` classes (`hidden lg:block`) or `useIsMobile`
+- Inside popup → `<JarvisChat variant="floating" />`
+- Replaces `PotusFloatingChat` mount in `AppLayout`
 
-Así desaparecerá el “36d” falso en bloque, sin esperar a que entren mensajes nuevos.
+### 3. New full page for mobile/iPad (and accessible from desktop too)
+`src/pages/JarvisChat.tsx` → renders `<JarvisChat variant="page" />` filling `h-[calc(100vh-4rem)]`.
 
-#### 3) Ajuste del botón de refresh
-Revisaré el flujo de “Regenerar perfiles” para no mezclar “perfil actualizado” con “último contacto”.
-Si conviene, dejaré más claro en UI que:
-- una cosa es perfil IA
-- otra cosa es recencia real de conversación
+### 4. Routing changes (`src/App.tsx`)
+- `/chat` → now renders `JarvisChat` page (was Potus)
+- Remove `/potus-chat` route (or redirect to `/chat`)
+- Remove `/communications` route (redirect to `/dashboard` or just delete)
+- Keep `/chat-simple` only if user wants — otherwise leave
 
-### Resultado esperado
-Después de implementarlo:
-- Gorka, tu primo, Adolfo y el resto deberían reflejar la fecha real del último WhatsApp
-- la red estratégica dejará de marcar 36d falsos en masa
-- los próximos mensajes entrantes y salientes mantendrán `last_contact` correcto automáticamente
-- volver a pulsar “Regenerar perfiles” ya no dará la sensación de que “actualiza todo” cuando en realidad no arregla la recencia
+### 5. Navigation fixes
+- `BottomNavBar.handleJarvis` → keep `/chat` (now correct)
+- `QuickActions` JARVIS button → keep `/chat`
+- Remove "Comunicaciones" from `MenuVisibilityCard`
+- Remove "Comunicaciones" and "POTUS" entries from `MobileMenu.tsx` sections (replace POTUS label with "JARVIS" → /chat)
 
-### Detalle técnico
-#### Lógica de corrección
-```text
-last_contact_correcto(contacto) =
-  MAX(message_date) de contact_messages
-  donde contact_id = contacto.id
-  y source in ('whatsapp', 'whatsapp_backup')
-```
+### 6. Cleanup (delete obsolete files)
+- `src/pages/PotusChat.tsx`
+- `src/pages/Communications.tsx`
+- `src/components/potus/PotusFloatingChat.tsx` mount removed from layout (component file can stay if used elsewhere — will check; if not, delete)
+- `src/pages/Chat.tsx` repurposed → renders new JarvisChat page
+- Old `Chat.tsx` Potus reference removed
 
-#### Archivos a tocar
-- `supabase/functions/evolution-webhook/index.ts`
-- `supabase/functions/send-whatsapp/index.ts`
-- `supabase/functions/whatsapp-webhook/index.ts`
+### 7. AppLayout
+Replace `<PotusFloatingChat />` with `<JarvisFloatingChat />` (which auto-hides on mobile).
 
-#### Operación de datos a ejecutar
-- backfill sobre `people_contacts.last_contact` usando el histórico real de `contact_messages`
+### Files to touch
+**Create:**
+- `src/components/jarvis/JarvisChat.tsx`
+- `src/components/jarvis/JarvisFloatingChat.tsx`
+- `src/pages/JarvisChat.tsx` (or repurpose `Chat.tsx`)
 
-### Validación que haré al terminar
-1. Comprobar varios contactos problemáticos concretos.
-2. Verificar que el chip de recencia en `/red-estrategica` cambia tras recargar.
-3. Verificar que al entrar un mensaje nuevo el `last_contact` se mueve solo.
-4. Revisar un envío saliente desde la app para asegurar que también actualiza.
+**Edit:**
+- `src/App.tsx` (routes)
+- `src/components/layout/AppLayout.tsx` (swap floating widget)
+- `src/components/settings/MenuVisibilityCard.tsx` (remove Comunicaciones, rename POTUS→JARVIS)
+- `src/pages/MobileMenu.tsx` (remove Comunicaciones, rename POTUS→JARVIS)
+
+**Delete:**
+- `src/pages/PotusChat.tsx`
+- `src/pages/Communications.tsx`
+- `src/components/potus/PotusFloatingChat.tsx` (only if not referenced elsewhere)
+
+### Voice details
+- **Mic button (Whisper)**: record with MediaRecorder → POST to `/functions/v1/speech-to-text` → returned text inserted into input + auto-send. Reuse `useVoiceRecognition` hook.
+- **Real-time voice**: toggle button "🎙️ En vivo" inside chat → calls `useJarvisRealtime.startSession()` → WebRTC session with OpenAI Realtime via `jarvis-voice` function. Live transcript appears as user message; assistant response appears as assistant message. Stop button ends session.
+
+### Result
+- Desktop web: JARVIS floats as before, accessible everywhere.
+- Mobile/iPad: tapping JARVIS in bottom bar opens `/chat` full-page with same component.
+- POTUS chat completely removed from UI.
+- "Comunicaciones" removed from menu.
+- Mic + real-time voice integrated inside the JARVIS chat itself.
+

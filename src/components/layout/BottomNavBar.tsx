@@ -30,7 +30,7 @@ export const BottomNavBar = ({ onJarvisPress, isJarvisActive = false }: BottomNa
   const handleJarvis = () => {
     selection();
     if (onJarvisPress) onJarvisPress();
-    else navigate("/chat");
+    else window.dispatchEvent(new CustomEvent('jarvis:toggle'));
   };
 
   const isMenuActive = location.pathname === "/menu";

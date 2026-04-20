@@ -80,34 +80,69 @@ export async function chat(
     body.response_format = { type: "json_object" };
   }
 
-  const response = await fetch(GATEWAY_URL, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`Lovable AI Gateway error: ${response.status}`, errorText.substring(0, 500));
-
-    if (response.status === 429) {
-      throw new Error("Rate limit exceeded. Please try again later.");
-    }
-    if (response.status === 402) {
-      throw new Error("Payment required. Add credits to your Lovable workspace.");
-    }
-    throw new Error(`AI Gateway error: ${response.status} - ${errorText.substring(0, 300)}`);
+  // Fallback chain: if the chosen model fails with transient/empty, try lighter models.
+  const fallbackChain: string[] = [model];
+  if (model === "google/gemini-3.1-pro-preview") {
+    fallbackChain.push("google/gemini-3-flash-preview", "google/gemini-2.5-flash");
+  } else if (model === "google/gemini-3-flash-preview") {
+    fallbackChain.push("google/gemini-2.5-flash");
   }
 
-  const data = await response.json();
-  let result = data.choices?.[0]?.message?.content || "";
+  let lastError: string = "";
+  let result = "";
+
+  outer: for (const tryModel of fallbackChain) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const attemptBody = { ...body, model: tryModel };
+      const response = await fetch(GATEWAY_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(attemptBody),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Lovable AI Gateway error (${tryModel}, attempt ${attempt + 1}): ${response.status}`, errorText.substring(0, 300));
+
+        if (response.status === 429) {
+          throw new Error("Rate limit exceeded. Please try again later.");
+        }
+        if (response.status === 402) {
+          throw new Error("Payment required. Add credits to your Lovable workspace.");
+        }
+        // Transient: retry then fallback
+        if (response.status >= 500 || response.status === 408) {
+          lastError = `${response.status} - ${errorText.substring(0, 200)}`;
+          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+          continue;
+        }
+        throw new Error(`AI Gateway error: ${response.status} - ${errorText.substring(0, 300)}`);
+      }
+
+      const data = await response.json();
+      const upstreamErr = data.choices?.[0]?.error;
+      const content = data.choices?.[0]?.message?.content;
+
+      if (content) {
+        result = content;
+        if (tryModel !== model) console.log(`AI Gateway: succeeded with fallback model ${tryModel}`);
+        break outer;
+      }
+
+      // Empty content — usually upstream provider 502 / network lost
+      lastError = upstreamErr
+        ? `upstream ${upstreamErr.code}: ${upstreamErr.message}`
+        : "empty content";
+      console.warn(`AI Gateway empty response (${tryModel}, attempt ${attempt + 1}): ${lastError}`);
+      await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+    }
+  }
 
   if (!result) {
-    console.error("AI Gateway returned empty content:", JSON.stringify(data).substring(0, 500));
-    throw new Error("AI Gateway returned empty response");
+    throw new Error(`AI Gateway returned empty response after retries. Last error: ${lastError}`);
   }
 
   if (options.responseFormat === "json") {

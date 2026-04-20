@@ -454,6 +454,8 @@ export default function ContactDetail() {
                 el?.scrollIntoView({ behavior: "smooth" });
               }}
               evidenceLabel={`Ver evidencia (${totalMessages.toLocaleString("es")} mensajes)`}
+              onMarkDone={hasLivePending ? () => handleDismissHeadline("done") : undefined}
+              onMarkDismissed={hasLivePending ? () => handleDismissHeadline("dismissed") : undefined}
             />
           );
         })()}

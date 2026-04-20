@@ -397,6 +397,7 @@ serve(async (req) => {
         .maybeSingle();
       const crmUserId = user_id || ownerRow?.user_id || Deno.env.get("EVOLUTION_DEFAULT_USER_ID");
       if (crmUserId) {
+        const sentAt = new Date().toISOString();
         const { error: persistErr } = await supabase
           .from("contact_messages")
           .insert({
@@ -406,13 +407,28 @@ serve(async (req) => {
             direction: "outgoing",
             sender: "Yo",
             source: "whatsapp",
-            message_date: new Date().toISOString(),
+            message_date: sentAt,
           });
 
         if (persistErr) {
           console.error("[send-whatsapp] Error persisting outgoing message:", persistErr);
         } else {
           console.log(`[send-whatsapp] Outgoing message persisted for contact ${resolvedContactId}`);
+        }
+
+        // Bump last_contact (handles NULL correctly)
+        const { data: cur } = await supabase
+          .from("people_contacts")
+          .select("last_contact")
+          .eq("id", resolvedContactId)
+          .maybeSingle();
+        const curMs = cur?.last_contact ? new Date(cur.last_contact).getTime() : 0;
+        const newMs = new Date(sentAt).getTime();
+        if (!cur?.last_contact || newMs > curMs) {
+          await supabase
+            .from("people_contacts")
+            .update({ last_contact: sentAt })
+            .eq("id", resolvedContactId);
         }
       }
     }

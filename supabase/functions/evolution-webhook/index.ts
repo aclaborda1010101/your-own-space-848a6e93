@@ -303,6 +303,25 @@ serve(async (req) => {
     console.log(`Message persisted: ${insertedMessage.id} (${direction}) from ${senderName}${contactId ? "" : " [UNLINKED]"}`);
 
     // ============================
+    // BUMP last_contact on people_contacts (handles NULL correctly)
+    // ============================
+    if (contactId) {
+      const { data: cur } = await supabase
+        .from("people_contacts")
+        .select("last_contact")
+        .eq("id", contactId)
+        .maybeSingle();
+      const curMs = cur?.last_contact ? new Date(cur.last_contact).getTime() : 0;
+      const newMs = new Date(messageDate).getTime();
+      if (!cur?.last_contact || newMs > curMs) {
+        await supabase
+          .from("people_contacts")
+          .update({ last_contact: messageDate })
+          .eq("id", contactId);
+      }
+    }
+
+    // ============================
     // FIRE MEDIA PROCESSOR (audio/image/document) in background
     // ============================
     if (mediaKind === "audio" || mediaKind === "image" || mediaKind === "document") {

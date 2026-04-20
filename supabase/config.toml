@@ -116,3 +116,13 @@ verify_jwt = false
 
 [functions.reimport-whatsapp-recent]
 verify_jwt = false
+
+[functions.speech-to-text]
+verify_jwt = false
+
+[functions.jarvis-voice]
+verify_jwt = false
+
+[functions.jarvis-stt]
+verify_jwt = false
+

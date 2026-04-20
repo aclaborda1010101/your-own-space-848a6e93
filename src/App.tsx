@@ -70,6 +70,7 @@ const PrivacyPolicy = React.lazy(() => import("./pages/PrivacyPolicy"));
 const AICosts = React.lazy(() => import("./pages/AICosts"));
 const IntelligenceInbox = React.lazy(() => import("./pages/IntelligenceInbox"));
 const MobileMenu = React.lazy(() => import("./pages/MobileMenu"));
+const JarvisPage = React.lazy(() => import("./pages/JarvisPage"));
 
 // --- Loading fallback ---
 const PageLoader = () => (
@@ -169,7 +170,7 @@ const App = () => (
                   <Route path="/chat" element={<ProtectedPage><Chat /></ProtectedPage>} />
                   <Route path="/chat-simple" element={<ProtectedPage><ChatSimple /></ProtectedPage>} />
                   <Route path="/potus" element={<Navigate to="/chat" replace />} />
-                  <Route path="/jarvis" element={<Navigate to="/chat" replace />} />
+                  <Route path="/jarvis" element={<ProtectedPage><JarvisPage /></ProtectedPage>} />
                   <Route path="/communications" element={<ProtectedPage><Communications /></ProtectedPage>} />
                   {/* OpenClaw: la home de OpenClaw es ahora el Hub real (TITAN/POTUS) */}
                   <Route path="/openclaw" element={<ProtectedPage><OpenClawHub /></ProtectedPage>} />

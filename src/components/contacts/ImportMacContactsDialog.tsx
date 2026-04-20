@@ -95,7 +95,7 @@ export function ImportMacContactsDialog() {
           <div className="space-y-3">
             <input
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx"
               onChange={handleFile}
               disabled={loading}
               className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"

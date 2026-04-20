@@ -92,6 +92,14 @@ export default function ContactDetail() {
   const [savingNotes, setSavingNotes] = useState(false);
   const [refreshingProfile, setRefreshingProfile] = useState(false);
   const [activeScope, setActiveScope] = useState<"profesional" | "personal" | "familiar">("profesional");
+  const [linkedTasks, setLinkedTasks] = useState<Array<{
+    id: string;
+    title: string;
+    completed: boolean;
+    priority: string;
+    created_at: string;
+    completed_at: string | null;
+  }>>([]);
 
   const { payload: headlines, loading: hLoading } = useContactHeadlines(contactId || null);
   const { podcast, segment, busy, regenerate, setFormat } = useContactPodcast(contactId || null);
@@ -176,6 +184,18 @@ export default function ContactDetail() {
           .order("event_date", { ascending: false })
           .limit(50);
         setPlaudThreads(thr || []);
+      } catch { /* ignore */ }
+
+      // Tareas vinculadas a este contacto
+      try {
+        const { data: lt } = await supabase
+          .from("tasks")
+          .select("id, title, completed, priority, created_at, completed_at")
+          .eq("contact_id", contactId!)
+          .eq("user_id", user!.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        setLinkedTasks((lt as any) || []);
       } catch { /* ignore */ }
     } finally {
       setLoading(false);
@@ -373,10 +393,20 @@ export default function ContactDetail() {
           const isExpiring = fresh === "expiring";
           const isStale = fresh === "stale";
           const hasLivePending = !isExpired && !isStale && headlines.pending.title !== "Sin asunto vivo";
+          // Fallback: si headlines no tiene asunto vivo pero el perfil tiene proxima_accion,
+          // úsala como asunto vivo para evitar la incoherencia visual.
+          const useNextActionFallback = !hasLivePending && !!nextAction?.que;
           return (
             <JarvisSuggestionHero
               headline={
-                !hasLivePending ? (
+                useNextActionFallback ? (
+                  <>
+                    {String(nextAction.que).split(/(:|—|·)/)[0]}{" "}
+                    {headlines.health.trend && (
+                      <span className="text-foreground/80">{headlines.health.trend}</span>
+                    )}
+                  </>
+                ) : !hasLivePending ? (
                   <span className="text-muted-foreground">
                     Sin asunto vivo · la recomendación anterior ya pasó o perdió vigencia.{" "}
                     {headlines.health.trend && (
@@ -394,7 +424,9 @@ export default function ContactDetail() {
                 )
               }
               pretext={
-                !hasLivePending
+                useNextActionFallback
+                  ? `Sugerencia desde perfil · canal: ${nextAction.canal || "—"}`
+                  : !hasLivePending
                   ? "Recomendación caducada · movida a historial"
                   : isExpiring
                   ? "⏳ Caduca en las próximas horas · " + headlines.pending.last_mentioned
@@ -404,7 +436,7 @@ export default function ContactDetail() {
               }
               context={`${headlines.health.relationship_type} — salud relacional ${headlines.health.score}/10 (${headlines.health.label}).`}
               confidence={Math.round((headlines.health.score / 10) * 100)}
-              priority={!hasLivePending ? "baja" : healthScore < 4 ? "alta" : healthScore < 7 ? "media" : "baja"}
+              priority={useNextActionFallback ? "media" : !hasLivePending ? "baja" : healthScore < 4 ? "alta" : healthScore < 7 ? "media" : "baja"}
               detectedAgo={
                 contact.last_contact
                   ? formatDistanceToNowStrict(new Date(contact.last_contact), { locale: es })
@@ -413,10 +445,10 @@ export default function ContactDetail() {
               tags={[
                 contact.category || "personal",
                 totalMessages > 1000 ? "histórico denso" : "activo",
-                ...(isExpired ? ["caducada"] : isExpiring ? ["caduca hoy"] : isStale ? ["sin novedades"] : []),
+                ...(useNextActionFallback ? ["desde perfil"] : isExpired ? ["caducada"] : isExpiring ? ["caduca hoy"] : isStale ? ["sin novedades"] : []),
               ]}
-              onAccept={!hasLivePending ? undefined : () => navigate(`/tasks?contact=${contact.id}&suggest=1`)}
-              acceptLabel={!hasLivePending ? undefined : "Aceptar y agendar"}
+              onAccept={(!hasLivePending && !useNextActionFallback) ? undefined : () => navigate(`/tasks?contact=${contact.id}&suggest=1`)}
+              acceptLabel={(!hasLivePending && !useNextActionFallback) ? undefined : "Aceptar y agendar"}
               onEvidence={() => {
                 const el = document.getElementById("contact-tabs");
                 el?.scrollIntoView({ behavior: "smooth" });
@@ -494,6 +526,57 @@ export default function ContactDetail() {
             </div>
           </GlassCard>
         )}
+
+        {/* TAREAS VINCULADAS */}
+        {linkedTasks.length > 0 && (() => {
+          const pending = linkedTasks.filter((t) => !t.completed);
+          const done = linkedTasks.filter((t) => t.completed);
+          return (
+            <GlassCard className="p-5 sm:p-6">
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3 font-mono">
+                <Bell className="w-3 h-3" />
+                <span>Tareas asociadas · {linkedTasks.length}</span>
+              </div>
+              <div className="space-y-2">
+                {pending.map((t) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-border bg-card/40"
+                  >
+                    <span className="text-sm text-foreground truncate">{t.title}</span>
+                    <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                      {t.priority}
+                    </span>
+                  </div>
+                ))}
+                {done.length > 0 && (
+                  <details className="pt-2">
+                    <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                      Completadas ({done.length})
+                    </summary>
+                    <div className="space-y-1.5 mt-2">
+                      {done.slice(0, 10).map((t) => (
+                        <div key={t.id} className="px-2.5 py-1.5 opacity-60">
+                          <span className="text-xs line-through text-muted-foreground truncate">
+                            {t.title}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3 rounded-full"
+                onClick={() => navigate(`/tasks?contact=${contact.id}`)}
+              >
+                Nueva tarea para {contact.name.split(/\s+/)[0]}
+              </Button>
+            </GlassCard>
+          );
+        })()}
 
         {/* HEADLINES — análisis IA secundario */}
         <div>

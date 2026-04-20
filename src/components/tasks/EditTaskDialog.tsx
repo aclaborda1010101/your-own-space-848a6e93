@@ -10,9 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
+import { ContactSelect } from "@/components/tasks/ContactSelect";
 import { cn } from "@/lib/utils";
-import { Briefcase, Heart, Wallet, Lock, Save } from "lucide-react";
+import { Briefcase, Heart, Wallet, Users, Save } from "lucide-react";
 
 interface Task {
   id: string;
@@ -22,13 +22,18 @@ interface Task {
   duration: number;
   completed: boolean;
   isPersonal: boolean;
+  contactId?: string;
+  contactName?: string;
 }
 
 interface EditTaskDialogProps {
   task: Task | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (id: string, updates: Partial<Pick<Task, "title" | "type" | "priority" | "duration" | "isPersonal">>) => Promise<void>;
+  onSave: (
+    id: string,
+    updates: Partial<Pick<Task, "title" | "type" | "priority" | "duration" | "isPersonal" | "contactId">>,
+  ) => Promise<void>;
 }
 
 const typeConfig = {
@@ -49,7 +54,8 @@ export const EditTaskDialog = ({ task, open, onOpenChange, onSave }: EditTaskDia
   const [type, setType] = useState<"work" | "life" | "finance">("work");
   const [priority, setPriority] = useState<"P0" | "P1" | "P2">("P1");
   const [duration, setDuration] = useState(30);
-  const [isPersonal, setIsPersonal] = useState(false);
+  const [isPersonal, setIsPersonal] = useState(true);
+  const [contactId, setContactId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -59,16 +65,26 @@ export const EditTaskDialog = ({ task, open, onOpenChange, onSave }: EditTaskDia
       setPriority(task.priority);
       setDuration(task.duration);
       setIsPersonal(task.isPersonal);
+      setContactId(task.contactId ?? null);
     }
   }, [task]);
 
   const handleSave = async () => {
     if (!task || !title.trim()) return;
     setSaving(true);
-    await onSave(task.id, { title: title.trim(), type, priority, duration, isPersonal });
+    await onSave(task.id, {
+      title: title.trim(),
+      type,
+      priority,
+      duration,
+      isPersonal,
+      contactId: contactId ?? undefined,
+    });
     setSaving(false);
     onOpenChange(false);
   };
+
+  const shared = !isPersonal;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -151,18 +167,31 @@ export const EditTaskDialog = ({ task, open, onOpenChange, onSave }: EditTaskDia
             />
           </div>
 
-          {/* Personal toggle */}
+          {/* Contact link */}
+          <div className="space-y-2">
+            <Label>Contacto vinculado</Label>
+            <ContactSelect
+              value={contactId}
+              onChange={(id) => setContactId(id)}
+              className="w-full"
+            />
+          </div>
+
+          {/* Shared toggle (privada por defecto) */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Lock className={cn("w-4 h-4", isPersonal ? "text-primary" : "text-muted-foreground")} />
-              <Label>Personal (no compartida)</Label>
+              <Users className={cn("w-4 h-4", shared ? "text-primary" : "text-muted-foreground")} />
+              <Label>Compartida con red</Label>
             </div>
             <Switch
-              checked={isPersonal}
-              onCheckedChange={setIsPersonal}
+              checked={shared}
+              onCheckedChange={(v) => setIsPersonal(!v)}
               className="data-[state=checked]:bg-primary"
             />
           </div>
+          <p className="text-[11px] text-muted-foreground -mt-2">
+            Por defecto las tareas son privadas. Actívalo solo si quieres que las personas con acceso compartido la vean.
+          </p>
         </div>
 
         <DialogFooter>

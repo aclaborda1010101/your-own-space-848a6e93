@@ -10,7 +10,7 @@ const corsHeaders = {
 // Returns immediately and processes contacts in the background via EdgeRuntime.waitUntil
 // to avoid the 150s edge function timeout.
 const DELAY_BETWEEN_MS = 1500;
-const MAX_PER_RUN = 50;
+const MAX_PER_RUN = 100;
 
 async function processContactsInBackground(
   supabaseUrl: string,
@@ -91,35 +91,61 @@ serve(async (req) => {
 
     const admin = createClient(supabaseUrl, serviceRoleKey) as any;
 
-    const { data: contacts, error } = await admin
-      .from("people_contacts")
-      .select("id, name, personality_profile")
-      .eq("user_id", userId)
-      .or("is_favorite.eq.true,in_strategic_network.eq.true")
-      .order("updated_at", { ascending: true })
-      .limit(MAX_PER_RUN);
+    // PRIORITIZACIÓN:
+    // 1) Sin personality_profile (nunca analizados) primero.
+    // 2) Después, los más antiguos por updated_at (NULLS first).
+    // Hacemos dos queries para garantizar el orden correcto y combinamos.
+    const [{ data: noProfile, error: e1 }, { data: withProfile, error: e2 }] = await Promise.all([
+      admin
+        .from("people_contacts")
+        .select("id, name, personality_profile, updated_at")
+        .eq("user_id", userId)
+        .or("is_favorite.eq.true,in_strategic_network.eq.true")
+        .or("personality_profile.is.null,personality_profile.eq.{}")
+        .order("updated_at", { ascending: true, nullsFirst: true })
+        .limit(MAX_PER_RUN),
+      admin
+        .from("people_contacts")
+        .select("id, name, personality_profile, updated_at")
+        .eq("user_id", userId)
+        .or("is_favorite.eq.true,in_strategic_network.eq.true")
+        .not("personality_profile", "is", null)
+        .order("updated_at", { ascending: true, nullsFirst: true })
+        .limit(MAX_PER_RUN),
+    ]);
 
-    if (error) throw error;
-    if (!contacts || contacts.length === 0) {
+    if (e1) throw e1;
+    if (e2) throw e2;
+
+    const seen = new Set<string>();
+    const merged: Array<{ id: string; name: string; personality_profile: any }> = [];
+    for (const c of [...(noProfile || []), ...(withProfile || [])]) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      merged.push(c);
+      if (merged.length >= MAX_PER_RUN) break;
+    }
+
+    if (merged.length === 0) {
       return new Response(
         JSON.stringify({ queued: 0, total: 0, message: "No hay contactos en la red estratégica" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`[refresh-all] User ${userId}: queueing ${contacts.length} contacts in background`);
+    console.log(`[refresh-all] User ${userId}: queueing ${merged.length} contacts in background (sin perfil: ${(noProfile || []).length})`);
 
     // Fire and forget — runs after response is returned, up to the function's max duration.
     // @ts-ignore - EdgeRuntime is provided by Supabase Edge runtime
     EdgeRuntime.waitUntil(
-      processContactsInBackground(supabaseUrl, serviceRoleKey, userId, contacts)
+      processContactsInBackground(supabaseUrl, serviceRoleKey, userId, merged)
     );
 
     return new Response(
       JSON.stringify({
-        queued: contacts.length,
-        total: contacts.length,
-        message: `Refrescando ${contacts.length} contactos en segundo plano. Vuelve en 1-2 minutos.`,
+        queued: merged.length,
+        total: merged.length,
+        message: `Refrescando ${merged.length} contactos en segundo plano. Vuelve en 1-2 minutos.`,
         background: true,
       }),
       { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } }

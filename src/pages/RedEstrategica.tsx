@@ -194,14 +194,27 @@ export default function RedEstrategica() {
         { body: {} },
       );
       if (error) throw error;
-      const refreshed = data?.refreshed ?? 0;
-      const total = data?.total ?? 0;
-      const errors = data?.errors ?? 0;
-      toast.success(`Perfiles regenerados: ${refreshed}/${total}`, {
+
+      // Nueva respuesta async: { queued, total, message, background: true }
+      const queued = data?.queued ?? 0;
+      const message =
+        data?.message ||
+        `Refrescando ${queued} contactos en segundo plano. Vuelve en 1-2 minutos.`;
+
+      toast.success(message, {
         id: tId,
-        description: errors > 0 ? `${errors} con error` : "Todos al día.",
+        description: "Los perfiles se irán actualizando automáticamente.",
       });
-      void load();
+
+      // Polling: refrescar la lista cada 30s durante 3 min para ver el avance.
+      let ticks = 0;
+      const interval = window.setInterval(() => {
+        void load();
+        ticks++;
+        if (ticks >= 6) window.clearInterval(interval);
+      }, 30_000);
+      // Primer refresco en 5s para captar los primeros perfiles ya regenerados.
+      window.setTimeout(() => void load(), 5_000);
     } catch (e) {
       toast.error("No se pudieron regenerar los perfiles", {
         id: tId,

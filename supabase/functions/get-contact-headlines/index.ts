@@ -62,6 +62,9 @@ serve(async (req) => {
       .maybeSingle();
 
     const cachedExpired = isCachedPayloadExpired(cached?.payload);
+    // Si la cache está obsoleta (stale/expired) regenerar SIEMPRE, aunque no haya
+    // delta de mensajes nuevos. Era el motivo por el que contactos sin actividad
+    // reciente quedaban eternamente con "Sin asunto vivo".
     const needsRegen =
       force ||
       !cached ||

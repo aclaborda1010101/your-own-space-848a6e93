@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { EditTaskDialog } from "@/components/tasks/EditTaskDialog";
 import { SuggestedTasksDialog, useTaskSuggestionsCount } from "@/components/tasks/SuggestedTasksDialog";
+import { ContactSelect } from "@/components/tasks/ContactSelect";
 import {
   buildDefaultWorkspace,
   TaskWorkspaceDetail,
@@ -18,18 +19,20 @@ import { Switch } from "@/components/ui/switch";
 import { SwipeableTask } from "@/components/tasks/SwipeableTask";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar } from "@/hooks/useCalendar";
-import { 
-  Plus, 
-  CheckSquare, 
-  Briefcase, 
-  Heart, 
+import {
+  Plus,
+  CheckSquare,
+  Briefcase,
+  Heart,
   Wallet,
   Loader2,
   Lock,
+  Users,
   Sparkles,
   Flame,
   CalendarCheck,
   ChevronDown,
+  User as UserIcon,
 } from "lucide-react";
 import { PageHero } from "@/components/ui/PageHero";
 import { cn } from "@/lib/utils";
@@ -51,7 +54,9 @@ const TASK_WORKSPACE_STORAGE_KEY = "jarvis-task-workspace-v1";
 const Tasks = () => {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskType, setNewTaskType] = useState<"work" | "life" | "finance">("work");
-  const [newTaskPersonal, setNewTaskPersonal] = useState(false);
+  // Privada por defecto (shared = false)
+  const [newTaskShared, setNewTaskShared] = useState(false);
+  const [newTaskContactId, setNewTaskContactId] = useState<string | null>(null);
   const [view, setView] = useState<"today" | "week">("today");
   const [editingTask, setEditingTask] = useState<any>(null);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -138,11 +143,13 @@ const Tasks = () => {
       type: newTaskType,
       priority: "P1",
       duration: 30,
-      isPersonal: newTaskPersonal,
+      isPersonal: !newTaskShared,
+      contactId: newTaskContactId,
     });
 
     setNewTaskTitle("");
-    setNewTaskPersonal(false);
+    setNewTaskShared(false);
+    setNewTaskContactId(null);
   };
 
   const convertToBlock = async (taskTitle: string, duration: number) => {
@@ -278,15 +285,26 @@ const Tasks = () => {
                 })}
               </div>
 
-              <div className="flex items-center justify-between gap-3 px-1">
-                <div className="flex items-center gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2 items-center">
+                <ContactSelect
+                  value={newTaskContactId}
+                  onChange={(id) => setNewTaskContactId(id)}
+                  className="w-full h-10"
+                />
+                <div className="flex items-center gap-2 px-1">
                   <Switch
-                    checked={newTaskPersonal}
-                    onCheckedChange={setNewTaskPersonal}
+                    checked={newTaskShared}
+                    onCheckedChange={setNewTaskShared}
                     className="data-[state=checked]:bg-primary"
                   />
-                  <Lock className={`w-3.5 h-3.5 ${newTaskPersonal ? "text-primary" : "text-muted-foreground"}`} />
-                  <span className="text-xs text-muted-foreground">Personal · Privado</span>
+                  {newTaskShared ? (
+                    <Users className="w-3.5 h-3.5 text-primary" />
+                  ) : (
+                    <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+                  )}
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {newTaskShared ? "Compartida con red" : "Privada"}
+                  </span>
                 </div>
               </div>
 
@@ -323,15 +341,24 @@ const Tasks = () => {
                         onClick={() => handleSelectTask(task)}
                         className="block w-full rounded-xl text-left transition focus:outline-none focus:ring-2 focus:ring-primary/40"
                       >
-                        <div className="flex items-center gap-1 mb-1">
+                        <div className="flex items-center gap-1 mb-1 flex-wrap">
                           {task.projectName && (
                             <Badge variant="outline" className="text-xs bg-primary/5 text-primary border-primary/20">
                               [{task.projectName}]
                             </Badge>
                           )}
-                          {task.isPersonal && (
+                          {task.contactName && (
+                            <Badge variant="outline" className="text-xs bg-accent/10 text-accent border-accent/30">
+                              <UserIcon className="w-3 h-3 mr-1" /> → {task.contactName}
+                            </Badge>
+                          )}
+                          {task.isPersonal ? (
                             <Badge variant="outline" className="text-xs bg-muted text-muted-foreground border-border">
-                              <Lock className="w-3 h-3 mr-1" /> Personal
+                              <Lock className="w-3 h-3 mr-1" /> Privada
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs bg-primary/5 text-primary border-primary/20">
+                              <Users className="w-3 h-3 mr-1" /> Compartida
                             </Badge>
                           )}
                         </div>

@@ -63,6 +63,25 @@ export const useSuggestions = () => {
     const priority = PRIORITY_MAP[c.priority || "medium"] || "P2";
     const taskType = detectTaskType(c);
 
+    // Resolver contacto vinculado:
+    //   1) si la sugerencia ya trae contact_id explícito, úsalo.
+    //   2) si trae contact_name, intenta fuzzy match vía RPC.
+    let contactId: string | null = c.contact_id || null;
+    if (!contactId && c.contact_name) {
+      try {
+        const { data: matches } = await supabase.rpc("search_contacts_fuzzy", {
+          p_user_id: user.id,
+          p_search_term: String(c.contact_name),
+          p_limit: 1,
+        });
+        if (Array.isArray(matches) && matches.length > 0) {
+          contactId = matches[0].id;
+        }
+      } catch (e) {
+        console.warn("[suggestions] fuzzy contact match failed:", e);
+      }
+    }
+
     const { error } = await supabase.from("tasks").insert({
       user_id: user.id,
       title: c.title || c.description || "Tarea de Plaud",
@@ -70,6 +89,9 @@ export const useSuggestions = () => {
       priority,
       duration: c.duration || 30,
       completed: false,
+      contact_id: contactId,
+      // Sugeridas: privadas por defecto. El usuario puede compartirlas después.
+      is_personal: true,
     });
     if (error) throw error;
   };

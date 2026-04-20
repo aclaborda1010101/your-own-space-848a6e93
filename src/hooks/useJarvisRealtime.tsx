@@ -944,6 +944,37 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
                 description: 'Elimina/cancela un evento del calendario',
                 parameters: { type: 'object', properties: { event_title: { type: 'string' } }, required: ['event_title'] },
               },
+              // ── análisis profundo de relación ─────────────────────
+              {
+                type: 'function', name: 'analyze_contact_relationship',
+                description: 'Analiza la relación con un contacto: trae histórico de WhatsApp, emails, transcripciones y observaciones donde aparece. Úsalo cuando el usuario pida "analiza mi relación con X" o "qué sabemos de X".',
+                parameters: { type: 'object', properties: { name: { type: 'string', description: 'Nombre o parte del nombre del contacto' } }, required: ['name'] },
+              },
+              // ── OpenClaw (mandar tareas a nodos remotos) ──────────
+              {
+                type: 'function', name: 'openclaw_list_nodes',
+                description: 'Lista los nodos OpenClaw disponibles (POTUS, TITAN, JARVIS, ATLAS, etc) con su estado actual.',
+                parameters: { type: 'object', properties: {} },
+              },
+              {
+                type: 'function', name: 'openclaw_create_task',
+                description: 'Crea una tarea en OpenClaw para que un nodo (POTUS, TITAN, JARVIS, ATLAS...) la ejecute. Úsalo cuando el usuario diga "manda a POTUS que haga X" o similar.',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string', description: 'Título corto de la tarea' },
+                    description: { type: 'string', description: 'Descripción/instrucciones para el nodo' },
+                    node: { type: 'string', description: 'Nombre del nodo destino: POTUS, TITAN, JARVIS, ATLAS... (opcional)' },
+                    priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+                  },
+                  required: ['title'],
+                },
+              },
+              {
+                type: 'function', name: 'openclaw_run_now',
+                description: 'Dispara inmediatamente una tarea OpenClaw existente buscándola por título.',
+                parameters: { type: 'object', properties: { task_title: { type: 'string' } }, required: ['task_title'] },
+              },
             ],
           },
         });
@@ -1044,7 +1075,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       toast.error(error instanceof Error ? error.message : 'Error al iniciar JARVIS');
       cleanupOnError('start_error');
     }
-  }, [isActive, updateState, handleRealtimeEvent, sendEvent, clearResilienceTimers]);
+  }, [isActive, updateState, handleRealtimeEvent, sendEvent, clearResilienceTimers, voice]);
 
   // Toggle session
   const toggleSession = useCallback(() => {
@@ -1077,6 +1108,8 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
     isActive,
     transcript,
     response,
+    voice,
+    setVoice,
     startSession,
     stopSession,
     toggleSession,

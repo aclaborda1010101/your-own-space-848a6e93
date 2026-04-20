@@ -9,6 +9,7 @@ import {
 } from "@/components/tasks/TaskWorkspaceDetail";
 import { ShareDialog } from "@/components/sharing/ShareDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";

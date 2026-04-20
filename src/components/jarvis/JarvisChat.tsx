@@ -236,6 +236,47 @@ export function JarvisChat({ variant = "page", autoProactive }: JarvisChatProps)
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || !session) return;
+    e.target.value = ""; // reset
+
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("Máximo 20MB por archivo");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop() || "bin";
+      const path = `${user.id}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("jarvis-attachments")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+
+      // Add user-visible message indicating the upload
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: `📎 Archivo adjunto: **${file.name}**` },
+      ]);
+
+      const { data, error } = await supabase.functions.invoke("jarvis-analyze-attachment", {
+        body: { storagePath: path, fileName: file.name, mimeType: file.type },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) throw error;
+
+      const summary = (data as any)?.summary || "(sin análisis)";
+      setMessages((prev) => [...prev, { role: "assistant", content: summary }]);
+    } catch (err) {
+      console.error("[JarvisChat] upload error:", err);
+      toast.error("No pude analizar el archivo");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (!user) return null;
 
   const isFloating = variant === "floating";

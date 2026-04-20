@@ -57,6 +57,7 @@ const Tasks = () => {
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [taskWorkspaces, setTaskWorkspaces] = useState<Record<string, TaskWorkspaceRecord>>({});
+  const [completedOpen, setCompletedOpen] = useState(false);
 
   const { 
     pendingTasks, 

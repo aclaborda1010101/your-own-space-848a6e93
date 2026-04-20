@@ -173,10 +173,11 @@ serve(async (req) => {
 
     console.log(`[Gateway] ${platform} message from ${user_id}: ${message.substring(0, 80)}...`);
 
-    // Fetch context in parallel
-    const [context, recentHistory] = await Promise.all([
+    // Fetch context in parallel (now includes semantic history retrieval)
+    const [context, recentHistory, semanticHistory] = await Promise.all([
       getUserContext(supabase, user_id),
       conversation_history ? Promise.resolve([]) : getRecentHistory(supabase, user_id, platform),
+      getSemanticHistory(supabase, user_id, message),
     ]);
 
     // Detect specialist

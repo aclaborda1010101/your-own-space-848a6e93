@@ -208,6 +208,11 @@ serve(async (req) => {
       contextStr += `\n🧠 MEMORIAS: ${context.memories.map((m: { content: string }) => m.content).join(" | ")}`;
     }
 
+    // Inject semantic history retrieval (the actual game-changer)
+    if (semanticHistory) {
+      contextStr += semanticHistory;
+    }
+
     // Build system prompt using RAG
     const agentType = specialist || "coach";
     const additionalContext = `

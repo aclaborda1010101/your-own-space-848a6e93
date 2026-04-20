@@ -101,10 +101,35 @@ export default function ContactDetail() {
     completed_at: string | null;
   }>>([]);
 
-  const { payload: headlines, loading: hLoading } = useContactHeadlines(contactId || null);
+  const { payload: headlines, loading: hLoading, refresh: refreshHeadlines } = useContactHeadlines(contactId || null);
   const { podcast, segment, busy, regenerate, setFormat } = useContactPodcast(contactId || null);
   const { profile, allContacts, contactLinks, linkContact, ignoreContact, reload: reloadProfile } =
     useContactProfile(contactId, user?.id);
+
+  async function handleDismissHeadline(decision: "done" | "dismissed") {
+    if (!contactId || !user || !headlines?.pending?.title) return;
+    const originalTitle = headlines.pending.title;
+    const tId = toast.loading(decision === "done" ? "Marcado como hecho" : "Descartando asunto");
+    try {
+      const { generateHeadlineSignature } = await import("@/lib/headlineSignature");
+      const signature = await generateHeadlineSignature(originalTitle);
+      const { error } = await supabase.from("contact_headline_dismissals").insert({
+        user_id: user.id,
+        contact_id: contactId,
+        signature,
+        original_title: originalTitle,
+        decision,
+      });
+      if (error) throw error;
+      toast.success(
+        decision === "done" ? "✓ JARVIS no insistirá con esto" : "Asunto descartado",
+        { id: tId },
+      );
+      await refreshHeadlines();
+    } catch (e) {
+      toast.error("No se pudo guardar", { id: tId, description: e instanceof Error ? e.message : String(e) });
+    }
+  }
 
   async function refreshProfile() {
     if (!contactId || !user || refreshingProfile) return;
@@ -454,6 +479,8 @@ export default function ContactDetail() {
                 el?.scrollIntoView({ behavior: "smooth" });
               }}
               evidenceLabel={`Ver evidencia (${totalMessages.toLocaleString("es")} mensajes)`}
+              onMarkDone={hasLivePending ? () => handleDismissHeadline("done") : undefined}
+              onMarkDismissed={hasLivePending ? () => handleDismissHeadline("dismissed") : undefined}
             />
           );
         })()}

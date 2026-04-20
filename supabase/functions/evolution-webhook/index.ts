@@ -190,61 +190,29 @@ serve(async (req) => {
           contactId = byPhone.id;
           contactIsFavorite = !!byPhone.is_favorite;
           await supabase.from("people_contacts").update({ wa_id: waId }).eq("id", contactId);
-        } else if (pushName && pushName.trim() && pushName !== waId) {
-          // 4. Match by name — STRICT: exact (case-insensitive) y solo si el pushName
-          // es "específico" (>=2 palabras o >=8 chars). Esto evita que un "Dani"
-          // entrante se fusione con "Daniel X" o "Daniela Y" sin tu permiso.
-          const cleanPush = pushName.trim();
-          const wordCount = cleanPush.split(/\s+/).length;
-          const isSpecific = wordCount >= 2 || cleanPush.length >= 8;
-
-          let byName: { id: string; is_favorite: boolean | null } | null = null;
-          if (isSpecific) {
-            const { data } = await supabase
-              .from("people_contacts")
-              .select("id, is_favorite")
-              .eq("user_id", userId)
-              .ilike("name", cleanPush) // exact case-insensitive (sin %)
-              .is("wa_id", null)
-              .maybeSingle();
-            byName = data as any;
-          } else {
-            console.log(
-              `[contact] pushName "${cleanPush}" demasiado genérico, no se hace match por nombre`,
-            );
-          }
-
-          if (byName) {
-            contactId = byName.id;
-            contactIsFavorite = !!byName.is_favorite;
-            await supabase
-              .from("people_contacts")
-              .update({ wa_id: waId, phone_numbers: [waId] })
-              .eq("id", contactId);
-            console.log(`[contact] Linked "${cleanPush}" with wa_id ${waId}`);
-          } else {
-            // 5. Create new contact (incluso si pushName es genérico tipo "Dani")
-            const { data: newContact, error: createErr } = await supabase
-              .from("people_contacts")
-              .insert({
-                user_id: userId,
-                name: cleanPush,
-                wa_id: waId,
-                category: "pendiente",
-                phone_numbers: [waId],
-              })
-              .select("id")
-              .single();
-            if (createErr) {
-              console.error("create contact failed:", createErr);
-            } else {
-              contactId = newContact.id;
-              console.log(`[contact] Created ${cleanPush} (${contactId})`);
-            }
-          }
         } else {
-          // No pushName + no match → leave unlinked, will reconcile later
-          console.log(`[contact] Unlinked message from ${waId} (no pushName, no match)`);
+          // 4. NO match por teléfono → SIEMPRE crear contacto nuevo.
+          // Eliminado el fuzzy match por nombre: el teléfono manda. El nombre
+          // sólo se usa para rellenar el campo `name` al crear el contacto.
+          // Para vincular un contacto antiguo con un wa_id, usa la UI manual.
+          const cleanPush = (pushName && pushName.trim()) || waId;
+          const { data: newContact, error: createErr } = await supabase
+            .from("people_contacts")
+            .insert({
+              user_id: userId,
+              name: cleanPush,
+              wa_id: waId,
+              category: "pendiente",
+              phone_numbers: [waId],
+            })
+            .select("id")
+            .single();
+          if (createErr) {
+            console.error("create contact failed:", createErr);
+          } else {
+            contactId = newContact.id;
+            console.log(`[contact] Created new contact "${cleanPush}" (${contactId}) for wa_id ${waId}`);
+          }
         }
       }
     }

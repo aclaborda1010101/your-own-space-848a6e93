@@ -23,8 +23,21 @@ import {
   Brain,
   Plus,
   Mic,
+  ChevronDown,
+  Check,
+  Heart,
+  Filter,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 interface Row {
   id: string;

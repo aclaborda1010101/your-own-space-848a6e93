@@ -836,7 +836,7 @@ serve(async (req) => {
     }
 
     const body = (req as any)._parsedBody || await req.json();
-    const { contact_id, scopes: requestedScopes, include_historical } = body;
+    const { contact_id, scopes: requestedScopes, include_historical, async: asyncMode } = body;
     if (!contact_id) throw new Error("contact_id required");
 
     // 1. Fetch contact info
@@ -848,6 +848,49 @@ serve(async (req) => {
       .single();
 
     if (contactErr || !contact) throw new Error("Contact not found");
+
+    // ── ASYNC MODE: schedule heavy work in background and return immediately ──
+    // This avoids the 150s edge-function idle timeout for large contacts.
+    // Default to async unless explicitly disabled with `async: false`.
+    if (asyncMode !== false) {
+      const heavyWork = (async () => {
+        try {
+          // Re-invoke ourselves synchronously by re-running the body of the handler.
+          // Easiest: call a fresh fetch to this same function with async: false.
+          const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/contact-analysis`;
+          await fetch(url, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              contact_id,
+              scopes: requestedScopes,
+              include_historical,
+              user_id: userId,
+              async: false,
+            }),
+          });
+        } catch (bgErr) {
+          console.error("[contact-analysis] background error:", bgErr);
+        }
+      })();
+
+      // @ts-ignore EdgeRuntime is provided by Supabase Edge Functions
+      if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(heavyWork);
+      } else {
+        // Fallback: fire-and-forget
+        heavyWork.catch(() => {});
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, status: "queued", contact_id }),
+        { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const scopes: string[] = requestedScopes && Array.isArray(requestedScopes) && requestedScopes.length > 0
       ? requestedScopes

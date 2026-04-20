@@ -206,9 +206,14 @@ REGLAS DE ESTILO:
       { role: "user", content: message },
     ];
 
-    // Generate response
+    // Generate response — use Gemini 3.1 Pro for deep analyses (Realtime delegations),
+    // fall back to Flash for casual chat platforms.
+    const isDeepAnalysis = platform === "web" && (
+      message.length > 80 ||
+      /analiza|relación|relacion|histórico|historico|profundo|por qué|porque|estrategia|plan/i.test(message)
+    );
     const response = await chat(allMessages, {
-      model: "gemini-flash",
+      model: isDeepAnalysis ? "google/gemini-3.1-pro-preview" : "gemini-flash",
       temperature: 0.8,
     });
 

@@ -92,6 +92,14 @@ export default function ContactDetail() {
   const [savingNotes, setSavingNotes] = useState(false);
   const [refreshingProfile, setRefreshingProfile] = useState(false);
   const [activeScope, setActiveScope] = useState<"profesional" | "personal" | "familiar">("profesional");
+  const [linkedTasks, setLinkedTasks] = useState<Array<{
+    id: string;
+    title: string;
+    completed: boolean;
+    priority: string;
+    created_at: string;
+    completed_at: string | null;
+  }>>([]);
 
   const { payload: headlines, loading: hLoading } = useContactHeadlines(contactId || null);
   const { podcast, segment, busy, regenerate, setFormat } = useContactPodcast(contactId || null);
@@ -176,6 +184,18 @@ export default function ContactDetail() {
           .order("event_date", { ascending: false })
           .limit(50);
         setPlaudThreads(thr || []);
+      } catch { /* ignore */ }
+
+      // Tareas vinculadas a este contacto
+      try {
+        const { data: lt } = await supabase
+          .from("tasks")
+          .select("id, title, completed, priority, created_at, completed_at")
+          .eq("contact_id", contactId!)
+          .eq("user_id", user!.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        setLinkedTasks((lt as any) || []);
       } catch { /* ignore */ }
     } finally {
       setLoading(false);

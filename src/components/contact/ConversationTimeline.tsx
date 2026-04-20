@@ -43,7 +43,7 @@ export function ConversationTimeline({ messages, contactName }: ConversationTime
       <div className="space-y-6">
         {grouped.map(([month, msgs]) => (
           <div key={month}>
-            <div className="text-sm font-display font-medium text-foreground/90 mb-3 sticky top-0 bg-background/40 backdrop-blur-sm py-1 -mx-2 px-2 rounded">
+            <div className="text-sm font-display font-medium text-foreground/90 mb-3 bg-background/60 py-1 -mx-2 px-2 rounded">
               {format(new Date(month + "-01"), "LLLL yyyy", { locale: es })}{" "}
               <span className="text-xs text-muted-foreground font-normal">
                 · {msgs.length} mensajes

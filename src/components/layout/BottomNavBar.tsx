@@ -26,12 +26,10 @@ export const BottomNavBar = () => {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 lg:hidden"
+      className="fixed bottom-0 left-0 right-0 z-40 lg:hidden overflow-hidden"
       aria-label="Navegación principal"
     >
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 h-px w-[65%] bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
-
-      <div className="relative bg-background/95 backdrop-blur-2xl border-t border-border/60 bg-scanlines pb-[env(safe-area-inset-bottom)]">
+      <div className="relative bg-background/95 backdrop-blur-xl border-t border-border/60 pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-end justify-around h-16 px-1">
           {items.map((item) => (
             <NavItem

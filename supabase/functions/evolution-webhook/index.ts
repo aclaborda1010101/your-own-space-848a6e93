@@ -303,6 +303,35 @@ serve(async (req) => {
     console.log(`Message persisted: ${insertedMessage.id} (${direction}) from ${senderName}${contactId ? "" : " [UNLINKED]"}`);
 
     // ============================
+    // FIRE MEDIA PROCESSOR (audio/image/document) in background
+    // ============================
+    if (mediaKind === "audio" || mediaKind === "image" || mediaKind === "document") {
+      const mediaJob = fetch(`${supabaseUrl}/functions/v1/process-whatsapp-media`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${supabaseKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messageId: insertedMessage.id,
+          contactId,
+          userId,
+          instance: instanceName,
+          messageKey: key,
+          mediaKind,
+          mimeType: mediaMimeType,
+          fileName: mediaFileName,
+          caption: mediaCaption,
+        }),
+      }).catch((err) => console.error("[process-whatsapp-media] fire error:", err));
+      // @ts-ignore EdgeRuntime is provided by Supabase runtime
+      if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any)?.waitUntil) {
+        // @ts-ignore
+        (EdgeRuntime as any).waitUntil(mediaJob);
+      }
+    }
+
+    // ============================
     // FIRE INTELLIGENCE (only if contact known)
     // ============================
     if (direction === "incoming" && contactId) {

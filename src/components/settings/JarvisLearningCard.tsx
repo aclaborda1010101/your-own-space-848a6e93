@@ -84,30 +84,54 @@ export const JarvisLearningCard = () => {
       )}
 
       {/* Patrones ya aplicados */}
-      {confirmed.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-success" /> Aprendido y aplicado ({confirmed.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {confirmed.slice(0, 8).map((p) => (
-              <div key={p.id} className="flex items-center justify-between gap-2 text-xs">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-foreground">{p.description || p.pattern_key}</p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {PATTERN_LABEL[p.pattern_type] || p.pattern_type} · {p.evidence_count} evidencias
-                  </p>
-                </div>
-                <Badge variant="secondary" className="text-[10px]">
-                  {Math.round(p.confidence * 100)}%
-                </Badge>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+      {confirmed.length > 0 && (() => {
+        const autoCount = confirmed.filter(
+          (p) => p.pattern_type === "classification_hint" && p.evidence_count >= 5 && p.confidence >= 0.85,
+        ).length;
+        return (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-success" /> Aprendido y aplicado ({confirmed.length})
+                {autoCount > 0 && (
+                  <Badge className="text-[10px] bg-success/15 text-success border-success/30 ml-auto">
+                    {autoCount} auto-asignación{autoCount !== 1 ? "es" : ""}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {confirmed.slice(0, 12).map((p) => {
+                const isAuto =
+                  p.pattern_type === "classification_hint" && p.evidence_count >= 5 && p.confidence >= 0.85;
+                return (
+                  <div key={p.id} className="flex items-center justify-between gap-2 text-xs">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-foreground">{p.description || p.pattern_key}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {PATTERN_LABEL[p.pattern_type] || p.pattern_type} · {p.evidence_count} evidencias
+                        {isAuto && " · auto"}
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {Math.round(p.confidence * 100)}%
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-destructive"
+                      onClick={() => rejectPattern(p.id)}
+                      title="Desaprender este patrón"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Salud de tipos de sugerencia */}
       {health.length > 0 && (

@@ -47,6 +47,8 @@ import { convertXlsxToCSVText, convertContactsXlsxToCSVText } from "@/lib/xlsx-u
 import { detectBlockFormat, parseBlockFormatTxt, parseBlockFormatByChat } from "@/lib/whatsapp-block-parser";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-error";
+import { PlaudImportDialog, type PlaudImportConfirmation } from "@/components/plaud/PlaudImportDialog";
+import { usePlaudImportSuggestions } from "@/hooks/usePlaudImportSuggestions";
 
 interface DetectedContact {
   name: string;
@@ -1517,6 +1519,9 @@ const DataImport = () => {
   // ---- Plaud Import ----
   const [plaudFile, setPlaudFile] = useState<File | null>(null);
   const [plaudProcessing, setPlaudProcessing] = useState(false);
+  const [plaudDialogOpen, setPlaudDialogOpen] = useState(false);
+  const [plaudPendingText, setPlaudPendingText] = useState<string>("");
+  const plaudSuggestions = usePlaudImportSuggestions();
   const [plaudFetchLoading, setPlaudFetchLoading] = useState(false);
   const [plaudTranscriptions, setPlaudTranscriptions] = useState<any[]>([]);
   const [plaudProcessingIds, setPlaudProcessingIds] = useState<Set<string>>(new Set());
@@ -1724,9 +1729,24 @@ const DataImport = () => {
   const handlePlaudImport = async () => {
     if (!plaudFile || !user) return;
     setPlaudProcessing(true);
-
     try {
       const text = await plaudFile.text();
+      setPlaudPendingText(text);
+      setPlaudDialogOpen(true);
+      // Pide sugerencia inicial (no bloqueante para abrir el diálogo)
+      plaudSuggestions.fetchSuggestions(plaudFile.name, text.slice(0, 4000));
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al leer el archivo de Plaud");
+    } finally {
+      setPlaudProcessing(false);
+    }
+  };
+
+  const commitPlaudImport = async (confirmation: PlaudImportConfirmation) => {
+    if (!plaudFile || !user) return;
+    try {
+      const text = plaudPendingText || (await plaudFile.text());
       const speakerSet = new Set<string>();
       const lines = text.split("\n");
       for (const line of lines) {
@@ -1746,7 +1766,9 @@ const DataImport = () => {
       const result: ImportResult = {
         type: "plaud",
         fileName: plaudFile.name,
-        summary: `Transcripción Plaud procesada, ${contacts.length} hablantes detectados`,
+        summary: confirmation.associate
+          ? `Plaud importado y asociado (${contacts.length} hablantes detectados)`
+          : `Plaud importado sin asociar (${contacts.length} hablantes detectados)`,
         contacts,
         transcription: text,
         processing: false,
@@ -1754,15 +1776,38 @@ const DataImport = () => {
       };
 
       setResults((prev) => [result, ...prev]);
+
+      // Persistir las asociaciones confirmadas en plaud_transcriptions si las hay
+      if (confirmation.associate && (confirmation.projectId || confirmation.contactIds.length)) {
+        const update: Record<string, any> = { context_type: confirmation.contextType };
+        if (confirmation.projectId) update.linked_project_id = confirmation.projectId;
+        if (confirmation.contactIds.length) update.linked_contact_ids = confirmation.contactIds;
+
+        const { error: insErr } = await (supabase as any).from("plaud_transcriptions").insert({
+          user_id: user.id,
+          title: plaudFile.name,
+          transcript_raw: text,
+          processing_status: "completed",
+          recording_date: new Date().toISOString(),
+          ...update,
+        });
+        if (insErr) console.warn("[plaud import] insert con asociaciones:", insErr.message);
+      }
+
       setPlaudFile(null);
-      toast.success("Transcripción Plaud importada");
+      setPlaudPendingText("");
+      plaudSuggestions.reset();
+      toast.success(
+        confirmation.associate
+          ? "Transcripción Plaud importada con asociaciones"
+          : "Transcripción Plaud importada sin asociar",
+      );
     } catch (err) {
       console.error(err);
       toast.error("Error al procesar el archivo de Plaud");
-    } finally {
-      setPlaudProcessing(false);
     }
   };
+
 
   // ---- Contact Review ----
   const updateContactName = (resultIdx: number, contactIdx: number, newName: string) => {
@@ -3366,6 +3411,22 @@ const DataImport = () => {
           ))}
         </div>
       )}
+
+      <PlaudImportDialog
+        open={plaudDialogOpen}
+        onOpenChange={(o) => {
+          setPlaudDialogOpen(o);
+          if (!o) {
+            plaudSuggestions.reset();
+          }
+        }}
+        loading={plaudSuggestions.loading}
+        error={plaudSuggestions.error}
+        suggestion={plaudSuggestions.data}
+        excerpt={plaudPendingText.slice(0, 4000)}
+        title={plaudFile?.name || ""}
+        onConfirm={commitPlaudImport}
+      />
     </main>
   );
 };

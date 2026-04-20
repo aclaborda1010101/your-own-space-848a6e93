@@ -262,43 +262,11 @@ serve(async (req) => {
     }
 
     const job = (async () => {
-      let totalMedia = 0;
-      let totalReplayed = 0;
-      let contactsDone = 0;
-      for (const c of targets) {
-        const remoteJid = `${c.wa_id}@s.whatsapp.net`;
-        try {
-          const messages = await fetchEvolutionMessages(instance, remoteJid, sinceUnix);
-          const mediaMsgs = messages.filter((m) => isMediaMessage(m.message));
-          totalMedia += mediaMsgs.length;
-
-          for (const m of mediaMsgs) {
-            const externalId = m?.key?.id;
-            if (!externalId) continue;
-            // Skip si ya existe
-            const { data: existing } = await supabase
-              .from("contact_messages")
-              .select("id")
-              .eq("user_id", userId)
-              .eq("external_id", externalId)
-              .maybeSingle();
-            if (existing) continue;
-
-            await replayToWebhook(instance, m);
-            totalReplayed++;
-            await new Promise((r) => setTimeout(r, DELAY_BETWEEN_REPLAYS_MS));
-          }
-          contactsDone++;
-          console.log(
-            `[reimport] ${c.name}: ${mediaMsgs.length} media, ${totalReplayed} encolados (acum)`,
-          );
-        } catch (e) {
-          console.error(`[reimport] contact ${c.name} failed:`, e);
-        }
+      try {
+        await runReimportForUser(supabase, userId, daysBack, contactIdFilter);
+      } catch (e) {
+        console.error("[reimport] user job failed:", e);
       }
-      console.log(
-        `[reimport] DONE — contacts=${contactsDone}/${targets.length} mediaFound=${totalMedia} replayed=${totalReplayed}`,
-      );
     })();
 
     // @ts-ignore EdgeRuntime exists at runtime

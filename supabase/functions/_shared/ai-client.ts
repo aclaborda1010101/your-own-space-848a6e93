@@ -94,6 +94,22 @@ function cleanJsonResponse(content: string): string {
   return repaired || "{}";
 }
 
+function safeParseGatewayPayload(rawText: string): Record<string, any> | null {
+  const trimmed = (rawText || "").trim();
+  if (!trimmed) return null;
+
+  try {
+    return JSON.parse(trimmed) as Record<string, any>;
+  } catch (error) {
+    console.warn(
+      "AI Gateway returned malformed JSON payload:",
+      error instanceof Error ? error.message : String(error),
+      trimmed.substring(0, 300),
+    );
+    return null;
+  }
+}
+
 /**
  * Chat completion via Lovable AI Gateway (OpenAI-compatible API)
  */
@@ -162,7 +178,17 @@ export async function chat(
         throw new Error(`AI Gateway error: ${response.status} - ${errorText.substring(0, 300)}`);
       }
 
-      const data = await response.json();
+      const rawText = await response.text();
+      const data = safeParseGatewayPayload(rawText);
+      if (!data) {
+        lastError = rawText.trim()
+          ? `invalid JSON payload: ${rawText.substring(0, 200)}`
+          : "empty response body";
+        console.warn(`AI Gateway invalid payload (${tryModel}, attempt ${attempt + 1}): ${lastError}`);
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+
       const upstreamErr = data.choices?.[0]?.error;
       const content = data.choices?.[0]?.message?.content;
 

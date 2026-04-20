@@ -1,45 +1,56 @@
 
 
-## Plan: bandeja de inteligencia con memoria — no volver a sugerir lo ya aceptado/rechazado
+## Plan: marcar asunto pendiente como "ya hecho / descartado" y que JARVIS no insista
 
-### Causa raíz (verificada en BD)
-- El índice `UNIQUE (user_id, signature) WHERE status='pending'` sólo deduplica entre **pendientes**. Una vez aceptas/rechazas, la firma "se libera" y el LLM la vuelve a meter.
-- El prompt al LLM no recibe el historial de lo ya decidido, así que regenera lo mismo (a veces con título ligeramente distinto, otra firma).
-- Ejemplo real ya en tu BD: "Verificar dominio con Google Search Console" para Álvaro → aceptada el 19/4 → reaparece pendiente el 20/4.
+### Diagnóstico (confirmado en BD)
+
+Alicia Martínez tiene en `contact_headlines.payload.pending.title` = **"Añadir música a vídeo de casting"** (`freshness=active`, generado el 20/4 con 291 mensajes). El usuario dice que ese asunto ya se hizo, pero el sistema lo seguirá mostrando hasta que entren ≥20 mensajes nuevos o caduque solo. Hoy no hay forma de decirle "esto ya está hecho".
+
+Además ese mismo título reaparece como **"Asunto pendiente"** en el bloque "Temas y tono" → es la misma fuente (`payload.pending.title`).
+
+### Causas
+
+1. **Bloque hero "JARVIS sugiere"** sólo tiene "Aceptar y agendar" + "Ver evidencia". Falta **"Hecho"** y **"Descartar"**.
+2. La cache de headlines no guarda decisiones del usuario → al regenerar, el LLM vuelve a proponer lo mismo porque sigue viendo el hilo de mensajes original.
+3. **"Asunto pendiente"** dentro de "Temas y tono" es un eco del mismo `pending.title` → si limpiamos la cabecera, también desaparece de ahí.
 
 ### Cambios
 
-**1. Deduplicación dura por firma — sin importar status (`detect-task-signals/index.ts`)**
-- Antes de insertar, consultar `suggestions` por `(user_id, signature)` con cualquier status. Si ya existe (accepted, rejected, snoozed o pending) → **skip silencioso**. Esto cierra el agujero del índice parcial.
-- Mantener el índice parcial actual (sigue siendo útil para concurrencia), pero la lógica de negocio bloquea ya en aplicación.
+**1. Nueva tabla `contact_headline_dismissals` (migración)**
+Registra qué asuntos se marcaron como hechos/descartados/pospuestos para cada contacto. Reutiliza la misma normalización de firma que `detect-task-signals` para que variantes léxicas no escapen.
+```
+id, user_id, contact_id, signature, original_title,
+decision ('done'|'dismissed'|'snoozed'), decided_at, expires_at
+```
+RLS por `user_id`. Índice `(user_id, contact_id)`.
 
-**2. Inyectar memoria al LLM (mismo archivo)**
-- Antes de llamar al LLM por contacto, cargar las últimas ~30 sugerencias **no-pending** de ese contacto (`status IN ('accepted','rejected','snoozed')`) con su título y status.
-- Pasarlas al prompt en una sección "YA DECIDIDO — NO PROPONER":
-  ```
-  ACEPTADAS (no repitas, ya están como tarea):
-  - Crear usuarios en Lexintel
-  - Verificar dominio con Google Search Console
-  RECHAZADAS (el usuario las descartó, NO las propongas otra vez):
-  - Aclarar tema Inmogestión con Agustito
-  - Ver a Alicia
-  ```
-- Añadir regla dura al prompt: "Si una sugerencia es semánticamente equivalente a algo en YA DECIDIDO, NO la incluyas. Equivalencia = mismo objetivo aunque cambien las palabras."
+**2. UI — botones de decisión en `JarvisSuggestionHero`**
+Añadir dos acciones nuevas al hero (junto a "Aceptar y agendar"):
+- **"Ya está hecho"** (success outline, `Check`) → marca `done`.
+- **"No aplica"** (ghost, `X`) → marca `dismissed`.
 
-**3. Firma normalizada más robusta**
-- Normalizar el título antes de hashear: minúsculas, sin tildes, sin números, colapsar espacios, quitar palabras de relleno ("crear", "hacer", "el", "la", "para"). Esto hace que "Crear 3 usuarios para Lexintel" y "Crear usuarios en Lexintel" produzcan la misma firma.
+Ambas escriben en `contact_headline_dismissals`, invalidan la cache local del hook y disparan `refresh(true)` del headline para que JARVIS proponga otra cosa.
 
-**4. UI — feedback visible (`useSignalSuggestions.tsx` + `IntelligenceInbox.tsx`)**
-- Tras aceptar/rechazar, el item ya desaparece (correcto). Añadir contador en el escaneo: "Escaneo completado: N nuevas, M omitidas (ya las habías visto)". El backend ya devuelve `skipped`, sólo falta mostrarlo.
+**3. `get-contact-headlines` con memoria**
+Antes de llamar al LLM:
+- Cargar las últimas N (≈10) decisiones del contacto.
+- Inyectarlas en el prompt como bloque **"YA RESUELTO / DESCARTADO POR EL USUARIO — NO PROPONGAS ESTO NI SUS VARIANTES"** (mismo patrón que ya usamos en `detect-task-signals`).
+- Tras generar el `pending.title`, normalizar firma y comparar contra dismissals: si coincide → forzar `title="Sin asunto vivo"` y `freshness="stale"` para que el front caiga en el fallback de `proxima_accion`.
+
+**4. ContactDetail.tsx — invalidación inmediata**
+Tras "Hecho/Descartar", llamar `refresh(true)` del hook headlines (ya existe `refresh` en `useContactHeadlines`). El hook `pending.title` desaparece del hero **y** del bloque "Asunto pendiente" en Temas/Tono, porque ambos leen el mismo campo.
 
 ### Out of scope
-- No tocamos el modelo LLM ni el threshold de 30 mensajes.
-- No tocamos otras suggestions de Plaud (`useSuggestions`) — bug confinado a `detect-task-signals`.
+- No tocamos la generación de "Próxima acción recomendada" (viene de `personality_profile`, ya está bien).
+- No tocamos el sistema de `suggestions` (bandeja de inteligencia) — ya tiene su propia memoria desde el cambio anterior.
 
 ### Archivos a tocar
-- `supabase/functions/detect-task-signals/index.ts` — pre-check por firma (cualquier status), inyectar contexto histórico al LLM, normalizar firma.
-- `src/hooks/useSignalSuggestions.tsx` — exponer `skipped` en el toast del escaneo.
+- **Migración** nueva: tabla `contact_headline_dismissals` + RLS.
+- `src/components/contact/JarvisSuggestionHero.tsx` — añadir props `onMarkDone`, `onMarkDismissed` y dos botones.
+- `src/pages/ContactDetail.tsx` — handlers que insertan el dismissal y llaman `refresh(true)`.
+- `src/hooks/useContactHeadlines.ts` — exponer la firma del título actual (para crear el dismissal con la misma normalización).
+- `supabase/functions/get-contact-headlines/index.ts` — cargar dismissals, inyectar al prompt, sobreescribir `pending` si el LLM repite algo dismissed.
 
 ### Resultado esperado
-Pulsar "Escanear ahora" tras haber aceptado/rechazado tareas previas devolverá sólo señales **nuevas de verdad**. Ya no reaparecerá "Verificar dominio…" ni "Aclarar tema Inmogestión…".
+Hoy en Alicia: pulsar **"Ya está hecho"** en "Añadir música a vídeo de casting" hará que (a) desaparezca del hero, (b) desaparezca del bloque "Asunto pendiente" en Temas/Tono, (c) JARVIS no lo vuelva a proponer aunque la conversación lo siga mencionando, (d) el hero caiga al fallback de la "próxima acción recomendada" del perfil.
 

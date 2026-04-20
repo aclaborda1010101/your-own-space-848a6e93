@@ -527,6 +527,57 @@ export default function ContactDetail() {
           </GlassCard>
         )}
 
+        {/* TAREAS VINCULADAS */}
+        {linkedTasks.length > 0 && (() => {
+          const pending = linkedTasks.filter((t) => !t.completed);
+          const done = linkedTasks.filter((t) => t.completed);
+          return (
+            <GlassCard className="p-5 sm:p-6">
+              <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3 font-mono">
+                <Bell className="w-3 h-3" />
+                <span>Tareas asociadas · {linkedTasks.length}</span>
+              </div>
+              <div className="space-y-2">
+                {pending.map((t) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-border bg-card/40"
+                  >
+                    <span className="text-sm text-foreground truncate">{t.title}</span>
+                    <span className="text-[10px] font-mono text-muted-foreground shrink-0">
+                      {t.priority}
+                    </span>
+                  </div>
+                ))}
+                {done.length > 0 && (
+                  <details className="pt-2">
+                    <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                      Completadas ({done.length})
+                    </summary>
+                    <div className="space-y-1.5 mt-2">
+                      {done.slice(0, 10).map((t) => (
+                        <div key={t.id} className="px-2.5 py-1.5 opacity-60">
+                          <span className="text-xs line-through text-muted-foreground truncate">
+                            {t.title}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3 rounded-full"
+                onClick={() => navigate(`/tasks?contact=${contact.id}`)}
+              >
+                Nueva tarea para {contact.name.split(/\s+/)[0]}
+              </Button>
+            </GlassCard>
+          );
+        })()}
+
         {/* HEADLINES — análisis IA secundario */}
         <div>
           <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground mb-3 px-1 font-mono">

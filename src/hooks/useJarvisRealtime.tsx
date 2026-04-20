@@ -622,8 +622,8 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
         sendEvent({
           type: 'session.update',
           session: {
-            modalities: ['text', 'audio'],
-            instructions: `Eres JARVIS, el asistente personal de IA de alta gama. Hablas español con un tono profesional pero cercano, como el JARVIS de Iron Man. 
+            type: 'realtime',
+            instructions: `Eres JARVIS, el asistente personal de IA de alta gama. Hablas español con un tono profesional pero cercano, como el JARVIS de Iron Man.
 
 Tu rol principal es ayudar al usuario a gestionar su día a día:
 - Crear y gestionar tareas
@@ -646,17 +646,17 @@ Cuando pida registrar una observación o nota, usa log_observation.
 Cuando pregunte sobre sus estadísticas o rendimiento, usa get_my_stats.
 Cuando pregunte sobre sus hábitos o patrones, usa ask_about_habits.
 Cuando pida eliminar o cancelar un evento, usa delete_event.`,
-            voice: 'ash',
-            input_audio_format: 'pcm16',
-            output_audio_format: 'pcm16',
-            input_audio_transcription: {
-              model: 'whisper-1',
-            },
-            turn_detection: {
-              type: 'server_vad',
-              threshold: 0.5,
-              prefix_padding_ms: 300,
-              silence_duration_ms: 500,
+            audio: {
+              input: {
+                transcription: { model: 'whisper-1' },
+                turn_detection: {
+                  type: 'server_vad',
+                  threshold: 0.5,
+                  prefix_padding_ms: 300,
+                  silence_duration_ms: 500,
+                },
+              },
+              output: { voice: 'alloy' },
             },
             tools: [
               {
@@ -690,19 +690,13 @@ Cuando pida eliminar o cancelar un evento, usa delete_event.`,
                 type: 'function',
                 name: 'list_pending_tasks',
                 description: 'Lista las tareas pendientes del usuario',
-                parameters: {
-                  type: 'object',
-                  properties: {},
-                },
+                parameters: { type: 'object', properties: {} },
               },
               {
                 type: 'function',
                 name: 'get_today_summary',
                 description: 'Obtiene un resumen del día actual incluyendo tareas y check-in',
-                parameters: {
-                  type: 'object',
-                  properties: {},
-                },
+                parameters: { type: 'object', properties: {} },
               },
               {
                 type: 'function',
@@ -735,10 +729,7 @@ Cuando pida eliminar o cancelar un evento, usa delete_event.`,
                 type: 'function',
                 name: 'get_my_stats',
                 description: 'Obtiene estadísticas de productividad del usuario de la última semana',
-                parameters: {
-                  type: 'object',
-                  properties: {},
-                },
+                parameters: { type: 'object', properties: {} },
               },
               {
                 type: 'function',

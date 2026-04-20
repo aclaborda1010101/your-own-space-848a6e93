@@ -67,89 +67,188 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
     }
   }, []);
 
-  // Execute a function call and return the result
+  // Execute a function call and return the result — SUPERAGENT POWERS
   const executeFunction = useCallback(async (name: string, args: Record<string, unknown>): Promise<string> => {
     console.log('[JARVIS] Executing function:', name, args);
-    
+    const sb = supabase as any;
+
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+      if (!userId) return JSON.stringify({ error: 'No autenticado' });
+
       switch (name) {
         case 'create_task': {
-          const { data, error } = await supabase
-            .from('tasks')
+          const { data, error } = await sb
+            .from('todos')
             .insert({
               title: args.title as string,
-              type: args.type as string,
-              priority: args.priority as string,
-              duration: args.duration as number,
-              completed: false,
-              user_id: (await supabase.auth.getUser()).data.user?.id,
+              priority: typeof args.priority === 'number' ? args.priority : 3,
+              due_date: (args.due_date as string) || null,
+              is_completed: false,
+              user_id: userId,
             })
             .select()
             .single();
-          
           if (error) throw error;
           return JSON.stringify({ success: true, task: data });
         }
-        
+
         case 'complete_task': {
           const searchTitle = (args.task_title as string).toLowerCase();
-          const { data: tasks } = await supabase
-            .from('tasks')
-            .select('id, title')
-            .eq('completed', false)
-            .ilike('title', `%${searchTitle}%`)
-            .limit(1);
-          
-          if (!tasks?.length) {
-            return JSON.stringify({ success: false, message: 'No se encontró la tarea' });
-          }
-          
-          const { error } = await supabase
-            .from('tasks')
-            .update({ completed: true, completed_at: new Date().toISOString() })
-            .eq('id', tasks[0].id);
-          
+          const { data: tasks } = await sb
+            .from('todos').select('id, title')
+            .eq('user_id', userId).eq('is_completed', false)
+            .ilike('title', `%${searchTitle}%`).limit(1);
+          if (!tasks?.length) return JSON.stringify({ success: false, message: 'No se encontró la tarea' });
+          const { error } = await sb.from('todos').update({ is_completed: true }).eq('id', tasks[0].id);
           if (error) throw error;
           return JSON.stringify({ success: true, task: tasks[0].title });
         }
-        
+
         case 'list_pending_tasks': {
-          const { data: tasks } = await supabase
-            .from('tasks')
-            .select('title, type, priority, duration')
-            .eq('completed', false)
-            .order('created_at', { ascending: false })
-            .limit(10);
-          
+          const { data: tasks } = await sb
+            .from('todos').select('id, title, priority, due_date')
+            .eq('user_id', userId).eq('is_completed', false)
+            .order('priority', { ascending: false }).limit(20);
           return JSON.stringify({ tasks: tasks || [] });
+        }
+
+        // ── SUPERAGENT: contactos ─────────────────────────────────────
+        case 'search_contacts': {
+          const term = String(args.query || '').trim();
+          if (!term) return JSON.stringify({ contacts: [] });
+          // Try fuzzy RPC first
+          const { data: fuzzy } = await sb.rpc('search_contacts_fuzzy', {
+            p_user_id: userId, p_search_term: term, p_limit: 8,
+          });
+          let ids = (fuzzy || []).map((r: any) => r.id);
+          if (!ids.length) {
+            const { data: ilike } = await sb.from('people_contacts')
+              .select('id').eq('user_id', userId).ilike('name', `%${term}%`).limit(8);
+            ids = (ilike || []).map((r: any) => r.id);
+          }
+          if (!ids.length) return JSON.stringify({ contacts: [], note: 'Sin coincidencias' });
+          const { data: full } = await sb.from('people_contacts')
+            .select('id, name, company, role, email, phone, notes, last_interaction_at')
+            .in('id', ids);
+          return JSON.stringify({ contacts: full || [] });
+        }
+
+        case 'create_contact': {
+          const { data, error } = await sb.from('people_contacts').insert({
+            user_id: userId,
+            name: args.name as string,
+            company: args.company || null,
+            role: args.role || null,
+            email: args.email || null,
+            phone: args.phone || null,
+            notes: args.notes || null,
+          }).select().single();
+          if (error) throw error;
+          return JSON.stringify({ success: true, contact: data });
+        }
+
+        // ── SUPERAGENT: proyectos ─────────────────────────────────────
+        case 'search_projects': {
+          const term = String(args.query || '').trim();
+          let q = sb.from('business_projects')
+            .select('id, name, company, status, sector, estimated_value, updated_at')
+            .eq('user_id', userId);
+          if (term) q = q.or(`name.ilike.%${term}%,company.ilike.%${term}%`);
+          const { data } = await q.order('updated_at', { ascending: false }).limit(15);
+          return JSON.stringify({ projects: data || [] });
+        }
+
+        // ── SUPERAGENT: memorias ──────────────────────────────────────
+        case 'search_memories': {
+          const { data } = await sb.rpc('get_jarvis_context', { p_user_id: userId, p_limit: 30 });
+          const term = String(args.query || '').toLowerCase();
+          const filtered = term
+            ? (data || []).filter((m: any) => m.content?.toLowerCase().includes(term))
+            : (data || []);
+          return JSON.stringify({ memories: filtered.slice(0, 15) });
+        }
+
+        // ── SUPERAGENT: emails / whatsapp ─────────────────────────────
+        case 'get_emails': {
+          const onlyUnread = args.unread !== false;
+          let q = sb.from('jarvis_emails_cache')
+            .select('from_addr, subject, preview, synced_at, is_read')
+            .eq('user_id', userId);
+          if (onlyUnread) q = q.eq('is_read', false);
+          const { data } = await q.order('synced_at', { ascending: false }).limit(15);
+          return JSON.stringify({ emails: data || [] });
+        }
+
+        case 'get_whatsapp_recent': {
+          const { data } = await sb.from('whatsapp_messages')
+            .select('from_name, from_number, body, created_at, direction')
+            .eq('user_id', userId).order('created_at', { ascending: false }).limit(20);
+          return JSON.stringify({ messages: data || [] });
+        }
+
+        // ── SUPERAGENT: delegación a especialistas ────────────────────
+        case 'ask_specialist': {
+          const question = String(args.question || '');
+          const { data: sess } = await supabase.auth.getSession();
+          const accessToken = sess?.session?.access_token;
+          const { data, error } = await supabase.functions.invoke('jarvis-gateway', {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            body: {
+              message: question,
+              user_id: userId,
+              platform: 'web',
+            },
+          });
+          if (error) return JSON.stringify({ error: error.message });
+          return JSON.stringify({ specialist: data?.specialist, answer: data?.response });
+        }
+
+        // ── SUPERAGENT: query genérica de cualquier tabla ─────────────
+        case 'query_table': {
+          const table = String(args.table || '');
+          const filters = (args.filters as Record<string, any>) || {};
+          const limit = Math.min(Number(args.limit || 10), 50);
+          const ALLOWED = new Set([
+            'todos', 'people_contacts', 'business_projects', 'check_ins', 'whoop_data',
+            'jarvis_emails_cache', 'whatsapp_messages', 'bosco_observations', 'bosco_interactions',
+            'transcriptions', 'specialist_memory', 'jarvis_memory', 'pomodoro_sessions',
+            'challenges', 'challenge_logs', 'agent_chat_messages', 'ai_news',
+          ]);
+          if (!ALLOWED.has(table)) return JSON.stringify({ error: `Tabla no permitida: ${table}` });
+          let q = sb.from(table).select('*').eq('user_id', userId);
+          for (const [k, v] of Object.entries(filters)) q = q.eq(k, v);
+          const { data, error } = await q.limit(limit);
+          if (error) return JSON.stringify({ error: error.message });
+          return JSON.stringify({ rows: data || [] });
         }
         
         case 'get_today_summary': {
           const today = new Date().toISOString().split('T')[0];
-          
-          const [{ data: tasks }, { data: checkIn }] = await Promise.all([
-            supabase.from('tasks').select('title, completed, type').gte('created_at', today),
-            supabase.from('check_ins').select('*').eq('date', today).maybeSingle(),
+          const [{ data: todos }, { data: checkIn }, { data: whoop }] = await Promise.all([
+            sb.from('todos').select('title, is_completed, priority').eq('user_id', userId).gte('created_at', today),
+            sb.from('check_ins').select('*').eq('user_id', userId).eq('date', today).maybeSingle(),
+            sb.from('whoop_data').select('recovery_score, sleep_hours, strain').eq('user_id', userId).eq('data_date', today).maybeSingle(),
           ]);
-          
-          const completed = tasks?.filter(t => t.completed).length || 0;
-          const pending = tasks?.filter(t => !t.completed).length || 0;
-          
+          const completed = todos?.filter((t: any) => t.is_completed).length || 0;
+          const pending = todos?.filter((t: any) => !t.is_completed).length || 0;
           return JSON.stringify({
             date: today,
             tasksCompleted: completed,
             tasksPending: pending,
             checkIn: checkIn ? { energy: checkIn.energy, mood: checkIn.mood, focus: checkIn.focus } : null,
+            whoop: whoop || null,
           });
         }
-        
+
         case 'create_event': {
-          // Call icloud-calendar to create event
           const eventDate = new Date().toISOString().split('T')[0];
           const startDateTime = new Date(`${eventDate}T${args.time}:00`);
           const endDateTime = new Date(startDateTime.getTime() + (args.duration as number) * 60 * 1000);
-          
+          const { data: sess } = await supabase.auth.getSession();
           const { data, error } = await supabase.functions.invoke('icloud-calendar', {
+            headers: { Authorization: `Bearer ${sess?.session?.access_token}` },
             body: {
               action: 'create',
               title: args.title,
@@ -158,109 +257,59 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
               description: args.description || '',
             },
           });
-          
           if (error) throw error;
           return JSON.stringify({ success: true, event: data });
         }
-        
+
         case 'log_observation': {
-          const today = new Date().toISOString().split('T')[0];
-          const userId = (await supabase.auth.getUser()).data.user?.id;
-          
-          const { data: existing } = await supabase
-            .from('daily_observations')
-            .select('id, observations')
-            .eq('user_id', userId)
-            .eq('date', today)
-            .maybeSingle();
-          
-          const newObs = args.observation as string;
-          const combined = existing?.observations 
-            ? `${existing.observations}\n${newObs}` 
-            : newObs;
-          
-          if (existing) {
-            await supabase
-              .from('daily_observations')
-              .update({ observations: combined })
-              .eq('id', existing.id);
-          } else {
-            await supabase
-              .from('daily_observations')
-              .insert({ user_id: userId, date: today, observations: newObs });
-          }
-          
+          const obs = args.observation as string;
+          const area = (args.area as string) || 'general';
+          const { error } = await sb.from('bosco_observations').insert({
+            user_id: userId,
+            observation: obs,
+            area,
+            date: new Date().toISOString().split('T')[0],
+          });
+          if (error) throw error;
           return JSON.stringify({ success: true, message: 'Observación registrada' });
         }
-        
+
         case 'get_my_stats': {
           const today = new Date();
           const weekAgo = new Date(today);
           weekAgo.setDate(weekAgo.getDate() - 7);
-          
-          const [{ data: pomodoros }, { data: tasks }, { data: checkIns }] = await Promise.all([
-            supabase.from('pomodoro_sessions')
-              .select('id')
-              .gte('created_at', weekAgo.toISOString()),
-            supabase.from('tasks')
-              .select('id, completed')
-              .gte('created_at', weekAgo.toISOString()),
-            supabase.from('check_ins')
-              .select('date')
-              .gte('date', weekAgo.toISOString().split('T')[0])
-              .order('date', { ascending: false }),
+          const [{ data: todos }, { data: checkIns }] = await Promise.all([
+            sb.from('todos').select('id, is_completed').eq('user_id', userId).gte('created_at', weekAgo.toISOString()),
+            sb.from('check_ins').select('date').eq('user_id', userId).gte('date', weekAgo.toISOString().split('T')[0]),
           ]);
-          
-          const streak = checkIns?.length || 0;
-          const tasksCompleted = tasks?.filter(t => t.completed).length || 0;
-          const totalTasks = tasks?.length || 0;
-          const pomodoroCount = pomodoros?.length || 0;
-          
+          const tasksCompleted = todos?.filter((t: any) => t.is_completed).length || 0;
+          const totalTasks = todos?.length || 0;
           return JSON.stringify({
-            weeklyStreak: streak,
-            pomodoroSessions: pomodoroCount,
+            weeklyCheckIns: checkIns?.length || 0,
             tasksCompleted,
             totalTasks,
             completionRate: totalTasks > 0 ? Math.round((tasksCompleted / totalTasks) * 100) : 0,
           });
         }
-        
+
         case 'ask_about_habits': {
-          const { data: insights } = await supabase
-            .from('habit_insights')
-            .select('insight_type, title, description, created_at')
-            .order('created_at', { ascending: false })
-            .limit(5);
-          
-          if (!insights?.length) {
-            return JSON.stringify({ 
-              message: 'Aún no hay suficientes datos para generar insights sobre hábitos.',
-              suggestion: 'Continúe usando la app durante unos días más.' 
-            });
-          }
-          
-          return JSON.stringify({
-            question: args.question,
-            insights: insights.map(i => ({
-              type: i.insight_type,
-              title: i.title,
-              description: i.description,
-            })),
-          });
+          const { data: learnings } = await sb.from('agent_learnings')
+            .select('category, learning_text, confidence')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false }).limit(8);
+          return JSON.stringify({ question: args.question, insights: learnings || [] });
         }
-        
+
         case 'delete_event': {
+          const { data: sess } = await supabase.auth.getSession();
           const { data, error } = await supabase.functions.invoke('icloud-calendar', {
-            body: {
-              action: 'delete',
-              title: args.event_title,
-            },
+            headers: { Authorization: `Bearer ${sess?.session?.access_token}` },
+            body: { action: 'delete', title: args.event_title },
           });
-          
           if (error) throw error;
           return JSON.stringify({ success: true, deleted: args.event_title });
         }
-        
+
         default:
           return JSON.stringify({ error: `Función ${name} no implementada` });
       }
@@ -618,34 +667,14 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       dc.onopen = () => {
         console.log('[JARVIS] Data channel open - ready for conversation!');
         
-        // Configure session with JARVIS persona and tools
+        // Use the rich instructions returned by edge function (with user context injected)
+        const richInstructions: string = data.instructions || `Eres JARVIS, superagente personal con acceso completo a la app. Habla en castellano, tono mayordomo de élite, conciso y resolutivo.`;
+
         sendEvent({
           type: 'session.update',
           session: {
             type: 'realtime',
-            instructions: `Eres JARVIS, el asistente personal de IA de alta gama. Hablas español con un tono profesional pero cercano, como el JARVIS de Iron Man.
-
-Tu rol principal es ayudar al usuario a gestionar su día a día:
-- Crear y gestionar tareas
-- Consultar y crear eventos en el calendario
-- Proporcionar resúmenes diarios
-- Dar insights sobre productividad y hábitos
-
-Siempre:
-- Sé conciso y directo
-- Usa un tono confiable y eficiente
-- Confirma las acciones realizadas
-- Ofrece sugerencias proactivas cuando sea apropiado
-
-Cuando el usuario pida crear una tarea, usa la función create_task.
-Cuando pida ver tareas pendientes, usa list_pending_tasks.
-Cuando pida completar una tarea, usa complete_task.
-Cuando pida un resumen del día, usa get_today_summary.
-Cuando pida crear un evento o cita, usa create_event.
-Cuando pida registrar una observación o nota, usa log_observation.
-Cuando pregunte sobre sus estadísticas o rendimiento, usa get_my_stats.
-Cuando pregunte sobre sus hábitos o patrones, usa ask_about_habits.
-Cuando pida eliminar o cancelar un evento, usa delete_event.`,
+            instructions: richInstructions,
             audio: {
               input: {
                 transcription: { model: 'whisper-1' },
@@ -659,101 +688,125 @@ Cuando pida eliminar o cancelar un evento, usa delete_event.`,
               output: { voice: 'alloy' },
             },
             tools: [
+              // ── tareas ─────────────────────────────────────────────
               {
-                type: 'function',
-                name: 'create_task',
-                description: 'Crea una nueva tarea para el usuario',
+                type: 'function', name: 'create_task',
+                description: 'Crea una nueva tarea (todo) del usuario',
                 parameters: {
                   type: 'object',
                   properties: {
                     title: { type: 'string', description: 'Título de la tarea' },
-                    type: { type: 'string', enum: ['work', 'personal', 'health', 'learning'], description: 'Tipo de tarea' },
-                    priority: { type: 'string', enum: ['low', 'medium', 'high'], description: 'Prioridad de la tarea' },
-                    duration: { type: 'number', description: 'Duración estimada en minutos' },
+                    priority: { type: 'number', description: 'Prioridad 1 (baja) a 5 (urgente)' },
+                    due_date: { type: 'string', description: 'Fecha límite YYYY-MM-DD (opcional)' },
                   },
-                  required: ['title', 'type', 'priority', 'duration'],
+                  required: ['title'],
                 },
               },
               {
-                type: 'function',
-                name: 'complete_task',
-                description: 'Marca una tarea como completada buscando por título',
+                type: 'function', name: 'complete_task',
+                description: 'Marca como completada una tarea buscando por título',
+                parameters: { type: 'object', properties: { task_title: { type: 'string' } }, required: ['task_title'] },
+              },
+              {
+                type: 'function', name: 'list_pending_tasks',
+                description: 'Lista las tareas pendientes',
+                parameters: { type: 'object', properties: {} },
+              },
+              // ── contactos ──────────────────────────────────────────
+              {
+                type: 'function', name: 'search_contacts',
+                description: 'Busca contactos del usuario con matching difuso (tolera typos y nombres parciales). ÚSALO siempre que el usuario mencione una persona.',
+                parameters: { type: 'object', properties: { query: { type: 'string', description: 'Nombre o parte del nombre' } }, required: ['query'] },
+              },
+              {
+                type: 'function', name: 'create_contact',
+                description: 'Crea un nuevo contacto',
                 parameters: {
                   type: 'object',
                   properties: {
-                    task_title: { type: 'string', description: 'Título o parte del título de la tarea a completar' },
+                    name: { type: 'string' }, company: { type: 'string' }, role: { type: 'string' },
+                    email: { type: 'string' }, phone: { type: 'string' }, notes: { type: 'string' },
                   },
-                  required: ['task_title'],
+                  required: ['name'],
+                },
+              },
+              // ── proyectos ──────────────────────────────────────────
+              {
+                type: 'function', name: 'search_projects',
+                description: 'Busca proyectos/clientes del usuario por nombre o empresa',
+                parameters: { type: 'object', properties: { query: { type: 'string' } } },
+              },
+              // ── memoria ────────────────────────────────────────────
+              {
+                type: 'function', name: 'search_memories',
+                description: 'Busca en la memoria persistente del asistente (preferencias, decisiones, hechos previos)',
+                parameters: { type: 'object', properties: { query: { type: 'string' } } },
+              },
+              // ── comunicaciones ─────────────────────────────────────
+              {
+                type: 'function', name: 'get_emails',
+                description: 'Obtiene emails (por defecto solo no leídos)',
+                parameters: { type: 'object', properties: { unread: { type: 'boolean' } } },
+              },
+              {
+                type: 'function', name: 'get_whatsapp_recent',
+                description: 'Obtiene los últimos mensajes de WhatsApp',
+                parameters: { type: 'object', properties: {} },
+              },
+              // ── delegación a especialistas ─────────────────────────
+              {
+                type: 'function', name: 'ask_specialist',
+                description: 'Delega una consulta profunda al gateway de especialistas (coach, nutrición, inglés, finanzas, salud, retail, secretaria, bosco). Úsalo para preguntas que requieran experticia de dominio.',
+                parameters: {
+                  type: 'object',
+                  properties: { question: { type: 'string', description: 'La pregunta completa para el especialista' } },
+                  required: ['question'],
+                },
+              },
+              // ── query genérica ─────────────────────────────────────
+              {
+                type: 'function', name: 'query_table',
+                description: 'Consulta genérica filtrada por user_id. Tablas permitidas: todos, people_contacts, business_projects, check_ins, whoop_data, jarvis_emails_cache, whatsapp_messages, bosco_observations, bosco_interactions, transcriptions, specialist_memory, jarvis_memory, pomodoro_sessions, challenges, challenge_logs, agent_chat_messages, ai_news.',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    table: { type: 'string' },
+                    filters: { type: 'object', description: 'Pares columna=valor para filtrar' },
+                    limit: { type: 'number' },
+                  },
+                  required: ['table'],
+                },
+              },
+              // ── resumen / stats ───────────────────────────────────
+              { type: 'function', name: 'get_today_summary', description: 'Resumen del día (tareas, check-in, WHOOP)', parameters: { type: 'object', properties: {} } },
+              { type: 'function', name: 'get_my_stats', description: 'Estadísticas de productividad de la última semana', parameters: { type: 'object', properties: {} } },
+              { type: 'function', name: 'ask_about_habits', description: 'Insights y aprendizajes detectados sobre los hábitos del usuario', parameters: { type: 'object', properties: { question: { type: 'string' } } } },
+              // ── observaciones / calendario ────────────────────────
+              {
+                type: 'function', name: 'log_observation',
+                description: 'Registra una observación o nota',
+                parameters: {
+                  type: 'object',
+                  properties: { observation: { type: 'string' }, area: { type: 'string', description: 'Área: general, bosco, salud, trabajo, etc.' } },
+                  required: ['observation'],
                 },
               },
               {
-                type: 'function',
-                name: 'list_pending_tasks',
-                description: 'Lista las tareas pendientes del usuario',
-                parameters: { type: 'object', properties: {} },
-              },
-              {
-                type: 'function',
-                name: 'get_today_summary',
-                description: 'Obtiene un resumen del día actual incluyendo tareas y check-in',
-                parameters: { type: 'object', properties: {} },
-              },
-              {
-                type: 'function',
-                name: 'create_event',
-                description: 'Crea un evento o cita en el calendario',
+                type: 'function', name: 'create_event',
+                description: 'Crea un evento en el calendario (iCloud)',
                 parameters: {
                   type: 'object',
                   properties: {
-                    title: { type: 'string', description: 'Título del evento' },
-                    time: { type: 'string', description: 'Hora del evento en formato HH:MM' },
-                    duration: { type: 'number', description: 'Duración en minutos' },
-                    description: { type: 'string', description: 'Descripción opcional del evento' },
+                    title: { type: 'string' }, time: { type: 'string', description: 'HH:MM' },
+                    duration: { type: 'number', description: 'minutos' }, description: { type: 'string' },
                   },
                   required: ['title', 'time', 'duration'],
                 },
               },
               {
-                type: 'function',
-                name: 'log_observation',
-                description: 'Registra una observación o nota del día',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    observation: { type: 'string', description: 'La observación o nota a registrar' },
-                  },
-                  required: ['observation'],
-                },
-              },
-              {
-                type: 'function',
-                name: 'get_my_stats',
-                description: 'Obtiene estadísticas de productividad del usuario de la última semana',
-                parameters: { type: 'object', properties: {} },
-              },
-              {
-                type: 'function',
-                name: 'ask_about_habits',
-                description: 'Consulta insights sobre los hábitos y patrones del usuario',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    question: { type: 'string', description: 'Pregunta específica sobre los hábitos' },
-                  },
-                  required: ['question'],
-                },
-              },
-              {
-                type: 'function',
-                name: 'delete_event',
-                description: 'Elimina o cancela un evento del calendario',
-                parameters: {
-                  type: 'object',
-                  properties: {
-                    event_title: { type: 'string', description: 'Título del evento a eliminar' },
-                  },
-                  required: ['event_title'],
-                },
+                type: 'function', name: 'delete_event',
+                description: 'Elimina/cancela un evento del calendario',
+                parameters: { type: 'object', properties: { event_title: { type: 'string' } }, required: ['event_title'] },
               },
             ],
           },

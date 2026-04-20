@@ -16,10 +16,10 @@ serve(async (req) => {
   const { user, error: authError } = await validateAuth(req, corsHeaders);
   if (authError) return authError;
 
-  const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
-  if (!OPENAI_API_KEY) {
-    console.error('OPENAI_API_KEY not configured');
-    return new Response(JSON.stringify({ error: 'OPENAI_API_KEY not configured' }), {
+  const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
+  if (!GROQ_API_KEY) {
+    console.error('GROQ_API_KEY not configured');
+    return new Response(JSON.stringify({ error: 'GROQ_API_KEY not configured' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -28,8 +28,8 @@ serve(async (req) => {
   try {
     const formData = await req.formData();
     const audioFile = formData.get('audio') as File | null;
-    const language = formData.get('language') as string || 'es';
-    
+    const language = (formData.get('language') as string) || 'es';
+
     if (!audioFile) {
       return new Response(JSON.stringify({ error: 'Audio file is required' }), {
         status: 400,
@@ -37,25 +37,24 @@ serve(async (req) => {
       });
     }
 
-    console.log(`[jarvis-stt] User ${user!.id} transcribing: ${audioFile.name}, size: ${audioFile.size}`);
+    console.log(`[jarvis-stt/groq] User ${user!.id} transcribing: ${audioFile.name}, size: ${audioFile.size}`);
 
-    const whisperFormData = new FormData();
-    whisperFormData.append('file', audioFile, audioFile.name || 'audio.webm');
-    whisperFormData.append('model', 'whisper-1');
-    whisperFormData.append('language', language);
-    whisperFormData.append('response_format', 'json');
+    const groqFormData = new FormData();
+    groqFormData.append('file', audioFile, audioFile.name || 'audio.webm');
+    groqFormData.append('model', 'whisper-large-v3');
+    groqFormData.append('language', language);
+    groqFormData.append('response_format', 'json');
+    groqFormData.append('temperature', '0');
 
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: whisperFormData,
+      headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` },
+      body: groqFormData,
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Whisper API error:', response.status, errorText);
+      console.error('Groq Whisper error:', response.status, errorText);
       return new Response(JSON.stringify({ error: 'Transcription failed' }), {
         status: response.status,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -63,12 +62,9 @@ serve(async (req) => {
     }
 
     const data = await response.json();
-    console.log(`Transcription complete: "${data.text?.substring(0, 50)}..."`);
+    console.log(`[jarvis-stt/groq] OK: "${(data.text || '').substring(0, 60)}..."`);
 
-    return new Response(JSON.stringify({ 
-      text: data.text,
-      language: language
-    }), {
+    return new Response(JSON.stringify({ text: data.text, language }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (error: unknown) {

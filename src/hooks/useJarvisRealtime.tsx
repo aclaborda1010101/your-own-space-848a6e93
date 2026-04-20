@@ -4,10 +4,13 @@ import { toast } from 'sonner';
 
 export type RealtimeState = 'idle' | 'connecting' | 'listening' | 'speaking' | 'processing';
 
+export type RealtimeVoice = 'ash' | 'verse' | 'ballad' | 'echo' | 'alloy' | 'sage' | 'shimmer';
+
 interface UseJarvisRealtimeOptions {
   onTranscript?: (text: string) => void;
   onResponse?: (text: string) => void;
   onStateChange?: (state: RealtimeState) => void;
+  voice?: RealtimeVoice;
 }
 
 // Function execution types
@@ -21,7 +24,8 @@ interface FunctionCall {
 const OPENAI_REALTIME_MODEL = 'gpt-realtime';
 
 export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
-  const { onTranscript, onResponse, onStateChange } = options;
+  const { onTranscript, onResponse, onStateChange, voice: initialVoice = 'ash' } = options;
+  const [voice, setVoice] = useState<RealtimeVoice>(initialVoice);
   
   const [state, setState] = useState<RealtimeState>('idle');
   const [isActive, setIsActive] = useState(false);
@@ -310,6 +314,129 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
           return JSON.stringify({ success: true, deleted: args.event_title });
         }
 
+        // ── SUPERAGENT: análisis profundo de relación con un contacto ─
+        case 'analyze_contact_relationship': {
+          const term = String(args.name || '').trim();
+          if (!term) return JSON.stringify({ error: 'name requerido' });
+
+          // 1) Resolver contacto (fuzzy → ilike)
+          let contact: any = null;
+          const { data: fuzzy } = await sb.rpc('search_contacts_fuzzy', {
+            p_user_id: userId, p_search_term: term, p_limit: 1,
+          });
+          if (fuzzy?.length) {
+            const { data: full } = await sb.from('people_contacts')
+              .select('id, name, company, role, email, phone, notes, last_interaction_at')
+              .eq('id', fuzzy[0].id).maybeSingle();
+            contact = full;
+          }
+          if (!contact) {
+            const { data: ilike } = await sb.from('people_contacts')
+              .select('id, name, company, role, email, phone, notes, last_interaction_at')
+              .eq('user_id', userId).ilike('name', `%${term}%`).limit(1).maybeSingle();
+            contact = ilike;
+          }
+          if (!contact) return JSON.stringify({ error: `Contacto "${term}" no encontrado` });
+
+          const phone = contact.phone ? String(contact.phone).replace(/\D/g, '') : null;
+          const email = contact.email || null;
+          const nameLike = `%${contact.name.split(' ')[0]}%`;
+
+          // 2) Traer histórico en paralelo
+          const [waRes, emailRes, transRes, obsRes] = await Promise.all([
+            phone
+              ? sb.from('whatsapp_messages')
+                  .select('body, direction, created_at')
+                  .eq('user_id', userId)
+                  .or(`from_number.ilike.%${phone.slice(-9)}%,to_number.ilike.%${phone.slice(-9)}%`)
+                  .order('created_at', { ascending: false }).limit(15)
+              : Promise.resolve({ data: [] }),
+            email
+              ? sb.from('jarvis_emails_cache')
+                  .select('from_addr, subject, preview, synced_at')
+                  .eq('user_id', userId).ilike('from_addr', `%${email}%`)
+                  .order('synced_at', { ascending: false }).limit(10)
+              : Promise.resolve({ data: [] }),
+            sb.from('transcriptions')
+              .select('title, summary, created_at')
+              .eq('user_id', userId).ilike('summary', nameLike)
+              .order('created_at', { ascending: false }).limit(8),
+            sb.from('bosco_observations')
+              .select('observation, area, date')
+              .eq('user_id', userId).ilike('observation', nameLike)
+              .order('date', { ascending: false }).limit(8),
+          ]);
+          const emails = emailRes.data || [];
+
+          return JSON.stringify({
+            contact: {
+              name: contact.name, company: contact.company, role: contact.role,
+              email: contact.email, phone: contact.phone, notes: contact.notes,
+              last_interaction_at: contact.last_interaction_at,
+            },
+            whatsapp_recent: (waRes.data || []).map((m: any) => ({
+              dir: m.direction, body: String(m.body || '').slice(0, 200), at: m.created_at,
+            })),
+            emails_recent: emails.map((e: any) => ({
+              from: e.from_addr, subject: e.subject, preview: String(e.preview || '').slice(0, 160), at: e.synced_at,
+            })),
+            transcriptions_mentioning: (transRes.data || []).map((t: any) => ({
+              title: t.title, summary: String(t.summary || '').slice(0, 220), at: t.created_at,
+            })),
+            observations: (obsRes.data || []).map((o: any) => ({
+              text: String(o.observation || '').slice(0, 220), area: o.area, date: o.date,
+            })),
+          });
+        }
+
+        // ── SUPERAGENT: OpenClaw (mandar tareas a nodos POTUS / TITAN / etc) ─
+        case 'openclaw_list_nodes': {
+          const { data } = await sb.from('openclaw_nodes')
+            .select('id, name, status, role, model, active_task, progress, last_seen_at')
+            .eq('user_id', userId).order('name');
+          return JSON.stringify({ nodes: data || [] });
+        }
+
+        case 'openclaw_create_task': {
+          const title = String(args.title || '').trim();
+          if (!title) return JSON.stringify({ error: 'title requerido' });
+          const nodeName = args.node ? String(args.node).trim() : null;
+          let nodeId: string | null = null;
+          if (nodeName) {
+            const { data: nd } = await sb.from('openclaw_nodes')
+              .select('id').eq('user_id', userId).ilike('name', nodeName).maybeSingle();
+            nodeId = nd?.id || null;
+          }
+          const priority = ['low', 'medium', 'high', 'urgent'].includes(String(args.priority))
+            ? String(args.priority) : 'medium';
+          const { data, error } = await sb.from('openclaw_tasks').insert({
+            user_id: userId,
+            title,
+            description: args.description ? String(args.description) : null,
+            node_id: nodeId,
+            priority,
+            status: 'pending',
+          }).select().single();
+          if (error) return JSON.stringify({ error: error.message });
+          return JSON.stringify({ success: true, task: data, node: nodeName || 'auto' });
+        }
+
+        case 'openclaw_run_now': {
+          const term = String(args.task_title || '').trim();
+          if (!term) return JSON.stringify({ error: 'task_title requerido' });
+          const { data: tasks } = await sb.from('openclaw_tasks')
+            .select('id, title, status')
+            .eq('user_id', userId).ilike('title', `%${term}%`)
+            .in('status', ['pending', 'paused', 'completed'])
+            .order('created_at', { ascending: false }).limit(1);
+          if (!tasks?.length) return JSON.stringify({ error: 'Tarea no encontrada' });
+          const { error } = await sb.from('openclaw_tasks')
+            .update({ status: 'running', started_at: new Date().toISOString() })
+            .eq('id', tasks[0].id);
+          if (error) return JSON.stringify({ error: error.message });
+          return JSON.stringify({ success: true, task: tasks[0].title, status: 'running' });
+        }
+
         default:
           return JSON.stringify({ error: `Función ${name} no implementada` });
       }
@@ -405,8 +532,16 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
         
         try {
           const parsedArgs = JSON.parse(fnArgs || '{}');
-          const result = await executeFunction(fnName, parsedArgs);
-          
+          const t0 = Date.now();
+          // 12s timeout to avoid silent hangs when an edge function or RPC stalls
+          const result = await Promise.race<string>([
+            executeFunction(fnName, parsedArgs),
+            new Promise<string>((resolve) =>
+              setTimeout(() => resolve(JSON.stringify({ error: 'timeout (12s)' })), 12000),
+            ),
+          ]);
+          console.log(`[JARVIS] tool=${fnName} took ${Date.now() - t0}ms`);
+
           // Send function output back to OpenAI
           sendEvent({
             type: 'conversation.item.create',
@@ -416,7 +551,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
               output: result,
             },
           });
-          
+
           // Request model to continue generating response
           sendEvent({ type: 'response.create' });
         } catch (err) {
@@ -531,12 +666,13 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       setIsActive(true);
       
       // Get ephemeral token from edge function with explicit auth header
-      console.log('[JARVIS] Getting ephemeral token...');
+      console.log('[JARVIS] Getting ephemeral token... voice=', voice);
       const accessToken = sessionData.session.access_token;
       const { data, error } = await supabase.functions.invoke('jarvis-voice', {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
+        body: { voice },
       });
 
       if (error || !data?.client_secret?.value) {
@@ -677,7 +813,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
             instructions: richInstructions,
             audio: {
               input: {
-                transcription: { model: 'whisper-1' },
+                transcription: { model: 'gpt-4o-mini-transcribe' },
                 turn_detection: {
                   type: 'server_vad',
                   threshold: 0.5,
@@ -685,7 +821,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
                   silence_duration_ms: 500,
                 },
               },
-              output: { voice: 'alloy' },
+              output: { voice },
             },
             tools: [
               // ── tareas ─────────────────────────────────────────────
@@ -808,6 +944,37 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
                 description: 'Elimina/cancela un evento del calendario',
                 parameters: { type: 'object', properties: { event_title: { type: 'string' } }, required: ['event_title'] },
               },
+              // ── análisis profundo de relación ─────────────────────
+              {
+                type: 'function', name: 'analyze_contact_relationship',
+                description: 'Analiza la relación con un contacto: trae histórico de WhatsApp, emails, transcripciones y observaciones donde aparece. Úsalo cuando el usuario pida "analiza mi relación con X" o "qué sabemos de X".',
+                parameters: { type: 'object', properties: { name: { type: 'string', description: 'Nombre o parte del nombre del contacto' } }, required: ['name'] },
+              },
+              // ── OpenClaw (mandar tareas a nodos remotos) ──────────
+              {
+                type: 'function', name: 'openclaw_list_nodes',
+                description: 'Lista los nodos OpenClaw disponibles (POTUS, TITAN, JARVIS, ATLAS, etc) con su estado actual.',
+                parameters: { type: 'object', properties: {} },
+              },
+              {
+                type: 'function', name: 'openclaw_create_task',
+                description: 'Crea una tarea en OpenClaw para que un nodo (POTUS, TITAN, JARVIS, ATLAS...) la ejecute. Úsalo cuando el usuario diga "manda a POTUS que haga X" o similar.',
+                parameters: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string', description: 'Título corto de la tarea' },
+                    description: { type: 'string', description: 'Descripción/instrucciones para el nodo' },
+                    node: { type: 'string', description: 'Nombre del nodo destino: POTUS, TITAN, JARVIS, ATLAS... (opcional)' },
+                    priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+                  },
+                  required: ['title'],
+                },
+              },
+              {
+                type: 'function', name: 'openclaw_run_now',
+                description: 'Dispara inmediatamente una tarea OpenClaw existente buscándola por título.',
+                parameters: { type: 'object', properties: { task_title: { type: 'string' } }, required: ['task_title'] },
+              },
             ],
           },
         });
@@ -908,7 +1075,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       toast.error(error instanceof Error ? error.message : 'Error al iniciar JARVIS');
       cleanupOnError('start_error');
     }
-  }, [isActive, updateState, handleRealtimeEvent, sendEvent, clearResilienceTimers]);
+  }, [isActive, updateState, handleRealtimeEvent, sendEvent, clearResilienceTimers, voice]);
 
   // Toggle session
   const toggleSession = useCallback(() => {
@@ -941,6 +1108,8 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
     isActive,
     transcript,
     response,
+    voice,
+    setVoice,
     startSession,
     stopSession,
     toggleSession,

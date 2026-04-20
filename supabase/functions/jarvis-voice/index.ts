@@ -128,7 +128,19 @@ serve(async (req) => {
     const contextBlock = await loadUserContext(supabaseAdmin, user!.id);
     const fullInstructions = BASE_PERSONA + contextBlock;
 
-    console.log(`[jarvis-voice] User ${user!.id} → injecting ${contextBlock.length} chars of context`);
+    // Allow client to choose voice (defaults to "ash" — masculine, butler-like)
+    let requestedVoice = 'ash';
+    try {
+      if (req.headers.get('content-type')?.includes('application/json')) {
+        const body = await req.json().catch(() => ({}));
+        if (body?.voice && typeof body.voice === 'string') {
+          const allowed = ['ash', 'verse', 'ballad', 'echo', 'alloy', 'sage', 'shimmer'];
+          if (allowed.includes(body.voice)) requestedVoice = body.voice;
+        }
+      }
+    } catch { /* no body, ignore */ }
+
+    console.log(`[jarvis-voice] User ${user!.id} → context=${contextBlock.length} chars, voice=${requestedVoice}`);
 
     const sessionConfig = {
       session: {
@@ -137,7 +149,8 @@ serve(async (req) => {
         instructions: fullInstructions,
         audio: {
           input: {
-            transcription: { model: "whisper-1" },
+            // Faster + cheaper than whisper-1 for live transcription
+            transcription: { model: "gpt-4o-mini-transcribe" },
             turn_detection: {
               type: "server_vad",
               threshold: 0.5,
@@ -145,7 +158,7 @@ serve(async (req) => {
               silence_duration_ms: 600,
             },
           },
-          output: { voice: "alloy" },
+          output: { voice: requestedVoice },
         },
       },
     };
@@ -180,6 +193,7 @@ serve(async (req) => {
         client_secret: clientSecret,
         model: OPENAI_REALTIME_MODEL,
         instructions: fullInstructions, // client uses these in session.update too
+        voice: requestedVoice,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );

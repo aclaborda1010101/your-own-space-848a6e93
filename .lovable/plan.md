@@ -1,56 +1,68 @@
 
+## Plan: pipeline multimedia WhatsApp (audio + imagen + PDF)
 
-## Plan: marcar asunto pendiente como "ya hecho / descartado" y que JARVIS no insista
+### Objetivo
+Que JARVIS procese automáticamente lo que llega por WhatsApp más allá del texto: audios → transcripción, imágenes → OCR + descripción, PDFs → texto extraído. Todo se guarda en `contact_messages` para que cuente en headlines, personalidad y RAG.
 
-### Diagnóstico (confirmado en BD)
+### Arquitectura
 
-Alicia Martínez tiene en `contact_headlines.payload.pending.title` = **"Añadir música a vídeo de casting"** (`freshness=active`, generado el 20/4 con 291 mensajes). El usuario dice que ese asunto ya se hizo, pero el sistema lo seguirá mostrando hasta que entren ≥20 mensajes nuevos o caduque solo. Hoy no hay forma de decirle "esto ya está hecho".
-
-Además ese mismo título reaparece como **"Asunto pendiente"** en el bloque "Temas y tono" → es la misma fuente (`payload.pending.title`).
-
-### Causas
-
-1. **Bloque hero "JARVIS sugiere"** sólo tiene "Aceptar y agendar" + "Ver evidencia". Falta **"Hecho"** y **"Descartar"**.
-2. La cache de headlines no guarda decisiones del usuario → al regenerar, el LLM vuelve a proponer lo mismo porque sigue viendo el hilo de mensajes original.
-3. **"Asunto pendiente"** dentro de "Temas y tono" es un eco del mismo `pending.title` → si limpiamos la cabecera, también desaparece de ahí.
+```text
+evolution-webhook (rápido, no bloquea)
+   │
+   ├─ texto → flujo actual (sin cambios)
+   │
+   └─ audio/imagen/document detectado
+        │
+        ├─ inserta placeholder en contact_messages: "[⏳ Procesando audio…]"
+        └─ EdgeRuntime.waitUntil( process-whatsapp-media )
+                │
+                ├─ fetch base64 vía Evolution API /chat/getBase64FromMediaMessage
+                ├─ audio  → Groq Whisper  → "[🎙️ Audio] {transcripción}"
+                ├─ imagen → Gemini Vision → "[🖼️ Imagen] {descripción + OCR}"
+                ├─ pdf    → pdf.js/text   → "[📎 PDF: nombre] {texto}"
+                └─ UPDATE contact_messages SET content = ... WHERE id = placeholderId
+```
 
 ### Cambios
 
-**1. Nueva tabla `contact_headline_dismissals` (migración)**
-Registra qué asuntos se marcaron como hechos/descartados/pospuestos para cada contacto. Reutiliza la misma normalización de firma que `detect-task-signals` para que variantes léxicas no escapen.
-```
-id, user_id, contact_id, signature, original_title,
-decision ('done'|'dismissed'|'snoozed'), decided_at, expires_at
-```
-RLS por `user_id`. Índice `(user_id, contact_id)`.
+**1. `evolution-webhook/index.ts`** — detección y derivación
+- Detectar `audioMessage`, `imageMessage`, `documentMessage`, `videoMessage` en `messages.upsert`.
+- Insertar placeholder inmediato (`[⏳ Procesando {tipo}…]`) con `external_id` real para mantener idempotencia.
+- Disparar `process-whatsapp-media` con `EdgeRuntime.waitUntil` (no bloquea webhook, no rompe ACK a Evolution).
 
-**2. UI — botones de decisión en `JarvisSuggestionHero`**
-Añadir dos acciones nuevas al hero (junto a "Aceptar y agendar"):
-- **"Ya está hecho"** (success outline, `Check`) → marca `done`.
-- **"No aplica"** (ghost, `X`) → marca `dismissed`.
+**2. Nueva edge function `process-whatsapp-media/index.ts`**
+- Input: `{ messageId, contactId, userId, instance, evolutionMessageKey, mediaType, caption }`.
+- Llama `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/{instance}` con la key del mensaje.
+- Según `mediaType`:
+  - `audio`: POST a `https://api.groq.com/openai/v1/audio/transcriptions` (whisper-large-v3, lang `es`).
+  - `image`: POST a Lovable AI Gateway con `google/gemini-3-flash-preview` y mensaje multimodal `image_url` base64 → pide descripción breve + OCR de cualquier texto visible.
+  - `document` (pdf): si MIME es pdf → extraer texto con pdf.js (deno-compatible) o Gemini Vision como fallback; si es otro tipo → guardar `[📎 Documento: nombre]`.
+  - `video`: por ahora `[🎬 Vídeo recibido]` (transcribir vídeo es caro; lo dejamos fuera del MVP).
+- `UPDATE contact_messages SET content = '<prefijo> <texto>' WHERE id = messageId`.
+- Si todo falla tras retries → `[⚠️ {tipo} no procesable]` (no se queda colgado en "procesando").
 
-Ambas escriben en `contact_headline_dismissals`, invalidan la cache local del hook y disparan `refresh(true)` del headline para que JARVIS proponga otra cosa.
+**3. UI mínima (sin pantalla nueva)**
+- En `ContactTabs.tsx > WhatsAppTab` la lista de mensajes ya muestra `content`. Los prefijos `[🎙️] [🖼️] [📎]` los hacen reconocibles sin componente extra.
+- (Opcional, fuera de MVP) un badge especial cuando el contenido empieza por esos prefijos. Lo dejo para una segunda iteración para no inflar este cambio.
 
-**3. `get-contact-headlines` con memoria**
-Antes de llamar al LLM:
-- Cargar las últimas N (≈10) decisiones del contacto.
-- Inyectarlas en el prompt como bloque **"YA RESUELTO / DESCARTADO POR EL USUARIO — NO PROPONGAS ESTO NI SUS VARIANTES"** (mismo patrón que ya usamos en `detect-task-signals`).
-- Tras generar el `pending.title`, normalizar firma y comparar contra dismissals: si coincide → forzar `title="Sin asunto vivo"` y `freshness="stale"` para que el front caiga en el fallback de `proxima_accion`.
+**4. Headlines / personalidad**
+- `get-contact-headlines` y `contact-analysis` ya leen `contact_messages.content`, así que el texto transcrito/descrito entra automáticamente al análisis. Cero cambios ahí.
 
-**4. ContactDetail.tsx — invalidación inmediata**
-Tras "Hecho/Descartar", llamar `refresh(true)` del hook headlines (ya existe `refresh` en `useContactHeadlines`). El hook `pending.title` desaparece del hero **y** del bloque "Asunto pendiente" en Temas/Tono, porque ambos leen el mismo campo.
+### Secrets
+- `GROQ_API_KEY` → ya existe (lo usa `jarvis-hybrid-voice`).
+- `LOVABLE_API_KEY` → ya existe (Vision).
+- `EVOLUTION_API_URL` + `EVOLUTION_API_KEY` → ya existen.
 
-### Out of scope
-- No tocamos la generación de "Próxima acción recomendada" (viene de `personality_profile`, ya está bien).
-- No tocamos el sistema de `suggestions` (bandeja de inteligencia) — ya tiene su propia memoria desde el cambio anterior.
+Nada nuevo que pedir.
 
-### Archivos a tocar
-- **Migración** nueva: tabla `contact_headline_dismissals` + RLS.
-- `src/components/contact/JarvisSuggestionHero.tsx` — añadir props `onMarkDone`, `onMarkDismissed` y dos botones.
-- `src/pages/ContactDetail.tsx` — handlers que insertan el dismissal y llaman `refresh(true)`.
-- `src/hooks/useContactHeadlines.ts` — exponer la firma del título actual (para crear el dismissal con la misma normalización).
-- `supabase/functions/get-contact-headlines/index.ts` — cargar dismissals, inyectar al prompt, sobreescribir `pending` si el LLM repite algo dismissed.
+### Resiliencia
+- `fetchWithRetry` (ya en uso para Evolution) en la llamada a `getBase64FromMediaMessage`.
+- Timeout de 60s por media (Whisper/Vision son rápidos; si tarda más, marcamos como no procesable).
+- Idempotencia: el placeholder se inserta con `external_id` antes del `waitUntil`, así si Evolution reenvía el evento detectamos duplicado igual que con texto.
+- Tamaño: si base64 > 8 MB (audios largos, vídeos) → no procesar (`[⚠️ Demasiado grande]`).
+
+### Memoria a actualizar
+Tras desplegar: actualizar `mem://integraciones/whatsapp-personal-limitacion-multimedia-v1` para reflejar que el límite ya no aplica a audio/imagen/pdf (solo a vídeo).
 
 ### Resultado esperado
-Hoy en Alicia: pulsar **"Ya está hecho"** en "Añadir música a vídeo de casting" hará que (a) desaparezca del hero, (b) desaparezca del bloque "Asunto pendiente" en Temas/Tono, (c) JARVIS no lo vuelva a proponer aunque la conversación lo siga mencionando, (d) el hero caiga al fallback de la "próxima acción recomendada" del perfil.
-
+Cuando alguien te mande por WhatsApp un audio explicando algo, una foto de un cartel, o un PDF de presupuesto: en ~5–15 s el mensaje aparecerá en el chat del contacto con su transcripción/descripción/texto, y JARVIS lo tendrá en cuenta en el siguiente headline y en su personalidad de ese contacto.

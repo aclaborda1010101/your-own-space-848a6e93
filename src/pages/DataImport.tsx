@@ -47,6 +47,8 @@ import { convertXlsxToCSVText, convertContactsXlsxToCSVText } from "@/lib/xlsx-u
 import { detectBlockFormat, parseBlockFormatTxt, parseBlockFormatByChat } from "@/lib/whatsapp-block-parser";
 import { Checkbox } from "@/components/ui/checkbox";
 import { getEdgeFunctionErrorMessage } from "@/lib/edge-function-error";
+import { PlaudImportDialog, type PlaudImportConfirmation } from "@/components/plaud/PlaudImportDialog";
+import { usePlaudImportSuggestions } from "@/hooks/usePlaudImportSuggestions";
 
 interface DetectedContact {
   name: string;
@@ -1517,6 +1519,9 @@ const DataImport = () => {
   // ---- Plaud Import ----
   const [plaudFile, setPlaudFile] = useState<File | null>(null);
   const [plaudProcessing, setPlaudProcessing] = useState(false);
+  const [plaudDialogOpen, setPlaudDialogOpen] = useState(false);
+  const [plaudPendingText, setPlaudPendingText] = useState<string>("");
+  const plaudSuggestions = usePlaudImportSuggestions();
   const [plaudFetchLoading, setPlaudFetchLoading] = useState(false);
   const [plaudTranscriptions, setPlaudTranscriptions] = useState<any[]>([]);
   const [plaudProcessingIds, setPlaudProcessingIds] = useState<Set<string>>(new Set());

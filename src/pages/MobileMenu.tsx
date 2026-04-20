@@ -59,7 +59,8 @@ export default function MobileMenu() {
     contacts: number;
     whoopRecovery: number | null;
     aiCostsMonth: number | null;
-  }>({ tasksPending: 0, tasksDone: 0, contacts: 0, whoopRecovery: null, aiCostsMonth: null });
+    suggestionsPending: number;
+  }>({ tasksPending: 0, tasksDone: 0, contacts: 0, whoopRecovery: null, aiCostsMonth: null, suggestionsPending: 0 });
 
   // SEO title
   useEffect(() => {
@@ -103,13 +104,19 @@ export default function MobileMenu() {
         .select("cost_usd")
         .eq("user_id", uid)
         .gte("created_at", startOfMonth);
+      const suggestionsP: any = supabase
+        .from("suggestions")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", uid)
+        .eq("status", "pending");
 
-      const [pending, done, contacts, whoop, costs] = await Promise.all([
+      const [pending, done, contacts, whoop, costs, suggestions] = await Promise.all([
         pendingP,
         doneP,
         contactsP,
         whoopP,
         costsP,
+        suggestionsP,
       ]);
 
       if (cancelled) return;
@@ -124,6 +131,7 @@ export default function MobileMenu() {
         contacts: contacts.count ?? 0,
         whoopRecovery: whoop.data?.recovery_score ?? null,
         aiCostsMonth: totalCost > 0 ? totalCost : null,
+        suggestionsPending: suggestions.count ?? 0,
       });
     })();
     return () => {
@@ -147,6 +155,15 @@ export default function MobileMenu() {
             path: "/tasks",
             meta: `${counts.tasksPending} pendientes · ${counts.tasksDone} hechas hoy`,
             badge: counts.tasksPending || undefined,
+          },
+          {
+            icon: Brain,
+            label: "Bandeja inteligencia",
+            path: "/intelligence/inbox",
+            meta: counts.suggestionsPending > 0
+              ? `${counts.suggestionsPending} sugerencias pendientes`
+              : "Sin sugerencias pendientes",
+            badge: counts.suggestionsPending || undefined,
           },
           { icon: CalIcon, label: "Calendario", path: "/calendar", meta: monthStr },
           {

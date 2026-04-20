@@ -181,18 +181,31 @@ serve(async (req) => {
           })
           .eq("id", email.id);
 
-        // If action items were found, create tasks
+        // Action items detectados → Bandeja de inteligencia (NO se crean como tareas directas)
         if (extracted.action_items?.length > 0) {
-          for (const action of extracted.action_items.slice(0, 3)) { // Max 3 tasks per email
-            await supabase.from("tasks").insert({
+          for (const action of extracted.action_items.slice(0, 3)) {
+            const actionTitle = String(action.text || "").substring(0, 200);
+            if (!actionTitle) continue;
+            await supabase.from("suggestions").insert({
               user_id: userId,
-              title: action.text.substring(0, 200),
-              priority: action.priority === "high" ? "high" : action.priority === "medium" ? "medium" : "low",
-              due_date: action.deadline || null,
-              source: "email",
-              notes: `📧 De: ${email.from_address}\nAsunto: ${email.subject}`,
+              suggestion_type: "task_from_plaud",
+              status: "pending",
+              content: {
+                title: actionTitle,
+                description: actionTitle,
+                type: "work",
+                priority: action.priority === "high" ? "high" : action.priority === "medium" ? "medium" : "low",
+                duration: 30,
+                source: "email-intelligence",
+                email_id: email.id,
+                email_from: email.from_address,
+                email_subject: email.subject,
+                deadline: action.deadline || null,
+              },
+              confidence: 0.7,
+              reasoning: `Acción detectada en email de ${email.from_address} · ${email.subject}`,
             }).then(({ error }) => {
-              if (error) console.warn(`[email-intelligence] Could not create task: ${error.message}`);
+              if (error) console.warn(`[email-intelligence] Could not queue suggestion: ${error.message}`);
             });
           }
         }

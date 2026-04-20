@@ -499,22 +499,27 @@ async function saveTranscriptionAndEntities(
     await supabase.from("suggestions").insert(rows);
   }
 
-  // Insert tasks
+  // Tareas detectadas en la transcripción → Bandeja de inteligencia (NO se crean como tareas directas)
   if (extracted.tasks?.length) {
     const rows = extracted.tasks.map((t) => ({
       user_id: userId,
-      title: t.title,
-      type: t.brain === "bosco" ? "life" : t.brain === "professional" ? "work" : "life",
-      priority: t.priority === "high" ? "P1" : t.priority === "medium" ? "P2" : "P3",
-      duration: 30,
-      completed: false,
-      source,
-      description: `Extraída de: ${extracted.title}. ${extracted.summary}`,
-      due_date: null,
+      suggestion_type: "task_from_plaud",
+      status: "pending",
+      source_transcription_id: transcription.id,
+      content: {
+        title: t.title,
+        description: `Extraída de: ${extracted.title}. ${extracted.summary}`,
+        type: t.brain === "bosco" ? "life" : t.brain === "professional" ? "work" : "life",
+        priority: t.priority || "medium",
+        duration: 30,
+        source,
+      },
+      confidence: 0.75,
+      reasoning: `Tarea detectada en transcripción "${extracted.title}"`,
     }));
-    const { error: taskInsertError } = await supabase.from("tasks").insert(rows);
-    if (taskInsertError) console.error("[process-transcription] Task insert error:", taskInsertError);
-    else console.log(`[process-transcription] Inserted ${rows.length} tasks`);
+    const { error: suggInsertError } = await supabase.from("suggestions").insert(rows);
+    if (suggInsertError) console.error("[process-transcription] Suggestion insert error:", suggInsertError);
+    else console.log(`[process-transcription] Queued ${rows.length} task suggestions in Intelligence Inbox`);
   }
 
   // Generate embeddings

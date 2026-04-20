@@ -7,10 +7,63 @@ const corsHeaders = {
 };
 
 // Manual "refresh ALL" — invoked from the UI button.
-// Queues every contact in the strategic network for the calling user,
-// fires contact-analysis with throttling, returns a progress summary.
-const DELAY_BETWEEN_MS = 2500;
+// Returns immediately and processes contacts in the background via EdgeRuntime.waitUntil
+// to avoid the 150s edge function timeout.
+const DELAY_BETWEEN_MS = 1500;
 const MAX_PER_RUN = 50;
+
+async function processContactsInBackground(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  userId: string,
+  contacts: Array<{ id: string; name: string; personality_profile: any }>,
+) {
+  const admin = createClient(supabaseUrl, serviceRoleKey) as any;
+  let refreshed = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < contacts.length; i++) {
+    const c = contacts[i];
+    try {
+      const hasProfile = c.personality_profile && Object.keys(c.personality_profile).length > 0;
+      const resp = await fetch(`${supabaseUrl}/functions/v1/contact-analysis`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({
+          contact_id: c.id,
+          user_id: userId,
+          scopes: ["profesional", "personal", "familiar"],
+          include_historical: !hasProfile,
+        }),
+      });
+      if (resp.ok) {
+        refreshed++;
+        await admin
+          .from("people_contacts")
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", c.id);
+        console.log(`[refresh-all-bg] ✅ ${c.name} (${refreshed}/${contacts.length})`);
+      } else {
+        const t = await resp.text();
+        console.error(`[refresh-all-bg] ❌ ${c.name}: ${resp.status} ${t.slice(0, 150)}`);
+        errors.push(`${c.name}: ${resp.status}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[refresh-all-bg] ❌ ${c.name}: ${msg}`);
+      errors.push(`${c.name}: ${msg}`);
+    }
+
+    if (i < contacts.length - 1) {
+      await new Promise((r) => setTimeout(r, DELAY_BETWEEN_MS));
+    }
+  }
+
+  console.log(`[refresh-all-bg] DONE user=${userId} refreshed=${refreshed}/${contacts.length} errors=${errors.length}`);
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -49,64 +102,27 @@ serve(async (req) => {
     if (error) throw error;
     if (!contacts || contacts.length === 0) {
       return new Response(
-        JSON.stringify({ refreshed: 0, total: 0, message: "No hay contactos en la red estratégica" }),
+        JSON.stringify({ queued: 0, total: 0, message: "No hay contactos en la red estratégica" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`[refresh-all] User ${userId}: ${contacts.length} contacts queued`);
+    console.log(`[refresh-all] User ${userId}: queueing ${contacts.length} contacts in background`);
 
-    let refreshed = 0;
-    const errors: string[] = [];
-
-    // Fire-and-forget the slow ones; await up to 30s budget per call
-    for (const c of contacts) {
-      try {
-        const hasProfile = c.personality_profile && Object.keys(c.personality_profile).length > 0;
-        const resp = await fetch(`${supabaseUrl}/functions/v1/contact-analysis`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${serviceRoleKey}`,
-          },
-          body: JSON.stringify({
-            contact_id: c.id,
-            user_id: userId,
-            scopes: ["profesional", "personal", "familiar"],
-            include_historical: !hasProfile,
-          }),
-        });
-        if (resp.ok) {
-          refreshed++;
-          await admin
-            .from("people_contacts")
-            .update({ updated_at: new Date().toISOString() })
-            .eq("id", c.id);
-          console.log(`[refresh-all] ✅ ${c.name}`);
-        } else {
-          const t = await resp.text();
-          console.error(`[refresh-all] ❌ ${c.name}: ${resp.status} ${t.slice(0, 150)}`);
-          errors.push(`${c.name}: ${resp.status}`);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[refresh-all] ❌ ${c.name}: ${msg}`);
-        errors.push(`${c.name}: ${msg}`);
-      }
-
-      if (contacts.indexOf(c) < contacts.length - 1) {
-        await new Promise((r) => setTimeout(r, DELAY_BETWEEN_MS));
-      }
-    }
+    // Fire and forget — runs after response is returned, up to the function's max duration.
+    // @ts-ignore - EdgeRuntime is provided by Supabase Edge runtime
+    EdgeRuntime.waitUntil(
+      processContactsInBackground(supabaseUrl, serviceRoleKey, userId, contacts)
+    );
 
     return new Response(
       JSON.stringify({
-        refreshed,
+        queued: contacts.length,
         total: contacts.length,
-        errors: errors.length,
-        errorDetails: errors,
+        message: `Refrescando ${contacts.length} contactos en segundo plano. Vuelve en 1-2 minutos.`,
+        background: true,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error: unknown) {
     console.error("[refresh-all] Fatal:", error);

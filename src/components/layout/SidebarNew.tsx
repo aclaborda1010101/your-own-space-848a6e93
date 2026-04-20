@@ -76,7 +76,6 @@ const sections: NavSection[] = [
       { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
       { icon: Brain, label: "Bandeja inteligencia", path: "/intelligence/inbox" },
       { icon: TerminalSquare, label: "OpenClaw Hub", path: "/openclaw/hub" },
-      { icon: Mic, label: "Comunicaciones", path: "/communications" },
       { icon: CheckSquare, label: "Tareas", path: "/tasks" },
       { icon: Calendar, label: "Calendario", path: "/calendar" },
       { icon: Activity, label: "Salud", path: "/health" },

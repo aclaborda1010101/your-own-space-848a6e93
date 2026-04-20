@@ -177,7 +177,6 @@ export default function MobileMenu() {
             meta: `${counts.contacts.toLocaleString("es-ES")} contactos`,
             badge: counts.contacts >= 1000 ? `${(counts.contacts / 1000).toFixed(1)}k` : counts.contacts,
           },
-          { icon: Mic, label: "Comunicaciones", path: "/communications", meta: "WhatsApp · Email · Plaud" },
         ],
       },
       {

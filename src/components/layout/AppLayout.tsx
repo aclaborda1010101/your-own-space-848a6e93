@@ -5,6 +5,7 @@ import { SidebarNew } from "./SidebarNew";
 import { TopBar } from "./TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
 import { cn } from "@/lib/utils";
+import { JarvisFloatingChat } from "@/components/jarvis/JarvisFloatingChat";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -61,6 +62,9 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
       {!isLoginPage && !isWizardPage && (
         <BottomNavBar />
       )}
+
+      {/* JARVIS floating widget — desktop only (hidden on mobile/iPad) */}
+      {!isLoginPage && !isWizardPage && <JarvisFloatingChat />}
     </div>
   );
 };

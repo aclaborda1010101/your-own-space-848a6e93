@@ -215,6 +215,19 @@ function extractMentionDate(text: string | null | undefined, fallbackDate: Date 
   const absolute = parseDate(text);
   if (absolute) return absolute;
 
+  const shortMonth = text.toLowerCase().match(/(?:mencionado el\s+)?(\d{1,2})\s+(ene|feb|mar|abr|may|jun|jul|ago|sep|sept|oct|nov|dic)\s+(\d{4})\b/i);
+  if (shortMonth) {
+    const monthMap: Record<string, number> = {
+      ene: 0, feb: 1, mar: 2, abr: 3, may: 4, jun: 5,
+      jul: 6, ago: 7, sep: 8, sept: 8, oct: 9, nov: 10, dic: 11,
+    };
+    const day = parseInt(shortMonth[1], 10);
+    const month = monthMap[shortMonth[2]];
+    const year = parseInt(shortMonth[3], 10);
+    const parsed = new Date(Date.UTC(year, month, day));
+    if (parsed.getUTCDate() === day && parsed.getUTCMonth() === month) return parsed;
+  }
+
   const now = new Date();
   const daysAgo = text.match(/hace\s+(\d+)\s*d[ií]as?/i);
   if (daysAgo) return new Date(now.getTime() - parseInt(daysAgo[1], 10) * 24 * 3600 * 1000);

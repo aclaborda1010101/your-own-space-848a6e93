@@ -265,6 +265,8 @@ Devuelve SOLO el JSON, sin markdown ni texto extra.`;
       tasks_count: tasks.length,
       meals_count: meals.length,
       cal_count: calEvents.length,
+      cal_allday_count: calAllDay.length,
+      cal_status: calStatus,
       plaud_count: plaud.length,
       has_prefs: !!prefs,
     };

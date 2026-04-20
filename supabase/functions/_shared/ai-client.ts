@@ -147,17 +147,39 @@ export async function chat(
   let lastError: string = "";
   let result = "";
 
+  // Heavier models get fewer retries to avoid burning the 150s edge timeout.
+  const attemptsPerModel = (m: string) =>
+    m === "google/gemini-3.1-pro-preview" ? 1 :
+    m === "google/gemini-3-flash-preview" ? 2 : 2;
+
+  // Per-request timeout so a single hung fetch can't eat the whole budget.
+  const FETCH_TIMEOUT_MS = 45_000;
+
   outer: for (const tryModel of fallbackChain) {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    const maxAttempts = attemptsPerModel(tryModel);
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const attemptBody = { ...body, model: tryModel };
-      const response = await fetch(GATEWAY_URL, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(attemptBody),
-      });
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+      let response: Response;
+      try {
+        response = await fetch(GATEWAY_URL, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${LOVABLE_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(attemptBody),
+          signal: ctrl.signal,
+        });
+      } catch (err) {
+        clearTimeout(timer);
+        lastError = `fetch failed: ${err instanceof Error ? err.message : String(err)}`;
+        console.warn(`AI Gateway fetch error (${tryModel}, attempt ${attempt + 1}): ${lastError}`);
+        await new Promise(r => setTimeout(r, 300));
+        continue;
+      }
+      clearTimeout(timer);
 
       if (!response.ok) {
         const errorText = await response.text();

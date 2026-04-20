@@ -43,8 +43,7 @@ const menuGroups: { title: string; items: MenuItem[] }[] = [
     title: "Principal",
     items: [
       { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard", permanent: true },
-      { icon: MessageSquare, label: "POTUS", path: "/chat" },
-      { icon: Mic, label: "Comunicaciones", path: "/communications" },
+      { icon: MessageSquare, label: "JARVIS", path: "/chat", permanent: true },
       { icon: CheckSquare, label: "Tareas", path: "/tasks" },
       { icon: Calendar, label: "Calendario", path: "/calendar" },
       { icon: Activity, label: "Salud", path: "/health" },

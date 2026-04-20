@@ -28,7 +28,6 @@ import { NativeBootstrap } from "./components/native/NativeBootstrap";
 const Dashboard = React.lazy(() => import("./pages/Dashboard"));
 const Chat = React.lazy(() => import("./pages/Chat"));
 const ChatSimple = React.lazy(() => import("./pages/ChatSimple"));
-const Communications = React.lazy(() => import("./pages/Communications"));
 const Health = React.lazy(() => import("./pages/Health"));
 const OpenClaw = React.lazy(() => import("./pages/OpenClaw"));
 const OpenClawPreview = React.lazy(() => import("./pages/OpenClaw"));
@@ -168,7 +167,8 @@ const App = () => (
                   <Route path="/chat-simple" element={<ProtectedPage><ChatSimple /></ProtectedPage>} />
                   <Route path="/potus" element={<Navigate to="/chat" replace />} />
                   <Route path="/jarvis" element={<Navigate to="/chat" replace />} />
-                  <Route path="/communications" element={<ProtectedPage><Communications /></ProtectedPage>} />
+                  <Route path="/potus-chat" element={<Navigate to="/chat" replace />} />
+                  <Route path="/communications" element={<Navigate to="/chat" replace />} />
                   {/* OpenClaw: la home de OpenClaw es ahora el Hub real (TITAN/POTUS) */}
                   <Route path="/openclaw" element={<ProtectedPage><OpenClawHub /></ProtectedPage>} />
                   <Route path="/openclaw/hub" element={<ProtectedPage><OpenClawHub /></ProtectedPage>} />

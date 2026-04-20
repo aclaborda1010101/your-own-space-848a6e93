@@ -250,7 +250,7 @@ function emptyPayload() {
 }
 
 async function upsertHeadlines(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   contactId: string,
   userId: string,
   payload: unknown,

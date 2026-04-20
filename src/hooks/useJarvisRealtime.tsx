@@ -343,7 +343,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
           const nameLike = `%${contact.name.split(' ')[0]}%`;
 
           // 2) Traer histórico en paralelo
-          const [waRes, mailRes, transRes, obsRes] = await Promise.all([
+          const [waRes, emailRes, transRes, obsRes] = await Promise.all([
             phone
               ? sb.from('whatsapp_messages')
                   .select('body, direction, created_at')
@@ -354,9 +354,8 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
             email
               ? sb.from('jarvis_emails_cache')
                   .select('from_addr, subject, preview, synced_at')
-                  .eq('user_id', userId)
-                  .or(`from_addr.ilike.%${email}%`)
-                  .order('synced_at', { ascending: false }).limit: 10 ? null : null
+                  .eq('user_id', userId).ilike('from_addr', `%${email}%`)
+                  .order('synced_at', { ascending: false }).limit(10)
               : Promise.resolve({ data: [] }),
             sb.from('transcriptions')
               .select('title, summary, created_at')
@@ -367,16 +366,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
               .eq('user_id', userId).ilike('observation', nameLike)
               .order('date', { ascending: false }).limit(8),
           ]);
-
-          // Re-fetch emails properly (above had a typo placeholder)
-          let emails: any[] = [];
-          if (email) {
-            const { data: em } = await sb.from('jarvis_emails_cache')
-              .select('from_addr, subject, preview, synced_at')
-              .eq('user_id', userId).ilike('from_addr', `%${email}%`)
-              .order('synced_at', { ascending: false }).limit(10);
-            emails = em || [];
-          }
+          const emails = emailRes.data || [];
 
           return JSON.stringify({
             contact: {

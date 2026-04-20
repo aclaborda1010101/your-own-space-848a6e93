@@ -27,6 +27,7 @@ import { ProfileByScope } from "@/components/contact/ProfileByScope";
 import { RelationshipTimelineChart } from "@/components/contact/RelationshipTimelineChart";
 import {
   ArrowLeft,
+  ArrowRight,
   Phone,
   MessageCircle,
   Bell,
@@ -41,6 +42,9 @@ import {
   Mic,
   Sparkles,
   RefreshCw,
+  Briefcase,
+  Heart,
+  Users,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -61,6 +65,7 @@ interface Contact {
   brain?: string | null;
   relationship?: string | null;
   email?: string | null;
+  wa_message_count?: number | null;
   scores?: { health?: number } | null;
   sentiment?: string | null;
   ai_tags?: string[] | null;
@@ -130,7 +135,7 @@ export default function ContactDetail() {
     try {
       const { data: c } = await supabase
         .from("people_contacts")
-        .select("id,name,category,categories,wa_id,phone_numbers,last_contact,context,role,company,brain,relationship,email,personality_profile,metadata,ai_tags,scores,sentiment")
+        .select("id,name,category,categories,wa_id,phone_numbers,last_contact,context,role,company,brain,relationship,email,wa_message_count,personality_profile,metadata,ai_tags,scores,sentiment")
         .eq("id", contactId!)
         .maybeSingle();
       setContact((c as Contact) || null);
@@ -227,6 +232,19 @@ export default function ContactDetail() {
     contact.sentiment === "positive" ? "bg-success/10 border-success/30 text-success" :
     contact.sentiment === "negative" ? "bg-destructive/10 border-destructive/30 text-destructive" :
     "bg-muted/20 border-border text-muted-foreground";
+  const scopedProfile = profile && typeof profile === "object"
+    ? (!profile.ambito && (profile.profesional || profile.personal || profile.familiar)
+        ? (profile[activeScope] || {})
+        : profile)
+    : null;
+  const nextAction = scopedProfile?.proxima_accion;
+  const brainMeta = contact.brain === "profesional"
+    ? { icon: <Briefcase className="w-3 h-3" />, label: "profesional" }
+    : contact.brain === "familiar"
+    ? { icon: <Users className="w-3 h-3" />, label: "familiar" }
+    : contact.brain === "personal"
+    ? { icon: <Heart className="w-3 h-3" />, label: "personal" }
+    : null;
 
   return (
     <div className="min-h-screen bg-background relative">
@@ -290,6 +308,22 @@ export default function ContactDetail() {
                     {t}
                   </span>
                 ))}
+                {brainMeta && (
+                  <span className="px-2.5 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary text-[11px] font-medium inline-flex items-center gap-1.5">
+                    {brainMeta.icon}
+                    {brainMeta.label}
+                  </span>
+                )}
+                {contact.relationship && (
+                  <span className="px-2.5 py-1 rounded-full bg-card/50 border border-border text-foreground/80 text-[11px]">
+                    {contact.relationship}
+                  </span>
+                )}
+                {!!(contact.wa_message_count ?? totalMessages) && (
+                  <span className="px-2.5 py-1 rounded-full bg-success/10 border border-success/30 text-success text-[11px] font-medium">
+                    {contact.wa_message_count ?? totalMessages} msgs WA
+                  </span>
+                )}
               </div>
             </div>
 
@@ -433,6 +467,33 @@ export default function ContactDetail() {
             },
           ]}
         />
+
+        {nextAction?.que && (
+          <GlassCard className="p-5 sm:p-6 border border-primary/20 bg-primary/5">
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-primary/80 mb-3 font-mono">
+              <ArrowRight className="w-3 h-3" />
+              <span>Próxima acción recomendada</span>
+            </div>
+            <div className="space-y-3">
+              <p className="text-base sm:text-lg font-medium text-foreground">{nextAction.que}</p>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {nextAction.canal && (
+                  <span className="px-2.5 py-1 rounded-full bg-card/60 border border-border text-muted-foreground">
+                    Canal: {nextAction.canal}
+                  </span>
+                )}
+                {nextAction.cuando && (
+                  <span className="px-2.5 py-1 rounded-full bg-card/60 border border-border text-muted-foreground">
+                    Cuándo: {nextAction.cuando}
+                  </span>
+                )}
+              </div>
+              {nextAction.pretexto && (
+                <p className="text-sm text-muted-foreground">💡 Pretexto: {nextAction.pretexto}</p>
+              )}
+            </div>
+          </GlassCard>
+        )}
 
         {/* HEADLINES — análisis IA secundario */}
         <div>
@@ -613,7 +674,6 @@ export default function ContactDetail() {
           </TabsContent>
 
           <TabsContent value="whatsapp" className="mt-6 space-y-6">
-            <SuggestedResponses contactId={contact.id} contactName={contact.name} />
             <WhatsAppTab contact={contact as any} />
           </TabsContent>
 
@@ -672,6 +732,14 @@ export default function ContactDetail() {
             <ProfileKnownData contact={contact as any} />
           </TabsContent>
         </Tabs>
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.3em] text-muted-foreground px-1 font-mono">
+            <MessageCircle className="w-3 h-3" />
+            <span>Borradores sugeridos</span>
+          </div>
+          <SuggestedResponses contactId={contact.id} contactName={contact.name} />
+        </div>
       </div>
     </div>
   );

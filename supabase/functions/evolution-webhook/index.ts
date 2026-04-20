@@ -146,74 +146,119 @@ serve(async (req) => {
     }
 
     // ============================
-    // CONTACT RESOLUTION (improved)
+    // CONTACT RESOLUTION (deterministic, dup-safe)
+    // Carga TODOS los candidatos posibles, elige el mejor con prioridad
+    // determinista, normaliza el wa_id en el ganador y NO asume unicidad.
     // ============================
     let contactId: string | null = null;
     let contactIsFavorite = false;
 
-    // 1. Exact match by wa_id
-    const { data: byWaId } = await supabase
+    type Cand = {
+      id: string;
+      name: string | null;
+      wa_id: string | null;
+      is_favorite: boolean | null;
+      in_strategic_network: boolean | null;
+      wa_message_count: number | null;
+      created_at: string | null;
+    };
+
+    // 1) Candidatos por wa_id exacto
+    const { data: exactMatches } = await supabase
       .from("people_contacts")
-      .select("id, is_favorite")
+      .select("id, name, wa_id, is_favorite, in_strategic_network, wa_message_count, created_at")
       .eq("user_id", userId)
-      .eq("wa_id", waId)
-      .maybeSingle();
+      .eq("wa_id", waId);
 
-    if (byWaId) {
-      contactId = byWaId.id;
-      contactIsFavorite = !!byWaId.is_favorite;
+    // 2) Candidatos por últimos 9 dígitos
+    const { data: last9Matches } = await supabase
+      .from("people_contacts")
+      .select("id, name, wa_id, is_favorite, in_strategic_network, wa_message_count, created_at")
+      .eq("user_id", userId)
+      .like("wa_id", `%${waLast9}`);
+
+    // 3) Candidatos por phone_numbers
+    const { data: phoneMatches } = await supabase
+      .from("people_contacts")
+      .select("id, name, wa_id, is_favorite, in_strategic_network, wa_message_count, created_at")
+      .eq("user_id", userId)
+      .contains("phone_numbers", [waId]);
+
+    // Unir candidatos sin duplicados
+    const candMap = new Map<string, Cand>();
+    for (const arr of [exactMatches, last9Matches, phoneMatches]) {
+      for (const c of (arr || []) as Cand[]) {
+        if (!candMap.has(c.id)) candMap.set(c.id, c);
+      }
+    }
+    const candidates = Array.from(candMap.values());
+
+    function nameQuality(c: Cand): number {
+      const n = (c.name || "").trim();
+      if (!n) return 0;
+      if (/^[0-9+\s-]+$/.test(n)) return 1; // solo números
+      if (n === waId) return 1;
+      if (n.length <= 4) return 2;          // alias muy corto (AAB)
+      if (!/\s/.test(n)) return 3;          // una sola palabra
+      return 4;                              // nombre humano completo
+    }
+
+    function pickBest(list: Cand[]): Cand | null {
+      if (list.length === 0) return null;
+      const sorted = [...list].sort((a, b) => {
+        // 1. Favoritos
+        const fa = a.is_favorite ? 1 : 0, fb = b.is_favorite ? 1 : 0;
+        if (fa !== fb) return fb - fa;
+        // 2. Red estratégica
+        const sa = a.in_strategic_network ? 1 : 0, sb = b.in_strategic_network ? 1 : 0;
+        if (sa !== sb) return sb - sa;
+        // 3. Más mensajes históricos
+        const ca = a.wa_message_count || 0, cb = b.wa_message_count || 0;
+        if (ca !== cb) return cb - ca;
+        // 4. Mejor calidad de nombre
+        const na = nameQuality(a), nb = nameQuality(b);
+        if (na !== nb) return nb - na;
+        // 5. Más antiguo
+        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return ta - tb;
+      });
+      return sorted[0];
+    }
+
+    const winner = pickBest(candidates);
+
+    if (winner) {
+      contactId = winner.id;
+      contactIsFavorite = !!winner.is_favorite;
+      // Normaliza wa_id si no era el canónico
+      if (winner.wa_id !== waId) {
+        await supabase.from("people_contacts").update({ wa_id: waId }).eq("id", winner.id);
+      }
+      if (candidates.length > 1) {
+        console.warn(
+          `[contact] DUP for wa_id ${waId}: chose ${winner.id} (${winner.name}) among ${candidates.length} candidates`,
+        );
+      }
     } else {
-      // 2. Match by last 9 digits in wa_id (ES numbers ±34 prefix)
-      const { data: byLast9 } = await supabase
+      // Sin match por teléfono → crear nuevo
+      const cleanPush = (pushName && pushName.trim()) || waId;
+      const { data: newContact, error: createErr } = await supabase
         .from("people_contacts")
-        .select("id, is_favorite, wa_id")
-        .eq("user_id", userId)
-        .like("wa_id", `%${waLast9}`)
-        .limit(1)
-        .maybeSingle();
-
-      if (byLast9) {
-        contactId = byLast9.id;
-        contactIsFavorite = !!byLast9.is_favorite;
-        // Normalize wa_id to canonical form
-        await supabase.from("people_contacts").update({ wa_id: waId }).eq("id", contactId);
+        .insert({
+          user_id: userId,
+          name: cleanPush,
+          wa_id: waId,
+          category: "pendiente",
+          phone_numbers: [waId],
+        })
+        .select("id")
+        .single();
+      if (createErr) {
+        console.error("create contact failed:", createErr);
       } else {
-        // 3. Match by phone_numbers array
-        const { data: byPhone } = await supabase
-          .from("people_contacts")
-          .select("id, is_favorite")
-          .eq("user_id", userId)
-          .contains("phone_numbers", [waId])
-          .maybeSingle();
-
-        if (byPhone) {
-          contactId = byPhone.id;
-          contactIsFavorite = !!byPhone.is_favorite;
-          await supabase.from("people_contacts").update({ wa_id: waId }).eq("id", contactId);
-        } else {
-          // 4. NO match por teléfono → SIEMPRE crear contacto nuevo.
-          // Eliminado el fuzzy match por nombre: el teléfono manda. El nombre
-          // sólo se usa para rellenar el campo `name` al crear el contacto.
-          // Para vincular un contacto antiguo con un wa_id, usa la UI manual.
-          const cleanPush = (pushName && pushName.trim()) || waId;
-          const { data: newContact, error: createErr } = await supabase
-            .from("people_contacts")
-            .insert({
-              user_id: userId,
-              name: cleanPush,
-              wa_id: waId,
-              category: "pendiente",
-              phone_numbers: [waId],
-            })
-            .select("id")
-            .single();
-          if (createErr) {
-            console.error("create contact failed:", createErr);
-          } else {
-            contactId = newContact.id;
-            console.log(`[contact] Created new contact "${cleanPush}" (${contactId}) for wa_id ${waId}`);
-          }
-        }
+        contactId = newContact.id;
+        console.log(`[contact] Created new contact "${cleanPush}" (${contactId}) for wa_id ${waId}`);
       }
     }
 

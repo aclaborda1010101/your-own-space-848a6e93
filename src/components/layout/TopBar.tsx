@@ -28,10 +28,7 @@ export const TopBar = ({ onMenuClick, showModeSelector = false }: TopBarProps) =
   };
 
   return (
-    <header className="safe-top sticky top-0 z-30 border-b border-border/60 bg-background/75 backdrop-blur-2xl">
-      {/* Thin holo accent line */}
-      <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
-
+    <header className="safe-top sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur-xl overflow-hidden">
       <div className="h-14 md:h-16 flex items-center justify-between px-3 lg:px-6 relative">
         {/* Left */}
         <div className="flex items-center gap-3">

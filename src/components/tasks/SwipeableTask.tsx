@@ -2,6 +2,17 @@ import { useState, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { PomodoroButton } from "@/components/pomodoro/PomodoroButton";
 import { useSwipeGesture } from "@/hooks/useSwipeGesture";
 import { useHaptics } from "@/hooks/useHaptics";

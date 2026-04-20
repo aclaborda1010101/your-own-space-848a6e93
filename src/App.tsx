@@ -22,6 +22,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { WebSocketInitializer } from "./components/WebSocketInitializer";
 import { UserSettingsProvider } from "./hooks/useUserSettings";
 import { NativeBootstrap } from "./components/native/NativeBootstrap";
+import { NativePushProvider } from "./hooks/useNativePushNotifications";
 
 // --- Lazy imports for protected pages ---
 
@@ -150,6 +151,7 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <AuthProvider>
+              <NativePushProvider>
               <OAuthMessageBridge />
               <Suspense fallback={<PageLoader />}>
                 <Routes>
@@ -224,6 +226,7 @@ const App = () => (
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </Suspense>
+              </NativePushProvider>
             </AuthProvider>
           </BrowserRouter>
         </TooltipProvider>

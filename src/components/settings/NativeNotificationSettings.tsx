@@ -188,6 +188,36 @@ export function NativeNotificationSettings() {
             <Sparkles className="w-3.5 h-3.5 mr-2" />
             Enviar push de prueba
           </Button>
+
+          {/* Debug surface — pipeline trazabilidad end-to-end */}
+          {isNative && (
+            <details className="text-xs border rounded-md p-2 bg-muted/30">
+              <summary className="cursor-pointer font-medium select-none">
+                🛠️ Debug pipeline push (tap para ver estado real)
+              </summary>
+              <ul className="mt-2 space-y-1 font-mono text-[11px] leading-relaxed">
+                <li>permission: <b>{push.debug.permission}</b></li>
+                <li>registrationAttempted: <b>{String(push.debug.registrationAttempted)}</b></li>
+                <li>tokenReceived: <b>{String(push.debug.tokenReceived)}</b></li>
+                <li>tokenSavedToBackend: <b>{String(push.debug.tokenSavedToBackend)}</b></li>
+                <li>deviceRegistered: <b>{String(push.debug.deviceRegistered)}</b></li>
+                <li>activeDeviceCount: <b>{push.debug.activeDeviceCount}</b></li>
+                <li>deviceId: <span className="break-all">{push.debug.deviceId ?? "—"}</span></li>
+                <li>tokenPreview: <span className="break-all">{push.debug.tokenPreview ?? "—"}</span></li>
+                <li>lastBackendSyncAt: {push.debug.lastBackendSyncAt ?? "—"}</li>
+                <li>lastBackendResponse: <span className="break-all">{push.debug.lastBackendResponse ?? "—"}</span></li>
+                <li className="text-destructive">lastError: {push.debug.lastError ?? "—"}</li>
+              </ul>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="mt-2 h-7 text-[11px]"
+                onClick={() => push.refreshActiveDevices()}
+              >
+                Releer backend
+              </Button>
+            </details>
+          )}
         </CardContent>
       </Card>
 

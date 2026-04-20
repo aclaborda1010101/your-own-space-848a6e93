@@ -19,7 +19,7 @@ import { toast } from "sonner";
 export function NativeNotificationSettings() {
   const { user } = useAuth();
   const push = useNativePushNotifications();
-  const { prefs, loading, saving, update } = useNotificationPreferences();
+  const { prefs, loading, saving, error: prefsError, update, reload } = useNotificationPreferences();
   const isNative = Capacitor.isNativePlatform();
 
   const sendTest = async () => {
@@ -114,8 +114,29 @@ export function NativeNotificationSettings() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-8">
+      <div className="flex flex-col items-center justify-center py-8 gap-3">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        <p className="text-xs text-muted-foreground">Cargando preferencias…</p>
+        <Button variant="ghost" size="sm" onClick={() => reload()}>
+          Reintentar
+        </Button>
+      </div>
+    );
+  }
+
+  if (prefsError && !prefs) {
+    return (
+      <div className="flex flex-col items-start gap-3 p-4 rounded-md border border-destructive/30 bg-destructive/5">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
+          <div className="text-sm">
+            <p className="font-medium text-destructive">No se pudieron cargar las preferencias</p>
+            <p className="text-xs text-muted-foreground mt-1 break-all">{prefsError}</p>
+          </div>
+        </div>
+        <Button size="sm" variant="outline" onClick={() => reload()}>
+          Reintentar
+        </Button>
       </div>
     );
   }

@@ -6,11 +6,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Manual "refresh ALL" — invoked from the UI button.
-// Returns immediately and processes contacts in the background via EdgeRuntime.waitUntil
-// to avoid the 150s edge function timeout.
+// Refresh perfiles de contactos.
+// Modos:
+//   - User-mode: header Authorization: Bearer <user JWT> → procesa solo ese user
+//   - Service-mode: header Authorization: Bearer <SERVICE_ROLE_KEY> y body { mode: "all-users" }
+//     → itera todos los usuarios con red activa (cron diario)
+//
+// SIN cap de 100. Se procesan todos los contactos activos por user en background.
 const DELAY_BETWEEN_MS = 1500;
-const MAX_PER_RUN = 100;
 
 async function processContactsInBackground(
   supabaseUrl: string,
@@ -45,7 +48,7 @@ async function processContactsInBackground(
           .from("people_contacts")
           .update({ updated_at: new Date().toISOString() })
           .eq("id", c.id);
-        console.log(`[refresh-all-bg] ✅ ${c.name} (${refreshed}/${contacts.length})`);
+        console.log(`[refresh-all-bg] ✅ user=${userId} ${c.name} (${refreshed}/${contacts.length})`);
       } else {
         const t = await resp.text();
         console.error(`[refresh-all-bg] ❌ ${c.name}: ${resp.status} ${t.slice(0, 150)}`);
@@ -65,6 +68,27 @@ async function processContactsInBackground(
   console.log(`[refresh-all-bg] DONE user=${userId} refreshed=${refreshed}/${contacts.length} errors=${errors.length}`);
 }
 
+async function fetchActiveContactsForUser(admin: any, userId: string) {
+  const { data, error } = await admin
+    .from("people_contacts")
+    .select("id, name, personality_profile, updated_at")
+    .eq("user_id", userId)
+    .or("is_favorite.eq.true,in_strategic_network.eq.true")
+    .order("updated_at", { ascending: true, nullsFirst: true });
+  if (error) throw error;
+
+  const hasProfile = (c: any) => c.personality_profile && Object.keys(c.personality_profile).length > 0;
+  const sorted = [...(data || [])].sort((a, b) => {
+    const ap = hasProfile(a) ? 1 : 0;
+    const bp = hasProfile(b) ? 1 : 0;
+    if (ap !== bp) return ap - bp;
+    const at = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+    const bt = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+    return at - bt;
+  });
+  return sorted;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -75,8 +99,56 @@ serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Identify caller from JWT
     const authHeader = req.headers.get("Authorization") || "";
+    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+    const body = await req.json().catch(() => ({}));
+    const isServiceMode = token === serviceRoleKey || body.mode === "all-users";
+
+    const admin = createClient(supabaseUrl, serviceRoleKey) as any;
+
+    // ---- SERVICE MODE: iterar todos los usuarios con red activa ----
+    if (isServiceMode) {
+      const { data: usersWithNet, error: uErr } = await admin
+        .from("people_contacts")
+        .select("user_id")
+        .or("is_favorite.eq.true,in_strategic_network.eq.true");
+      if (uErr) throw uErr;
+
+      const uniqueUsers = Array.from(new Set((usersWithNet || []).map((r: any) => r.user_id)));
+      console.log(`[refresh-all] SERVICE mode: ${uniqueUsers.length} users with active network`);
+
+      let totalQueued = 0;
+      const perUser: Array<{ userId: string; queued: number }> = [];
+
+      for (const uid of uniqueUsers) {
+        try {
+          const contacts = await fetchActiveContactsForUser(admin, uid);
+          if (contacts.length === 0) continue;
+          totalQueued += contacts.length;
+          perUser.push({ userId: uid, queued: contacts.length });
+
+          // @ts-ignore EdgeRuntime exists at runtime
+          EdgeRuntime.waitUntil(
+            processContactsInBackground(supabaseUrl, serviceRoleKey, uid, contacts)
+          );
+        } catch (e) {
+          console.error(`[refresh-all] user ${uid} failed:`, e);
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          mode: "all-users",
+          users: uniqueUsers.length,
+          totalQueued,
+          perUser,
+          background: true,
+        }),
+        { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ---- USER MODE ----
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     }) as any;
@@ -89,63 +161,27 @@ serve(async (req) => {
     }
     const userId = userData.user.id;
 
-    const admin = createClient(supabaseUrl, serviceRoleKey) as any;
+    const contacts = await fetchActiveContactsForUser(admin, userId);
 
-    // PRIORITIZACIÓN: traemos TODOS los favoritos/estratégicos del usuario y
-    // ordenamos en memoria — primero los que no tienen perfil, después los más
-    // antiguos por updated_at. Evitamos el bug de supabase-js donde dos .or()
-    // consecutivos se sobrescriben.
-    const { data: allActive, error: eAll } = await admin
-      .from("people_contacts")
-      .select("id, name, personality_profile, updated_at")
-      .eq("user_id", userId)
-      .or("is_favorite.eq.true,in_strategic_network.eq.true")
-      .order("updated_at", { ascending: true, nullsFirst: true })
-      .limit(MAX_PER_RUN * 2);
-
-    if (eAll) throw eAll;
-
-    const hasProfile = (c: any) => c.personality_profile && Object.keys(c.personality_profile).length > 0;
-    const sorted = [...(allActive || [])].sort((a, b) => {
-      const ap = hasProfile(a) ? 1 : 0;
-      const bp = hasProfile(b) ? 1 : 0;
-      if (ap !== bp) return ap - bp; // sin perfil primero
-      const at = a.updated_at ? new Date(a.updated_at).getTime() : 0;
-      const bt = b.updated_at ? new Date(b.updated_at).getTime() : 0;
-      return at - bt; // más antiguos primero
-    });
-    const noProfile = sorted.filter((c) => !hasProfile(c));
-    const withProfile = sorted.filter(hasProfile);
-
-    const seen = new Set<string>();
-    const merged: Array<{ id: string; name: string; personality_profile: any }> = [];
-    for (const c of [...(noProfile || []), ...(withProfile || [])]) {
-      if (seen.has(c.id)) continue;
-      seen.add(c.id);
-      merged.push(c);
-      if (merged.length >= MAX_PER_RUN) break;
-    }
-
-    if (merged.length === 0) {
+    if (contacts.length === 0) {
       return new Response(
         JSON.stringify({ queued: 0, total: 0, message: "No hay contactos en la red estratégica" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`[refresh-all] User ${userId}: queueing ${merged.length} contacts in background (sin perfil: ${(noProfile || []).length})`);
+    console.log(`[refresh-all] User ${userId}: queueing ALL ${contacts.length} contacts in background`);
 
-    // Fire and forget — runs after response is returned, up to the function's max duration.
-    // @ts-ignore - EdgeRuntime is provided by Supabase Edge runtime
+    // @ts-ignore EdgeRuntime exists at runtime
     EdgeRuntime.waitUntil(
-      processContactsInBackground(supabaseUrl, serviceRoleKey, userId, merged)
+      processContactsInBackground(supabaseUrl, serviceRoleKey, userId, contacts)
     );
 
     return new Response(
       JSON.stringify({
-        queued: merged.length,
-        total: merged.length,
-        message: `Refrescando ${merged.length} contactos en segundo plano. Vuelve en 1-2 minutos.`,
+        queued: contacts.length,
+        total: contacts.length,
+        message: `Refrescando ${contacts.length} contactos en segundo plano. Vuelve en 2-5 minutos.`,
         background: true,
       }),
       { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -1729,9 +1729,24 @@ const DataImport = () => {
   const handlePlaudImport = async () => {
     if (!plaudFile || !user) return;
     setPlaudProcessing(true);
-
     try {
       const text = await plaudFile.text();
+      setPlaudPendingText(text);
+      setPlaudDialogOpen(true);
+      // Pide sugerencia inicial (no bloqueante para abrir el diálogo)
+      plaudSuggestions.fetchSuggestions(plaudFile.name, text.slice(0, 4000));
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al leer el archivo de Plaud");
+    } finally {
+      setPlaudProcessing(false);
+    }
+  };
+
+  const commitPlaudImport = async (confirmation: PlaudImportConfirmation) => {
+    if (!plaudFile || !user) return;
+    try {
+      const text = plaudPendingText || (await plaudFile.text());
       const speakerSet = new Set<string>();
       const lines = text.split("\n");
       for (const line of lines) {
@@ -1751,7 +1766,9 @@ const DataImport = () => {
       const result: ImportResult = {
         type: "plaud",
         fileName: plaudFile.name,
-        summary: `Transcripción Plaud procesada, ${contacts.length} hablantes detectados`,
+        summary: confirmation.associate
+          ? `Plaud importado y asociado (${contacts.length} hablantes detectados)`
+          : `Plaud importado sin asociar (${contacts.length} hablantes detectados)`,
         contacts,
         transcription: text,
         processing: false,
@@ -1759,15 +1776,38 @@ const DataImport = () => {
       };
 
       setResults((prev) => [result, ...prev]);
+
+      // Persistir las asociaciones confirmadas en plaud_transcriptions si las hay
+      if (confirmation.associate && (confirmation.projectId || confirmation.contactIds.length)) {
+        const update: Record<string, any> = { context_type: confirmation.contextType };
+        if (confirmation.projectId) update.linked_project_id = confirmation.projectId;
+        if (confirmation.contactIds.length) update.linked_contact_ids = confirmation.contactIds;
+
+        const { error: insErr } = await (supabase as any).from("plaud_transcriptions").insert({
+          user_id: user.id,
+          title: plaudFile.name,
+          transcript_raw: text,
+          processing_status: "completed",
+          recording_date: new Date().toISOString(),
+          ...update,
+        });
+        if (insErr) console.warn("[plaud import] insert con asociaciones:", insErr.message);
+      }
+
       setPlaudFile(null);
-      toast.success("Transcripción Plaud importada");
+      setPlaudPendingText("");
+      plaudSuggestions.reset();
+      toast.success(
+        confirmation.associate
+          ? "Transcripción Plaud importada con asociaciones"
+          : "Transcripción Plaud importada sin asociar",
+      );
     } catch (err) {
       console.error(err);
       toast.error("Error al procesar el archivo de Plaud");
-    } finally {
-      setPlaudProcessing(false);
     }
   };
+
 
   // ---- Contact Review ----
   const updateContactName = (resultIdx: number, contactIdx: number, newName: string) => {

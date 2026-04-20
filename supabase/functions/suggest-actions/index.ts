@@ -42,8 +42,31 @@ serve(async (req) => {
     const hour = now.getHours()
     const dayOfWeek = now.toLocaleDateString('es-ES', { weekday: 'long' })
 
-    // Fetch user context
-    const [tasksData, eventsData, habitsData] = await Promise.all([
+    // Fetch user context — calendar comes from iCloud (no existe tabla calendar_events)
+    const fetchICloudNext24h = async (): Promise<any[]> => {
+      try {
+        const startISO = now.toISOString();
+        const endISO = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+        const icResp = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/icloud-calendar`, {
+          method: "POST",
+          headers: {
+            "Authorization": authHeader,
+            "Content-Type": "application/json",
+            "apikey": Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+          },
+          body: JSON.stringify({ action: "fetch", startDate: startISO, endDate: endISO }),
+        });
+        if (!icResp.ok) return [];
+        const icData = await icResp.json();
+        if (icData?.connected === false) return [];
+        return Array.isArray(icData?.events) ? icData.events : [];
+      } catch (err) {
+        console.error("[suggest-actions] icloud fetch failed", err);
+        return [];
+      }
+    };
+
+    const [tasksData, eventsRaw, habitsData] = await Promise.all([
       supabase
         .from('tasks')
         .select('*')
@@ -51,16 +74,9 @@ serve(async (req) => {
         .eq('completed', false)
         .order('priority', { ascending: false })
         .limit(5),
-      
-      supabase
-        .from('calendar_events')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('start_time', now.toISOString())
-        .lte('start_time', new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString())
-        .order('start_time', { ascending: true })
-        .limit(3),
-      
+
+      fetchICloudNext24h(),
+
       supabase
         .from('habits')
         .select('*')

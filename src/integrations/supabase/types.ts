@@ -2431,6 +2431,42 @@ export type Database = {
           },
         ]
       }
+      contact_headline_dismissals: {
+        Row: {
+          contact_id: string
+          created_at: string
+          decided_at: string
+          decision: string
+          expires_at: string | null
+          id: string
+          original_title: string
+          signature: string
+          user_id: string
+        }
+        Insert: {
+          contact_id: string
+          created_at?: string
+          decided_at?: string
+          decision?: string
+          expires_at?: string | null
+          id?: string
+          original_title: string
+          signature: string
+          user_id: string
+        }
+        Update: {
+          contact_id?: string
+          created_at?: string
+          decided_at?: string
+          decision?: string
+          expires_at?: string | null
+          id?: string
+          original_title?: string
+          signature?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       contact_headlines: {
         Row: {
           contact_id: string

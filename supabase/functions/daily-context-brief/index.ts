@@ -224,6 +224,10 @@ Deno.serve(async (req) => {
   "plaud_context": "Si hay algo relevante en grabaciones Plaud recientes que conecte con mañana, 1 frase. Si no, cadena vacía.",
   "closing_note": "Frase final motivadora o de aviso (≤80 chars)"
 }
+REGLAS DE INTEGRIDAD (CRÍTICO):
+- Si el bloque de calendario contiene "Sin datos de calendario disponibles", NO afirmes que el día está libre. En "calendar_summary" escribe literalmente: "No he podido confirmar tu agenda con iCloud — revisa la conexión en Ajustes." Y en "headline" no digas "tranquilo" ni "libre".
+- Solo puedes describir mañana como "tranquilo" / "libre" / "sin reuniones" si el bloque dice EXPLÍCITAMENTE "Sin eventos en el calendario para mañana".
+- Si hay reuniones, menciona cuántas son y la hora de la primera en "calendar_summary".
 Devuelve SOLO el JSON, sin markdown ni texto extra.`;
       userPrompt = `FECHA MAÑANA: ${tomorrowStr}\n\n${calendarBlock}\n\n${tasksBlock}\n\nESTADO FÍSICO ACTUAL:\n${whoopBlock}\n${trendBlock}\n\n${plaudBlock}\n\nGenera el brief de mañana en JSON.`;
     }

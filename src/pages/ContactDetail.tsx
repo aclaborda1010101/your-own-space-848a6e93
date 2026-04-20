@@ -320,13 +320,13 @@ export default function ContactDetail() {
               <Button
                 variant="outline"
                 size="sm"
-                className="rounded-full border-primary/40 text-primary hover:bg-primary/10"
+                className="rounded-full"
                 onClick={refreshProfile}
                 disabled={refreshingProfile}
-                title="Reanaliza el perfil completo de esta persona"
+                title="Reanaliza el perfil con los últimos WhatsApp y emails"
               >
                 <RefreshCw className={`w-4 h-4 mr-2 ${refreshingProfile ? "animate-spin" : ""}`} />
-                {refreshingProfile ? "Analizando…" : "Actualizar perfil"}
+                {refreshingProfile ? "Analizando…" : "Actualizar"}
               </Button>
             </div>
           </div>

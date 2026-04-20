@@ -42,8 +42,31 @@ serve(async (req) => {
     const hour = now.getHours()
     const dayOfWeek = now.toLocaleDateString('es-ES', { weekday: 'long' })
 
-    // Fetch user context
-    const [tasksData, eventsData, habitsData] = await Promise.all([
+    // Fetch user context — calendar comes from iCloud (no existe tabla calendar_events)
+    const fetchICloudNext24h = async (): Promise<any[]> => {
+      try {
+        const startISO = now.toISOString();
+        const endISO = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+        const icResp = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/icloud-calendar`, {
+          method: "POST",
+          headers: {
+            "Authorization": authHeader,
+            "Content-Type": "application/json",
+            "apikey": Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+          },
+          body: JSON.stringify({ action: "fetch", startDate: startISO, endDate: endISO }),
+        });
+        if (!icResp.ok) return [];
+        const icData = await icResp.json();
+        if (icData?.connected === false) return [];
+        return Array.isArray(icData?.events) ? icData.events : [];
+      } catch (err) {
+        console.error("[suggest-actions] icloud fetch failed", err);
+        return [];
+      }
+    };
+
+    const [tasksData, eventsRaw, habitsData] = await Promise.all([
       supabase
         .from('tasks')
         .select('*')
@@ -51,16 +74,9 @@ serve(async (req) => {
         .eq('completed', false)
         .order('priority', { ascending: false })
         .limit(5),
-      
-      supabase
-        .from('calendar_events')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('start_time', now.toISOString())
-        .lte('start_time', new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString())
-        .order('start_time', { ascending: true })
-        .limit(3),
-      
+
+      fetchICloudNext24h(),
+
       supabase
         .from('habits')
         .select('*')
@@ -69,7 +85,19 @@ serve(async (req) => {
     ])
 
     const tasks = tasksData.data || []
-    const events = eventsData.data || []
+    // iCloud events: { id, title, date: 'YYYY-MM-DD', time: 'HH:MM', duration, location, allDay }
+    const eventsRawArr: any[] = Array.isArray(eventsRaw) ? eventsRaw : []
+    const toEventDate = (e: any): Date | null => {
+      if (!e?.date) return null
+      const t = (typeof e.time === 'string' && /^\d{2}:\d{2}/.test(e.time)) ? e.time.slice(0, 5) : '00:00'
+      const d = new Date(`${e.date}T${t}:00`)
+      return isNaN(d.getTime()) ? null : d
+    }
+    const events = eventsRawArr
+      .filter(e => !e?.allDay)
+      .map(e => ({ ...e, _start: toEventDate(e) }))
+      .filter(e => e._start)
+      .sort((a: any, b: any) => a._start.getTime() - b._start.getTime())
     const habits = habitsData.data || []
 
     // Generate suggestions based on time and context
@@ -81,8 +109,8 @@ serve(async (req) => {
         suggestions.push(`☀️ Buenos días! Hora de tus hábitos matutinos: ${habits.slice(0, 2).map(h => h.name).join(', ')}`)
       }
       if (events.length > 0) {
-        const nextEvent = events[0]
-        const eventTime = new Date(nextEvent.start_time)
+        const nextEvent: any = events[0]
+        const eventTime: Date = nextEvent._start
         suggestions.push(`📅 Hoy tienes "${nextEvent.title}" a las ${eventTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`)
       }
     }
@@ -95,10 +123,10 @@ serve(async (req) => {
           suggestions.push(`🎯 Tienes ${highPriority.length} tareas de alta prioridad pendientes`)
         }
       }
-      
-      const nextEvent = events.find(e => new Date(e.start_time) > now)
+
+      const nextEvent: any = events.find((e: any) => e._start > now)
       if (nextEvent) {
-        const timeUntil = new Date(nextEvent.start_time).getTime() - now.getTime()
+        const timeUntil = (nextEvent._start as Date).getTime() - now.getTime()
         const hoursUntil = Math.floor(timeUntil / (1000 * 60 * 60))
         if (hoursUntil <= 1) {
           suggestions.push(`⏰ Tienes "${nextEvent.title}" en ${hoursUntil === 0 ? 'menos de 1 hora' : '1 hora'}`)

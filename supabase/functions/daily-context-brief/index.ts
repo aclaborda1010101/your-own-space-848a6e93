@@ -72,17 +72,38 @@ Deno.serve(async (req) => {
     tomorrowDate.setDate(tomorrowDate.getDate() + 1);
     const tomorrowStr = tomorrowDate.toISOString().slice(0, 10);
 
-    // Gather context (Whoop, tasks, meals, calendar for tomorrow, recent plaud)
+    // Gather context — calendar comes from iCloud (CalDAV) via icloud-calendar edge function.
+    // No existe tabla `calendar_events`; el calendario real está en iCloud del usuario.
+    const fetchTomorrowFromICloud = async (): Promise<{ events: any[]; status: "ok" | "disconnected" | "error" }> => {
+      try {
+        const startISO = `${tomorrowStr}T00:00:00.000Z`;
+        const endISO = `${tomorrowStr}T23:59:59.999Z`;
+        const icResp = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/icloud-calendar`, {
+          method: "POST",
+          headers: {
+            "Authorization": authHeader,
+            "Content-Type": "application/json",
+            "apikey": Deno.env.get("SUPABASE_ANON_KEY")!,
+          },
+          body: JSON.stringify({ action: "fetch", startDate: startISO, endDate: endISO }),
+        });
+        if (!icResp.ok) {
+          console.error("[daily-context-brief] icloud-calendar status", icResp.status);
+          return { events: [], status: "error" };
+        }
+        const icData = await icResp.json();
+        if (icData?.connected === false) return { events: [], status: "disconnected" };
+        return { events: Array.isArray(icData?.events) ? icData.events : [], status: "ok" };
+      } catch (err) {
+        console.error("[daily-context-brief] icloud fetch failed", err);
+        return { events: [], status: "error" };
+      }
+    };
+
     const calendarFetch =
       scope === "tomorrow"
-        ? sb.from("calendar_events")
-            .select("title, start_time, end_time, location")
-            .eq("user_id", user.id)
-            .gte("start_time", `${tomorrowStr}T00:00:00`)
-            .lte("start_time", `${tomorrowStr}T23:59:59`)
-            .order("start_time", { ascending: true })
-            .limit(15)
-        : Promise.resolve({ data: [] as any[] });
+        ? fetchTomorrowFromICloud()
+        : Promise.resolve({ events: [] as any[], status: "ok" as const });
 
     const plaudFetch =
       scope === "tomorrow"
@@ -120,7 +141,12 @@ Deno.serve(async (req) => {
     const tasks = tasksRes.data || [];
     const meals = mealsRes.data || [];
     const prefs = prefsRes.data;
-    const calEvents = (calRes as any).data || [];
+    const calResult = calRes as { events: any[]; status: "ok" | "disconnected" | "error" };
+    const calEventsAll = Array.isArray((calResult as any).events) ? calResult.events : [];
+    // Filtrar all-day para no contarlos como reuniones reales
+    const calEvents = calEventsAll.filter((e: any) => !e?.allDay);
+    const calAllDay = calEventsAll.filter((e: any) => e?.allDay);
+    const calStatus = (calResult as any).status || "ok";
     const plaud = (plaudRes as any).data || [];
 
     const whoopBlock = latestWhoop
@@ -146,9 +172,32 @@ Deno.serve(async (req) => {
       ? `Dieta: ${prefs.diet_type || "balanceada"}, objetivo: ${prefs.goals || "salud"}, target: ${prefs.calories_target}kcal/${prefs.proteins_target}P/${prefs.carbs_target}C/${prefs.fats_target}G, restricciones: ${(prefs.restrictions || []).join(", ") || "ninguna"}, alergias: ${(prefs.allergies || []).join(", ") || "ninguna"}`
       : "Sin preferencias nutricionales configuradas";
 
-    const calendarBlock = calEvents.length > 0
-      ? `Eventos mañana (${calEvents.length}): ${calEvents.map((e: any) => `${new Date(e.start_time).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} ${e.title}${e.location ? ` @ ${e.location}` : ""}`).join("; ")}`
-      : "Sin eventos en el calendario para mañana";
+    const formatEventTime = (e: any) => {
+      // iCloud-calendar devuelve { time: "HH:MM" } ya formateado en TZ del usuario
+      if (e?.time && typeof e.time === "string") return e.time;
+      if (e?.start_time) {
+        try { return new Date(e.start_time).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
+      }
+      return "";
+    };
+
+    let calendarBlock: string;
+    if (calStatus === "disconnected") {
+      calendarBlock = "Sin datos de calendario disponibles (iCloud no conectado)";
+    } else if (calStatus === "error") {
+      calendarBlock = "Sin datos de calendario disponibles (no he podido confirmar con iCloud)";
+    } else if (calEvents.length === 0 && calAllDay.length === 0) {
+      calendarBlock = "Sin eventos en el calendario para mañana";
+    } else {
+      const parts: string[] = [];
+      if (calEvents.length > 0) {
+        parts.push(`Reuniones mañana (${calEvents.length}): ${calEvents.map((e: any) => `${formatEventTime(e)} ${e.title || "(sin título)"}${e.location ? ` @ ${e.location}` : ""}`).join("; ")}`);
+      }
+      if (calAllDay.length > 0) {
+        parts.push(`Eventos todo el día: ${calAllDay.map((e: any) => e.title || "(sin título)").join(", ")}`);
+      }
+      calendarBlock = parts.join(" | ");
+    }
 
     const plaudBlock = plaud.length > 0
       ? `Últimas grabaciones Plaud: ${plaud.slice(0, 3).map((p: any) => `"${p.title || "sin título"}"${p.summary ? `: ${String(p.summary).slice(0, 120)}` : ""}`).join(" | ")}`
@@ -175,6 +224,10 @@ Deno.serve(async (req) => {
   "plaud_context": "Si hay algo relevante en grabaciones Plaud recientes que conecte con mañana, 1 frase. Si no, cadena vacía.",
   "closing_note": "Frase final motivadora o de aviso (≤80 chars)"
 }
+REGLAS DE INTEGRIDAD (CRÍTICO):
+- Si el bloque de calendario contiene "Sin datos de calendario disponibles", NO afirmes que el día está libre. En "calendar_summary" escribe literalmente: "No he podido confirmar tu agenda con iCloud — revisa la conexión en Ajustes." Y en "headline" no digas "tranquilo" ni "libre".
+- Solo puedes describir mañana como "tranquilo" / "libre" / "sin reuniones" si el bloque dice EXPLÍCITAMENTE "Sin eventos en el calendario para mañana".
+- Si hay reuniones, menciona cuántas son y la hora de la primera en "calendar_summary".
 Devuelve SOLO el JSON, sin markdown ni texto extra.`;
       userPrompt = `FECHA MAÑANA: ${tomorrowStr}\n\n${calendarBlock}\n\n${tasksBlock}\n\nESTADO FÍSICO ACTUAL:\n${whoopBlock}\n${trendBlock}\n\n${plaudBlock}\n\nGenera el brief de mañana en JSON.`;
     }
@@ -212,6 +265,8 @@ Devuelve SOLO el JSON, sin markdown ni texto extra.`;
       tasks_count: tasks.length,
       meals_count: meals.length,
       cal_count: calEvents.length,
+      cal_allday_count: calAllDay.length,
+      cal_status: calStatus,
       plaud_count: plaud.length,
       has_prefs: !!prefs,
     };

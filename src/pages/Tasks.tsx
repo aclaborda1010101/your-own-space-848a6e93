@@ -29,6 +29,7 @@ import {
   Sparkles,
   Flame,
   CalendarCheck,
+  ChevronDown,
 } from "lucide-react";
 import { PageHero } from "@/components/ui/PageHero";
 import { cn } from "@/lib/utils";

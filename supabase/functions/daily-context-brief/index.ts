@@ -141,7 +141,12 @@ Deno.serve(async (req) => {
     const tasks = tasksRes.data || [];
     const meals = mealsRes.data || [];
     const prefs = prefsRes.data;
-    const calEvents = (calRes as any).data || [];
+    const calResult = calRes as { events: any[]; status: "ok" | "disconnected" | "error" };
+    const calEventsAll = Array.isArray((calResult as any).events) ? calResult.events : [];
+    // Filtrar all-day para no contarlos como reuniones reales
+    const calEvents = calEventsAll.filter((e: any) => !e?.allDay);
+    const calAllDay = calEventsAll.filter((e: any) => e?.allDay);
+    const calStatus = (calResult as any).status || "ok";
     const plaud = (plaudRes as any).data || [];
 
     const whoopBlock = latestWhoop

@@ -11,6 +11,41 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** Best-effort cleanup of all auth-adjacent local state. Never throws. */
+function purgeLocalAuthArtifacts() {
+  try {
+    // Google provider tokens (cached for Calendar API)
+    localStorage.removeItem("google_provider_token");
+    localStorage.removeItem("google_provider_refresh_token");
+    localStorage.removeItem("google_token_expires_at");
+  } catch { /* ignore */ }
+
+  // Wipe any sb-* auth tokens that supabase-js may have left behind
+  try {
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (k.startsWith("sb-") && k.includes("-auth-token")) toRemove.push(k);
+    }
+    toRemove.forEach((k) => {
+      try { localStorage.removeItem(k); } catch { /* ignore */ }
+    });
+  } catch { /* ignore */ }
+
+  try {
+    const toRemove: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (!k) continue;
+      if (k.startsWith("sb-") && k.includes("-auth-token")) toRemove.push(k);
+    }
+    toRemove.forEach((k) => {
+      try { sessionStorage.removeItem(k); } catch { /* ignore */ }
+    });
+  } catch { /* ignore */ }
+}
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -83,10 +118,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const signOut = async () => {
-    try { await supabase.auth.signOut(); }
-    catch (error) { console.warn("[JARVIS Auth] SignOut error:", error); }
+    console.log("[JARVIS Auth] signOut() invoked");
+
+    // 1) Best-effort: tell Supabase to invalidate the refresh token (global = all sessions).
+    //    Wrap in a 4s timeout so a hanging network call never blocks logout on iOS.
+    try {
+      await Promise.race([
+        supabase.auth.signOut({ scope: "global" }),
+        new Promise((resolve) => setTimeout(resolve, 4000)),
+      ]);
+    } catch (error) {
+      console.warn("[JARVIS Auth] supabase.signOut error (ignored):", error);
+    }
+
+    // 2) Hard-clear local state so the UI cannot stay stuck on the authenticated tree.
     setUser(null);
     setSession(null);
+
+    // 3) Purge any cached tokens (sb-*-auth-token, google_provider_*).
+    purgeLocalAuthArtifacts();
+
+    // 4) Hard redirect — guarantees React Query caches and any in-flight requests
+    //    are dropped, even if a route guard somehow fails to react.
+    try {
+      window.location.replace("/login");
+    } catch {
+      try { window.location.href = "/login"; } catch { /* ignore */ }
+    }
   };
 
   const value = { user, session, loading, signOut };

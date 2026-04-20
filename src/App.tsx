@@ -150,6 +150,7 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <AuthProvider>
+              <NativePushProvider>
               <OAuthMessageBridge />
               <Suspense fallback={<PageLoader />}>
                 <Routes>

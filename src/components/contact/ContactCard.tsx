@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { HealthMetricRing } from "@/components/health/HealthMetricRing";
 
 interface ContactCardData {
   id: string;
@@ -59,23 +60,15 @@ const CATEGORY_META: Record<
   familiar: { icon: Users, label: "Familia", cls: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
 };
 
-/** Devuelve clases tonales según rango del score (mismo lenguaje que los KPIs). */
-function scoreTone(score: number) {
-  if (score >= 7) return {
-    box: "bg-success/15 border-success/40 text-success shadow-[0_0_20px_-6px_hsl(var(--success)/0.5)]",
-    border: "hover:border-success/40",
-    label: "Sana",
-  };
-  if (score >= 4) return {
-    box: "bg-warning/15 border-warning/40 text-warning shadow-[0_0_20px_-6px_hsl(var(--warning)/0.5)]",
-    border: "hover:border-warning/40",
-    label: "Atención",
-  };
-  return {
-    box: "bg-destructive/15 border-destructive/40 text-destructive shadow-[0_0_20px_-6px_hsl(var(--destructive)/0.5)]",
-    border: "hover:border-destructive/40",
-    label: "Crítica",
-  };
+/** Devuelve tono semántico según rango del score (mismo lenguaje que los KPIs). */
+function scoreTone(score: number): {
+  ringTone: "success" | "warning" | "destructive";
+  border: string;
+  label: string;
+} {
+  if (score >= 7) return { ringTone: "success", border: "hover:border-success/40", label: "Sana" };
+  if (score >= 4) return { ringTone: "warning", border: "hover:border-warning/40", label: "Atención" };
+  return { ringTone: "destructive", border: "hover:border-destructive/40", label: "Crítica" };
 }
 
 export function ContactCard({ contact, onClick, onRemove }: ContactCardProps) {
@@ -183,16 +176,17 @@ export function ContactCard({ contact, onClick, onRemove }: ContactCardProps) {
           </div>
         </div>
 
-        {/* Score grande tipo KPI */}
+        {/* Anillo de salud con gradient + glow (mismo lenguaje que el detalle) */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <div
-              className={cn(
-                "shrink-0 w-14 h-14 rounded-2xl border flex items-center justify-center font-display font-semibold text-3xl leading-none",
-                tone.box,
-              )}
-            >
-              {score}
+            <div className="shrink-0">
+              <HealthMetricRing
+                percent={score * 10}
+                value={String(score)}
+                label=""
+                tone={tone.ringTone}
+                size="sm"
+              />
             </div>
           </TooltipTrigger>
           <TooltipContent side="left" className="max-w-[220px] text-xs">

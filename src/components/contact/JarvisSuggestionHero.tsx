@@ -1,7 +1,7 @@
 import * as React from "react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Clock, ChevronRight } from "lucide-react";
+import { Sparkles, Clock, ChevronRight, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface JarvisSuggestionHeroProps {
@@ -25,6 +25,10 @@ interface JarvisSuggestionHeroProps {
   /** Acción secundaria */
   onEvidence?: () => void;
   evidenceLabel?: string;
+  /** Marcar como ya hecho — quita el asunto y JARVIS no insiste */
+  onMarkDone?: () => void;
+  /** Marcar como no aplica / descartar — JARVIS no lo vuelve a proponer */
+  onMarkDismissed?: () => void;
   /** Acción terciaria (descartar) */
   onDismiss?: () => void;
 }
@@ -46,6 +50,8 @@ export function JarvisSuggestionHero({
   acceptLabel = "Aceptar y agendar",
   onEvidence,
   evidenceLabel = "Ver evidencia",
+  onMarkDone,
+  onMarkDismissed,
   onDismiss,
 }: JarvisSuggestionHeroProps) {
   const ringColor =
@@ -124,6 +130,28 @@ export function JarvisSuggestionHero({
               >
                 {evidenceLabel}
                 <ChevronRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
+            )}
+            {onMarkDone && (
+              <Button
+                onClick={onMarkDone}
+                variant="outline"
+                className="rounded-full border-success/40 text-success hover:bg-success/10 hover:text-success"
+                title="Ya está hecho — JARVIS no insistirá con este asunto"
+              >
+                <Check className="w-3.5 h-3.5 mr-1" />
+                Ya está hecho
+              </Button>
+            )}
+            {onMarkDismissed && (
+              <Button
+                onClick={onMarkDismissed}
+                variant="ghost"
+                className="rounded-full text-muted-foreground hover:text-destructive"
+                title="No aplica — descartar este asunto"
+              >
+                <X className="w-3.5 h-3.5 mr-1" />
+                No aplica
               </Button>
             )}
             {onDismiss && (

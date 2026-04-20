@@ -265,7 +265,10 @@ export default function RedEstrategica() {
       const all: Row[] = [];
       let from = 0;
       const STEP = 1000;
-      while (true) {
+      // Cap defensivo para evitar bucles infinitos si algo va mal en la paginación.
+      const MAX_PAGES = 20;
+      let pages = 0;
+      while (pages < MAX_PAGES) {
         const { data, error } = await supabase
           .from("people_contacts")
           .select(
@@ -280,15 +283,27 @@ export default function RedEstrategica() {
         all.push(...(data as Row[]));
         if (data.length < STEP) break;
         from += STEP;
+        pages++;
       }
       setRows(all);
 
-      const { data: pods } = await supabase
-        .from("contact_podcasts")
-        .select("contact_id, total_segments")
-        .eq("user_id", user!.id)
-        .gt("total_segments", 0);
-      setPodcastIds(new Set((pods || []).map((p) => p.contact_id)));
+      try {
+        const { data: pods } = await supabase
+          .from("contact_podcasts")
+          .select("contact_id, total_segments")
+          .eq("user_id", user!.id)
+          .gt("total_segments", 0);
+        setPodcastIds(new Set((pods || []).map((p) => p.contact_id)));
+      } catch (e) {
+        console.warn("[RedEstrategica] podcasts load failed:", e);
+        setPodcastIds(new Set());
+      }
+    } catch (e) {
+      console.error("[RedEstrategica] load failed:", e);
+      toast.error("No se pudo cargar la red", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+      setRows([]);
     } finally {
       setLoading(false);
     }

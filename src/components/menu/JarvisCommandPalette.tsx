@@ -50,7 +50,6 @@ const NAV_ITEMS = [
   { icon: ShieldCheck, label: "Auditoría IA", path: "/auditoria-ia", group: "Proyectos" },
   { icon: Upload, label: "Importar", path: "/data-import", group: "Datos" },
   { icon: ContactRound, label: "Red Estratégica", path: "/red-estrategica", group: "Datos" },
-  { icon: Mic, label: "Comunicaciones", path: "/communications", group: "Datos" },
   { icon: Newspaper, label: "Noticias IA", path: "/ai-news", group: "Módulos" },
   { icon: UtensilsCrossed, label: "Nutrición", path: "/nutrition", group: "Módulos" },
   { icon: Wallet, label: "Finanzas", path: "/finances", group: "Módulos" },

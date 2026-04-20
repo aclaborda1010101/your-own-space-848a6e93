@@ -169,10 +169,18 @@ export function NativeNotificationSettings() {
             </div>
           )}
 
+          {isNative && renderDeviceStatus()}
+
           {push.token && (
             <div className="text-xs text-muted-foreground">
               <span className="opacity-60">Token APNs:</span>{" "}
               <code className="font-mono">{push.token.slice(0, 16)}…{push.token.slice(-6)}</code>
+            </div>
+          )}
+
+          {push.error && (
+            <div className="text-xs text-destructive">
+              <span className="opacity-80">Error:</span> {push.error}
             </div>
           )}
 

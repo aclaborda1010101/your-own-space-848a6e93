@@ -446,15 +446,23 @@ Devuelve análisis con esta forma exacta llamando a la función emit_headlines.`
                     properties: {
                       title: {
                         type: "string",
-                        description: "Asunto pendiente concreto, sin fechas relativas ambiguas; si hay fecha, usar fecha absoluta o frase neutra.",
+                        description: "Asunto pendiente VIVO (futuro o sin cerrar). Si el único asunto es un evento ya pasado, devuelve 'Sin asunto vivo'. Sin fechas relativas ambiguas; si hay fecha, fecha absoluta.",
                       },
                       who_owes: {
                         type: "string",
-                        description: '"tú", "él/ella" o "nadie"',
+                        description: '"tú", "él/ella" o "nadie". Si no hay asunto vivo, "nadie".',
                       },
                       last_mentioned: {
                         type: "string",
                         description: 'Fecha breve absoluta, ej: "mencionado el 12 abr 2026". Nunca usar "ayer", "mañana" o "el sábado".',
+                      },
+                      is_event: {
+                        type: "boolean",
+                        description: "true SOLO si el asunto es un evento puntual con fecha futura o sin fecha cerrada. false si el evento ya pasó o no es un evento.",
+                      },
+                      event_date: {
+                        type: "string",
+                        description: "Si is_event=true y conoces la fecha, formato ISO YYYY-MM-DD. Si no aplica, cadena vacía.",
                       },
                     },
                     required: ["title", "who_owes", "last_mentioned"],

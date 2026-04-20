@@ -469,7 +469,7 @@ export default function ContactDetail() {
                 <HeadlineCard
                   label="Asunto pendiente"
                   icon={<AlertCircle className="w-4 h-4" />}
-                  accent={headlines.pending.freshness_status === "expired" ? "default" : "warning"}
+                  accent={headlines.pending.freshness_status === "expired" ? "primary" : "warning"}
                   value={
                     <span>
                       {headlines.pending.freshness_status === "expired" && (

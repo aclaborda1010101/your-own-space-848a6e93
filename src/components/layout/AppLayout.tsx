@@ -38,7 +38,7 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
         !isWizardPage && (sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")
       )}>
         {!isWizardPage && (
-          <div className="hidden md:block">
+          <div className="hidden lg:block">
             <TopBar onMenuClick={openSidebar} />
           </div>
         )}

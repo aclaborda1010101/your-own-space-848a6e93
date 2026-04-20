@@ -1,0 +1,472 @@
+// JARVIS History Ingest
+// Modes:
+//  - single: process one specific source row (called by webhooks)
+//  - backfill: pull N pending rows of given source_type and process
+
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY")!;
+const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
+
+const sb = createClient(SUPABASE_URL, SERVICE_KEY);
+
+// ─────────────────────────────────────────────────────────
+// Embedding (OpenAI text-embedding-3-small @ 1024 dims)
+// ─────────────────────────────────────────────────────────
+async function embed(text: string): Promise<number[] | null> {
+  const truncated = text.slice(0, 32000);
+  if (!truncated.trim()) return null;
+  try {
+    const r = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: truncated,
+        dimensions: 1024,
+      }),
+    });
+    if (!r.ok) {
+      console.warn("[ingest] embed failed:", r.status, await r.text());
+      return null;
+    }
+    const j = await r.json();
+    return j.data?.[0]?.embedding ?? null;
+  } catch (e) {
+    console.warn("[ingest] embed exception:", e);
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Topic & summary extraction (Lovable AI Gateway / gemini-flash)
+// One call per chunk, JSON-only
+// ─────────────────────────────────────────────────────────
+async function extractMeta(content: string): Promise<{ summary: string; topics: string[]; importance: number }> {
+  const fallback = {
+    summary: content.slice(0, 200),
+    topics: [],
+    importance: 5,
+  };
+  try {
+    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [
+          {
+            role: "system",
+            content:
+              "Extract metadata from text. Reply ONLY JSON: {\"summary\":\"1-2 sentences max 200 chars\",\"topics\":[\"tag1\",\"tag2\"],\"importance\":1-10}. Topics in lowercase Spanish, max 5. Importance: 1=trivial, 5=normal, 8=important, 10=critical.",
+          },
+          { role: "user", content: content.slice(0, 4000) },
+        ],
+        temperature: 0.3,
+      }),
+    });
+    if (!r.ok) return fallback;
+    const j = await r.json();
+    const raw = j.choices?.[0]?.message?.content?.trim() ?? "";
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+    const parsed = JSON.parse(cleaned);
+    return {
+      summary: String(parsed.summary || fallback.summary).slice(0, 300),
+      topics: Array.isArray(parsed.topics) ? parsed.topics.map(String).slice(0, 5) : [],
+      importance: Math.min(10, Math.max(1, Number(parsed.importance) || 5)),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Chunking — token-approx ≈ 4 chars
+// ─────────────────────────────────────────────────────────
+function chunkText(text: string, targetChars = 3500, overlapChars = 400): string[] {
+  const t = (text || "").trim();
+  if (!t) return [];
+  if (t.length <= targetChars) return [t];
+
+  const chunks: string[] = [];
+  let i = 0;
+  while (i < t.length) {
+    const end = Math.min(i + targetChars, t.length);
+    let slice = t.slice(i, end);
+    // try to break on sentence
+    if (end < t.length) {
+      const lastPeriod = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("\n"));
+      if (lastPeriod > targetChars * 0.5) slice = slice.slice(0, lastPeriod + 1);
+    }
+    chunks.push(slice.trim());
+    i += slice.length - overlapChars;
+    if (i <= 0) i = end;
+  }
+  return chunks.filter(Boolean);
+}
+
+async function sha256(text: string): Promise<string> {
+  const buf = new TextEncoder().encode(text);
+  const hash = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+// ─────────────────────────────────────────────────────────
+// Source loaders — given source_table + source_id, returns content + metadata
+// ─────────────────────────────────────────────────────────
+interface LoadedSource {
+  content: string;
+  occurred_at: string;
+  people: string[];
+  metadata: Record<string, unknown>;
+  user_id: string;
+}
+
+async function loadSource(
+  source_table: string,
+  source_id: string,
+  user_id_hint?: string,
+): Promise<LoadedSource | null> {
+  switch (source_table) {
+    case "contact_messages": {
+      const { data: msg } = await sb
+        .from("contact_messages")
+        .select("id, contact_id, message_text, message_type, sent_at, direction, media_url")
+        .eq("id", source_id)
+        .single();
+      if (!msg || !msg.message_text) return null;
+      const { data: contact } = await sb
+        .from("people_contacts")
+        .select("id, name, user_id")
+        .eq("id", msg.contact_id)
+        .single();
+      if (!contact) return null;
+      return {
+        content: `[WhatsApp ${msg.direction === "out" ? "→" : "←"} ${contact.name}] ${msg.message_text}`,
+        occurred_at: msg.sent_at || new Date().toISOString(),
+        people: [contact.id],
+        metadata: { contact_name: contact.name, message_type: msg.message_type, direction: msg.direction },
+        user_id: contact.user_id,
+      };
+    }
+    case "jarvis_emails_cache": {
+      const { data: email } = await sb
+        .from("jarvis_emails_cache")
+        .select("id, user_id, from_addr, to_addrs, subject, body_text, preview, synced_at, received_at")
+        .eq("id", source_id)
+        .single();
+      if (!email) return null;
+      const body = email.body_text || email.preview || "";
+      if (!body.trim()) return null;
+      return {
+        content: `[Email de ${email.from_addr}] ${email.subject || "(sin asunto)"}\n\n${body}`,
+        occurred_at: email.received_at || email.synced_at || new Date().toISOString(),
+        people: [],
+        metadata: { from: email.from_addr, to: email.to_addrs, subject: email.subject },
+        user_id: email.user_id,
+      };
+    }
+    case "transcriptions": {
+      const { data: t } = await sb
+        .from("transcriptions")
+        .select("id, user_id, transcription_text, summary, brain, created_at, recorded_at")
+        .eq("id", source_id)
+        .single();
+      if (!t || !t.transcription_text) return null;
+      return {
+        content: `[Transcripción${t.brain ? " " + t.brain : ""}] ${t.summary ? t.summary + "\n\n" : ""}${t.transcription_text}`,
+        occurred_at: t.recorded_at || t.created_at || new Date().toISOString(),
+        people: [],
+        metadata: { brain: t.brain, summary: t.summary },
+        user_id: t.user_id,
+      };
+    }
+    case "plaud_transcriptions": {
+      const { data: t } = await sb
+        .from("plaud_transcriptions")
+        .select("id, user_id, transcription, summary, title, created_at, recorded_at")
+        .eq("id", source_id)
+        .single();
+      if (!t || !t.transcription) return null;
+      return {
+        content: `[Plaud${t.title ? ": " + t.title : ""}] ${t.summary ? t.summary + "\n\n" : ""}${t.transcription}`,
+        occurred_at: t.recorded_at || t.created_at || new Date().toISOString(),
+        people: [],
+        metadata: { title: t.title, summary: t.summary },
+        user_id: t.user_id,
+      };
+    }
+    case "potus_chat": {
+      const { data: m } = await sb
+        .from("potus_chat")
+        .select("id, user_id, message, role, platform, created_at")
+        .eq("id", source_id)
+        .single();
+      if (!m || !m.message) return null;
+      return {
+        content: `[Chat ${m.platform || "web"} ${m.role}] ${m.message}`,
+        occurred_at: m.created_at || new Date().toISOString(),
+        people: [],
+        metadata: { role: m.role, platform: m.platform },
+        user_id: m.user_id,
+      };
+    }
+    default:
+      console.warn("[ingest] unknown source_table:", source_table);
+      return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// Ingest one source row → produce N chunks
+// ─────────────────────────────────────────────────────────
+async function ingestOne(params: {
+  user_id: string;
+  source_type: string;
+  source_id: string;
+  source_table: string;
+}): Promise<{ inserted: number; skipped: number }> {
+  const loaded = await loadSource(params.source_table, params.source_id, params.user_id);
+  if (!loaded) return { inserted: 0, skipped: 1 };
+
+  const userId = loaded.user_id || params.user_id;
+  if (!userId) return { inserted: 0, skipped: 1 };
+
+  const chunks = chunkText(loaded.content);
+  if (chunks.length === 0) return { inserted: 0, skipped: 1 };
+
+  let inserted = 0;
+  let skipped = 0;
+  const total = chunks.length;
+
+  for (let idx = 0; idx < chunks.length; idx++) {
+    const chunkContent = chunks[idx];
+    const hash = await sha256(`${userId}:${params.source_table}:${params.source_id}:${idx}:${chunkContent.slice(0, 100)}`);
+
+    // Check existing
+    const { data: existing } = await sb
+      .from("jarvis_history_chunks")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("content_hash", hash)
+      .maybeSingle();
+    if (existing) { skipped++; continue; }
+
+    // Embed + extract meta in parallel
+    const [embedding, meta] = await Promise.all([
+      embed(chunkContent),
+      extractMeta(chunkContent),
+    ]);
+
+    // Importance boost by source
+    let importance = meta.importance;
+    if (loaded.people.length > 0) importance = Math.min(10, importance + 1);
+    if (params.source_type === "transcription" || params.source_type === "plaud") {
+      importance = Math.min(10, importance + 1);
+    }
+
+    const { error } = await sb.from("jarvis_history_chunks").insert({
+      user_id: userId,
+      source_type: params.source_type,
+      source_id: params.source_id,
+      source_table: params.source_table,
+      content: chunkContent,
+      content_summary: meta.summary,
+      content_hash: hash,
+      chunk_index: idx,
+      total_chunks: total,
+      embedding,
+      occurred_at: loaded.occurred_at,
+      people: loaded.people,
+      topics: meta.topics,
+      importance,
+      metadata: loaded.metadata,
+    });
+
+    if (error) {
+      console.warn("[ingest] insert failed:", error.message);
+      skipped++;
+    } else {
+      inserted++;
+    }
+
+    // Rate limit
+    await new Promise((r) => setTimeout(r, 200));
+  }
+
+  return { inserted, skipped };
+}
+
+// ─────────────────────────────────────────────────────────
+// Backfill mode: pull rows of given source_type that have no chunks yet
+// ─────────────────────────────────────────────────────────
+async function backfill(source_type: string, user_id: string, batch_size: number, days: number) {
+  const fromDate = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
+  let candidates: Array<{ id: string; source_table: string }> = [];
+
+  if (source_type === "whatsapp") {
+    const { data } = await sb
+      .from("contact_messages")
+      .select("id, contact_id, sent_at, people_contacts!inner(user_id)")
+      .eq("people_contacts.user_id", user_id)
+      .gte("sent_at", fromDate)
+      .order("sent_at", { ascending: false })
+      .limit(batch_size * 3);
+    candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "contact_messages" }));
+  } else if (source_type === "email") {
+    const { data } = await sb
+      .from("jarvis_emails_cache")
+      .select("id, received_at, synced_at")
+      .eq("user_id", user_id)
+      .gte("synced_at", fromDate)
+      .order("synced_at", { ascending: false })
+      .limit(batch_size * 3);
+    candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "jarvis_emails_cache" }));
+  } else if (source_type === "transcription") {
+    const { data } = await sb
+      .from("transcriptions")
+      .select("id, created_at")
+      .eq("user_id", user_id)
+      .order("created_at", { ascending: false })
+      .limit(batch_size * 3);
+    candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "transcriptions" }));
+  } else if (source_type === "plaud") {
+    const { data } = await sb
+      .from("plaud_transcriptions")
+      .select("id, created_at")
+      .eq("user_id", user_id)
+      .order("created_at", { ascending: false })
+      .limit(batch_size * 3);
+    candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "plaud_transcriptions" }));
+  }
+
+  // Filter out already-ingested
+  const ids = candidates.map((c) => c.id);
+  if (ids.length === 0) return { processed: 0, inserted: 0 };
+
+  const { data: existing } = await sb
+    .from("jarvis_history_chunks")
+    .select("source_id")
+    .eq("user_id", user_id)
+    .in("source_id", ids);
+  const done = new Set((existing || []).map((e: any) => e.source_id));
+
+  const todo = candidates.filter((c) => !done.has(c.id)).slice(0, batch_size);
+
+  let totalInserted = 0;
+  for (const c of todo) {
+    const { inserted } = await ingestOne({
+      user_id,
+      source_type,
+      source_id: c.id,
+      source_table: c.source_table,
+    });
+    totalInserted += inserted;
+  }
+
+  return { processed: todo.length, inserted: totalInserted };
+}
+
+// ─────────────────────────────────────────────────────────
+// HTTP handler
+// ─────────────────────────────────────────────────────────
+serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const body = await req.json();
+    const mode = body.mode || "single";
+
+    if (mode === "single") {
+      const { user_id, source_type, source_id, source_table } = body;
+      if (!user_id || !source_type || !source_id || !source_table) {
+        return new Response(
+          JSON.stringify({ error: "Missing user_id, source_type, source_id, source_table" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      const r = await ingestOne({ user_id, source_type, source_id, source_table });
+      return new Response(JSON.stringify({ success: true, ...r }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (mode === "backfill") {
+      const { user_id, source_type, batch_size = 50, days = 90 } = body;
+      if (!user_id || !source_type) {
+        return new Response(
+          JSON.stringify({ error: "Missing user_id or source_type" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      const r = await backfill(source_type, user_id, batch_size, days);
+      return new Response(JSON.stringify({ success: true, ...r }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (mode === "queue") {
+      // Process pending jobs from jarvis_ingestion_jobs
+      const { batch_size = 20 } = body;
+      const { data: jobs } = await sb.rpc("pick_jarvis_ingestion_job", {
+        p_worker_id: `ingest-${crypto.randomUUID().slice(0, 8)}`,
+        p_batch_size: batch_size,
+      });
+
+      let processed = 0;
+      let inserted = 0;
+      for (const job of jobs || []) {
+        try {
+          const r = await ingestOne({
+            user_id: job.user_id,
+            source_type: job.source_type,
+            source_id: job.source_id,
+            source_table: job.source_table,
+          });
+          inserted += r.inserted;
+          processed++;
+          await sb
+            .from("jarvis_ingestion_jobs")
+            .update({ status: "done", completed_at: new Date().toISOString() })
+            .eq("id", job.id);
+        } catch (e: any) {
+          await sb
+            .from("jarvis_ingestion_jobs")
+            .update({ status: "error", error: String(e?.message || e) })
+            .eq("id", job.id);
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, processed, inserted }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ error: "Unknown mode" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (e: any) {
+    console.error("[ingest] fatal:", e);
+    return new Response(JSON.stringify({ error: String(e?.message || e) }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});

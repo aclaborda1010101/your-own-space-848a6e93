@@ -129,3 +129,9 @@ verify_jwt = false
 [functions.jarvis-analyze-attachment]
 verify_jwt = false
 
+[functions.jarvis-history-ingest]
+verify_jwt = false
+
+[functions.jarvis-history-backfill-cron]
+verify_jwt = false
+

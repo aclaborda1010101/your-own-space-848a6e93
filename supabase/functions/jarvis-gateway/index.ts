@@ -90,6 +90,60 @@ async function getUserContext(supabase: any, userId: string) {
   };
 }
 
+// ─────────────────────────────────────────────────────────
+// Semantic retrieval: embed user message + hybrid search history
+// ─────────────────────────────────────────────────────────
+async function getSemanticHistory(
+  supabase: any,
+  userId: string,
+  message: string,
+): Promise<string> {
+  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+  if (!OPENAI_API_KEY) return "";
+
+  try {
+    // 1) Embed the question
+    const embRes = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: message.slice(0, 8000),
+        dimensions: 1024,
+      }),
+    });
+    if (!embRes.ok) return "";
+    const embJson = await embRes.json();
+    const embedding = embJson.data?.[0]?.embedding;
+    if (!embedding) return "";
+
+    // 2) Hybrid search
+    const { data: hits } = await supabase.rpc("search_history_hybrid", {
+      p_user_id: userId,
+      query_embedding: embedding,
+      query_text: message.slice(0, 500),
+      match_count: 8,
+    });
+
+    if (!hits || hits.length === 0) return "";
+
+    // 3) Format
+    const lines = hits.map((h: any) => {
+      const date = h.occurred_at ? new Date(h.occurred_at).toISOString().split("T")[0] : "";
+      const src = h.source_type;
+      const summary = h.content_summary || h.content.slice(0, 200);
+      return `[${src} ${date}] ${summary}`;
+    });
+    return "\n📚 HISTÓRICO RELEVANTE:\n" + lines.join("\n");
+  } catch (e) {
+    console.warn("[gateway] semantic retrieval error:", e);
+    return "";
+  }
+}
+
 async function getRecentHistory(supabase: any, userId: string, platform: string, limit = 10) {
   const { data } = await supabase
     .from("potus_chat")
@@ -119,10 +173,11 @@ serve(async (req) => {
 
     console.log(`[Gateway] ${platform} message from ${user_id}: ${message.substring(0, 80)}...`);
 
-    // Fetch context in parallel
-    const [context, recentHistory] = await Promise.all([
+    // Fetch context in parallel (now includes semantic history retrieval)
+    const [context, recentHistory, semanticHistory] = await Promise.all([
       getUserContext(supabase, user_id),
       conversation_history ? Promise.resolve([]) : getRecentHistory(supabase, user_id, platform),
+      getSemanticHistory(supabase, user_id, message),
     ]);
 
     // Detect specialist
@@ -151,6 +206,11 @@ serve(async (req) => {
 
     if (context.memories.length > 0) {
       contextStr += `\n🧠 MEMORIAS: ${context.memories.map((m: { content: string }) => m.content).join(" | ")}`;
+    }
+
+    // Inject semantic history retrieval (the actual game-changer)
+    if (semanticHistory) {
+      contextStr += semanticHistory;
     }
 
     // Build system prompt using RAG
@@ -222,20 +282,38 @@ REGLAS DE ESTILO:
     }
 
     // Save user message and response to potus_chat
-    await Promise.all([
+    const [userMsgRes, asstMsgRes] = await Promise.all([
       supabase.from("potus_chat").insert({
         user_id,
         message,
         role: "user",
         platform,
-      }),
+      }).select("id").single(),
       supabase.from("potus_chat").insert({
         user_id,
         message: response,
         role: "assistant",
         platform,
-      }),
+      }).select("id").single(),
     ]);
+
+    // Fire-and-forget: enqueue both messages for jarvis_history_chunks ingestion
+    try {
+      const jobs = [];
+      if (userMsgRes.data?.id) jobs.push({
+        user_id, source_type: "jarvis_chat", source_id: userMsgRes.data.id,
+        source_table: "potus_chat", status: "pending",
+      });
+      if (asstMsgRes.data?.id) jobs.push({
+        user_id, source_type: "jarvis_chat", source_id: asstMsgRes.data.id,
+        source_table: "potus_chat", status: "pending",
+      });
+      if (jobs.length > 0) {
+        supabase.from("jarvis_ingestion_jobs").insert(jobs).then(() => {});
+      }
+    } catch (e) {
+      console.warn("[Gateway] enqueue ingest failed:", e);
+    }
 
     // Save memory if message is substantial
     if (message.length > 30) {

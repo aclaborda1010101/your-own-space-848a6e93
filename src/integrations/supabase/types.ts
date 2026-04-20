@@ -4670,6 +4670,126 @@ export type Database = {
         }
         Relationships: []
       }
+      jarvis_history_chunks: {
+        Row: {
+          chunk_index: number
+          content: string
+          content_hash: string
+          content_summary: string | null
+          created_at: string
+          embedding: string | null
+          id: string
+          importance: number
+          metadata: Json | null
+          occurred_at: string
+          people: string[] | null
+          source_id: string | null
+          source_table: string | null
+          source_type: Database["public"]["Enums"]["jarvis_source_type"]
+          topics: string[] | null
+          total_chunks: number
+          tsv: unknown
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          chunk_index?: number
+          content: string
+          content_hash: string
+          content_summary?: string | null
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          importance?: number
+          metadata?: Json | null
+          occurred_at: string
+          people?: string[] | null
+          source_id?: string | null
+          source_table?: string | null
+          source_type: Database["public"]["Enums"]["jarvis_source_type"]
+          topics?: string[] | null
+          total_chunks?: number
+          tsv?: unknown
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          chunk_index?: number
+          content?: string
+          content_hash?: string
+          content_summary?: string | null
+          created_at?: string
+          embedding?: string | null
+          id?: string
+          importance?: number
+          metadata?: Json | null
+          occurred_at?: string
+          people?: string[] | null
+          source_id?: string | null
+          source_table?: string | null
+          source_type?: Database["public"]["Enums"]["jarvis_source_type"]
+          topics?: string[] | null
+          total_chunks?: number
+          tsv?: unknown
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      jarvis_ingestion_jobs: {
+        Row: {
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          id: string
+          locked_at: string | null
+          locked_by: string | null
+          payload: Json | null
+          run_after: string
+          source_id: string | null
+          source_table: string | null
+          source_type: Database["public"]["Enums"]["jarvis_source_type"]
+          status: Database["public"]["Enums"]["jarvis_job_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          locked_at?: string | null
+          locked_by?: string | null
+          payload?: Json | null
+          run_after?: string
+          source_id?: string | null
+          source_table?: string | null
+          source_type: Database["public"]["Enums"]["jarvis_source_type"]
+          status?: Database["public"]["Enums"]["jarvis_job_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          locked_at?: string | null
+          locked_by?: string | null
+          payload?: Json | null
+          run_after?: string
+          source_id?: string | null
+          source_table?: string | null
+          source_type?: Database["public"]["Enums"]["jarvis_source_type"]
+          status?: Database["public"]["Enums"]["jarvis_job_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       jarvis_learned_patterns: {
         Row: {
           applied_at: string | null
@@ -11402,6 +11522,15 @@ export type Database = {
           id: string
         }[]
       }
+      get_history_coverage: {
+        Args: { p_user_id: string }
+        Returns: {
+          coverage_pct: number
+          source_type: string
+          total_rows: number
+          vectorized_rows: number
+        }[]
+      }
       get_jarvis_context: {
         Args: { p_limit?: number; p_user_id: string }
         Returns: {
@@ -11473,6 +11602,32 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "rag_jobs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      pick_jarvis_ingestion_job: {
+        Args: { p_batch_size?: number; p_worker_id: string }
+        Returns: {
+          attempts: number
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          id: string
+          locked_at: string | null
+          locked_by: string | null
+          payload: Json | null
+          run_after: string
+          source_id: string | null
+          source_table: string | null
+          source_type: Database["public"]["Enums"]["jarvis_source_type"]
+          status: Database["public"]["Enums"]["jarvis_job_status"]
+          updated_at: string
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "jarvis_ingestion_jobs"
           isOneToOne: false
           isSetofReturn: true
         }
@@ -11570,6 +11725,35 @@ export type Database = {
           node_type: string
           similarity: number
           source_count: number
+        }[]
+      }
+      search_history_hybrid: {
+        Args: {
+          match_count?: number
+          p_date_from?: string
+          p_date_to?: string
+          p_min_importance?: number
+          p_people?: string[]
+          p_source_types?: Database["public"]["Enums"]["jarvis_source_type"][]
+          p_user_id: string
+          query_embedding: string
+          query_text: string
+          rrf_k?: number
+        }
+        Returns: {
+          content: string
+          content_summary: string
+          id: string
+          importance: number
+          metadata: Json
+          occurred_at: string
+          people: string[]
+          rrf_score: number
+          similarity: number
+          source_id: string
+          source_table: string
+          source_type: Database["public"]["Enums"]["jarvis_source_type"]
+          topics: string[]
         }[]
       }
       search_knowledge: {
@@ -11675,6 +11859,18 @@ export type Database = {
         | "client_feedback"
         | "opportunity"
         | "document"
+      jarvis_job_status: "pending" | "running" | "done" | "error"
+      jarvis_source_type:
+        | "whatsapp"
+        | "email"
+        | "transcription"
+        | "attachment"
+        | "calendar"
+        | "contact_note"
+        | "jarvis_chat"
+        | "manual"
+        | "plaud"
+        | "telegram"
       node_status: "online" | "offline" | "busy" | "maintenance" | "critical"
       priority_level: "P0" | "P1" | "P2"
       project_format: "series" | "mini" | "film" | "short" | "ad" | "comic"
@@ -11821,6 +12017,19 @@ export const Constants = {
         "client_feedback",
         "opportunity",
         "document",
+      ],
+      jarvis_job_status: ["pending", "running", "done", "error"],
+      jarvis_source_type: [
+        "whatsapp",
+        "email",
+        "transcription",
+        "attachment",
+        "calendar",
+        "contact_note",
+        "jarvis_chat",
+        "manual",
+        "plaud",
+        "telegram",
       ],
       node_status: ["online", "offline", "busy", "maintenance", "critical"],
       priority_level: ["P0", "P1", "P2"],

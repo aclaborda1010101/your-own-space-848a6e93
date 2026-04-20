@@ -90,6 +90,60 @@ async function getUserContext(supabase: any, userId: string) {
   };
 }
 
+// ─────────────────────────────────────────────────────────
+// Semantic retrieval: embed user message + hybrid search history
+// ─────────────────────────────────────────────────────────
+async function getSemanticHistory(
+  supabase: any,
+  userId: string,
+  message: string,
+): Promise<string> {
+  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+  if (!OPENAI_API_KEY) return "";
+
+  try {
+    // 1) Embed the question
+    const embRes = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: message.slice(0, 8000),
+        dimensions: 1024,
+      }),
+    });
+    if (!embRes.ok) return "";
+    const embJson = await embRes.json();
+    const embedding = embJson.data?.[0]?.embedding;
+    if (!embedding) return "";
+
+    // 2) Hybrid search
+    const { data: hits } = await supabase.rpc("search_history_hybrid", {
+      p_user_id: userId,
+      query_embedding: embedding,
+      query_text: message.slice(0, 500),
+      match_count: 8,
+    });
+
+    if (!hits || hits.length === 0) return "";
+
+    // 3) Format
+    const lines = hits.map((h: any) => {
+      const date = h.occurred_at ? new Date(h.occurred_at).toISOString().split("T")[0] : "";
+      const src = h.source_type;
+      const summary = h.content_summary || h.content.slice(0, 200);
+      return `[${src} ${date}] ${summary}`;
+    });
+    return "\n📚 HISTÓRICO RELEVANTE:\n" + lines.join("\n");
+  } catch (e) {
+    console.warn("[gateway] semantic retrieval error:", e);
+    return "";
+  }
+}
+
 async function getRecentHistory(supabase: any, userId: string, platform: string, limit = 10) {
   const { data } = await supabase
     .from("potus_chat")

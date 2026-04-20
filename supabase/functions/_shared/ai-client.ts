@@ -37,21 +37,61 @@ const DEFAULT_MODEL = "google/gemini-3-flash-preview";
  * Clean JSON response from markdown formatting
  */
 function cleanJsonResponse(content: string): string {
-  let cleaned = content.trim();
+  let cleaned = (content || "").trim();
+  if (!cleaned) return "{}";
 
-  if (cleaned.startsWith("```json")) cleaned = cleaned.slice(7);
-  else if (cleaned.startsWith("```")) cleaned = cleaned.slice(3);
-  if (cleaned.endsWith("```")) cleaned = cleaned.slice(0, -3);
+  // Strip markdown fences
+  cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
 
-  cleaned = cleaned.trim();
+  // Find outermost JSON boundaries — support both objects and arrays
+  const firstBrace = cleaned.indexOf("{");
+  const firstBracket = cleaned.indexOf("[");
+  let startIdx = -1;
+  let openChar = "";
+  if (firstBrace === -1 && firstBracket === -1) return "{}";
+  if (firstBrace === -1) { startIdx = firstBracket; openChar = "["; }
+  else if (firstBracket === -1) { startIdx = firstBrace; openChar = "{"; }
+  else if (firstBracket < firstBrace) { startIdx = firstBracket; openChar = "["; }
+  else { startIdx = firstBrace; openChar = "{"; }
 
-  const startIdx = cleaned.indexOf("{");
-  const endIdx = cleaned.lastIndexOf("}");
-  if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-    cleaned = cleaned.slice(startIdx, endIdx + 1);
+  const closeChar = openChar === "{" ? "}" : "]";
+  const endIdx = cleaned.lastIndexOf(closeChar);
+  cleaned = endIdx > startIdx ? cleaned.slice(startIdx, endIdx + 1) : cleaned.slice(startIdx);
+
+  const tryParse = (s: string): string | null => {
+    try { JSON.parse(s); return s; } catch { return null; }
+  };
+
+  let result = tryParse(cleaned);
+  if (result) return result;
+
+  // Repair trailing commas + control chars
+  let repaired = cleaned
+    .replace(/,(\s*[}\]])/g, "$1")
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+  result = tryParse(repaired);
+  if (result) return result;
+
+  // Balance unclosed braces/brackets (truncation recovery)
+  let braces = 0, brackets = 0, inStr = false, esc = false;
+  for (const ch of repaired) {
+    if (esc) { esc = false; continue; }
+    if (ch === "\\") { esc = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === "{") braces++;
+    else if (ch === "}") braces--;
+    else if (ch === "[") brackets++;
+    else if (ch === "]") brackets--;
   }
+  if (inStr) repaired += '"';
+  while (brackets-- > 0) repaired += "]";
+  while (braces-- > 0) repaired += "}";
+  result = tryParse(repaired);
+  if (result) return result;
 
-  return cleaned.trim();
+  console.warn("cleanJsonResponse: best-effort fallback (still invalid)");
+  return repaired || "{}";
 }
 
 /**

@@ -1,59 +1,44 @@
 
-## Plan: Timeline tipo "curva de vida" en cada contacto
+## Plan: Reprocesar multimedia pendiente de todos los contactos activos
 
-### Lo que pides
-1. **Test multimedia**: ya está desplegado. Te confirmo que cuando tu nena te mande audio/foto al WhatsApp, en el chat del contacto verás `[🎙️ Audio] transcripción…` o `[🖼️ Imagen] descripción + OCR…` en ~5-15s. Si en 30s no aparece, miramos logs de `process-whatsapp-media`. Esto **no requiere cambios de código**, solo que la pruebes.
+### Qué quieres
+Que vaya a `contact_messages` de todos tus contactos de la red estratégica/favoritos, encuentre todos los audios, imágenes y PDFs que llegaron antes de tener el pipeline (o que se quedaron como `[Audio]`, `[Imagen]`, `[Documento]` sin transcribir), y los procese ahora con Whisper/Gemini Vision para que cuenten en headlines y personalidad.
 
-2. **Timeline mejorado** (esto sí requiere trabajo):
+### Diagnóstico previo (lo hago al ejecutar)
+Consultaré `contact_messages` para ver cuántos mensajes multimedia sin procesar existen, identificándolos por patrones:
+- `content` empieza por `[Audio]`, `[Imagen]`, `[Foto]`, `[Documento]`, `[PDF]`, `[Video]`
+- O `content` está vacío/null pero tiene `external_id` (mensaje de Evolution sin texto)
+- Filtrados por `user_id = tu_id` y limitados a contactos `is_favorite = true OR in_strategic_network = true`
 
-### Estado actual
-Ya existe `RelationshipTimelineChart.tsx` + `build-relationship-timeline` edge function. Funciona pero:
-- Agrupa por mes (poco granular).
-- Hitos vienen solo de `personality_profile.hitos` con sentiment heurístico (no analiza qué pasó realmente).
-- Eventos personales mezclados pero sin destacar.
-- Tooltip básico.
+Esto me dirá el volumen real antes de lanzar nada (puede ser 50 o 5000, cambia la estrategia).
 
-### Lo que vamos a cambiar
+### Solución
 
-**A) Edge function `build-relationship-timeline`** — extracción de hitos reales con IA
-- Pasar a Gemini Flash una muestra representativa de los mensajes del contacto (primeros + últimos + picos de actividad).
-- Pedir extracción JSON estricta:
-  ```json
-  { "hitos": [
-    { "date": "2024-08-15", "title": "Viaje a Tulum",
-      "description": "Vacaciones juntos, lo pasaron genial",
-      "sentiment": 3, "category": "viaje|celebracion|conflicto|logro|perdida|reencuentro|cotidiano" }
-  ]}
-  ```
-- Sentiment ya no heurístico: lo decide el LLM (-3 a +3).
-- Cachear resultado en `people_contacts.personality_profile._timeline_cache` con TTL 7 días para no re-llamar al LLM cada vista.
-- Mantener serie de frecuencia mensual como línea base.
+**Nueva edge function `reprocess-whatsapp-media-backlog`**
+- Input: `{ limit?: number, contactId?: string }` (opcional para probar con 1 contacto primero).
+- Lee mensajes candidatos del usuario autenticado (favoritos + estratégicos), ordenados por más recientes primero.
+- Para cada mensaje:
+  - Si tiene `metadata.evolution_key` (la `messageKey` original de Evolution) → llama a `process-whatsapp-media` reutilizando la lógica que ya funciona.
+  - Si NO tiene `evolution_key` (mensajes antiguos importados o sin metadata) → marca como `[⚠️ Multimedia antigua no recuperable]` y sigue (Evolution solo guarda media unas semanas, no podemos recuperar audios de hace meses).
+- Procesamiento en background con `EdgeRuntime.waitUntil` + delay de 1.5s entre items para no saturar Groq/Gemini.
+- Devuelve inmediatamente `{ queued: N, recoverable: X, unrecoverable: Y }`.
 
-**B) Componente `RelationshipTimelineChart.tsx`** — curva continua + hitos marcados
-- Curva de actividad/sentimiento desde el primer mensaje hasta hoy (línea suave).
-- Puntos sobre la curva por cada hito, color según sentiment:
-  - verde (positivo: viajes, celebraciones, reencuentros)
-  - rojo (negativo: conflictos, pérdidas)
-  - amarillo (neutro/cotidiano)
-- Iconos por categoría (✈️ viaje, 🎉 celebración, 💔 conflicto, 🏆 logro, etc.).
-- Tooltip rico al pasar por encima:
-  - Fecha exacta formateada (`15 ago 2024`)
-  - Título + descripción del hito
-  - Etiqueta de sentimiento ("Bueno", "Malo", "Neutro")
-- Eventos personales del usuario (viaje a Venecia) como marcadores diferenciados encima de la curva (línea vertical punteada con icono).
-- Eje X: línea de tiempo desde primer mensaje hasta hoy (no agrupado por mes rígido).
+**Verificación previa que voy a hacer**
+Antes de implementar miro:
+1. La estructura de `contact_messages.metadata` para confirmar si guardamos `evolution_key` (clave para poder pedir el base64 de nuevo).
+2. Cuántos mensajes multimedia "huérfanos" hay realmente.
+3. Si `evolution-webhook` actual ya guarda esa key (si no, los multimedia futuros sí se podrán reprocesar pero los pasados no).
 
-**C) Integración en `ContactDetail.tsx`**
-- El componente ya está; nos aseguramos que ocupa una sección destacada (ya lo está vía tabs).
-- Botón "Recalcular timeline" que invalida el cache y vuelve a llamar al LLM.
+**Botón en UI** (`RedEstrategica.tsx`)
+Junto a "Refrescar perfiles" añado **"Reprocesar multimedia"** que invoca la nueva función. Toast muestra cuántos se han encolado y cuántos no eran recuperables.
+
+### Limitación honesta
+Evolution API **no guarda los media para siempre**. Los audios/imágenes que llegaron hace más de ~2-4 semanas probablemente ya no están descargables. Para esos marcaremos el contenido con un aviso claro y JARVIS sabrá ignorarlos. Los recientes (últimas semanas) sí se transcribirán perfectamente.
 
 ### Archivos a tocar
-- `supabase/functions/build-relationship-timeline/index.ts` (refactor extracción + cache)
-- `src/components/contact/RelationshipTimelineChart.tsx` (nueva visualización)
-- `src/hooks/useRelationshipTimeline.ts` (añadir `forceRefresh`)
+- `supabase/functions/reprocess-whatsapp-media-backlog/index.ts` (nueva)
+- `supabase/config.toml` (registrar la función)
+- `src/pages/RedEstrategica.tsx` (botón nuevo)
 
-### Resultado
-Abres el contacto de tu primo Carlitos y ves una curva continua desde el primer mensaje. Picos verdes en "Viaje a Tulum (ago 2024)", "Cumpleaños (mar 2025)", quizá un valle rojo si hubo bronca, y marcadores de tus propios viajes (Venecia) superpuestos. Pasas el ratón y te dice exactamente qué pasó y si fue bueno o malo.
-
-### Sobre el test del audio/foto
-Mándale ahora mismo a tu nena que te envíe un audio corto y una foto. Vuelve aquí en 1 minuto y me dices qué ves en el chat del contacto en `/red-estrategica/<su-id>`. Si funciona, paso al timeline. Si no, miramos logs antes.
+### Resultado esperado
+Pulsas el botón "Reprocesar multimedia" → en 2-5 minutos todos los audios/imágenes recientes de tus contactos activos pasan por Whisper/Gemini → el siguiente refresh de headlines ya tiene en cuenta lo que dijo tu nena en aquel audio, lo que se vio en aquella foto del cartel, etc.

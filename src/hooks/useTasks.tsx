@@ -28,6 +28,9 @@ export const useTasks = () => {
   useEffect(() => {
     if (user) {
       fetchTasks();
+    } else {
+      setTasks([]);
+      setLoading(false);
     }
   }, [user]);
 

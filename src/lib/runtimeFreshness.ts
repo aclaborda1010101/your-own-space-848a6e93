@@ -1,7 +1,7 @@
 /**
- * Runtime Freshness Guard v8
- * Unified cache-busting for preview and published hosts.
- * Uses `_cb` as the single cache-buster query param everywhere.
+ * Runtime Freshness Guard v9
+ * Non-destructive: never nukes auth tokens during background→foreground transitions.
+ * Only nukes caches/SW when a *new build* is detected.
  */
 
 declare const __APP_BUILD_ID__: string;
@@ -10,7 +10,10 @@ const BUILD_KEY = "__jarvis_build_id";
 const RELOAD_DONE = "__jarvis_reloaded";
 const PREVIEW_RESET_ATTEMPTS_KEY = "__jarvis_preview_sw_reset_attempts";
 const PREVIEW_RESET_MAX_ATTEMPTS = 2;
-const SLEEP_THRESHOLD_MS = 30_000;
+// 30 minutes — short background returns must NOT trigger reloads
+const SLEEP_THRESHOLD_MS = 30 * 60 * 1000;
+
+let sleepDetectorInstalled = false;
 
 // ── Host detection ──────────────────────────────────────────────
 
@@ -65,7 +68,7 @@ function hasActiveSwController(): boolean {
   }
 }
 
-/** Replace or append `_cb` param, remove legacy `__jarvis_preview_bust`. */
+/** Replace or append `_cb` param. Used only for build-change reloads. */
 function buildFreshUrl(): string {
   try {
     const url = new URL(window.location.href);
@@ -116,17 +119,23 @@ function handleBuildChange(): boolean {
 }
 
 // ── Resume-from-sleep detector ──────────────────────────────────
+// Only fires after VERY long absences (>30 min). Uses a soft reload that
+// does NOT nuke caches or auth tokens.
 
 function installSleepDetector(): void {
+  if (sleepDetectorInstalled) return;
+  sleepDetectorInstalled = true;
+
   let lastTick = Date.now();
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       const gap = Date.now() - lastTick;
       if (gap > SLEEP_THRESHOLD_MS) {
-        nukeSwAndCaches();
-        navigateToFreshUrl();
+        // Soft reload only. Do NOT nuke caches/SW (would invalidate session refresh in flight).
+        try { window.location.reload(); } catch { /* ignore */ }
       }
+      lastTick = Date.now();
     }
   });
 
@@ -139,18 +148,18 @@ export function ensureRuntimeFreshness(): boolean {
   if (typeof window === "undefined") return false;
 
   try {
-    // Published lovable.app
+    // Published lovable.app — only nuke when build changed
     if (isLovablePublishedHost()) {
-      nukeSwAndCaches();
       return handleBuildChange();
     }
 
-    // Preview
+    // Preview — only the SW-controlled escape hatch nukes caches
     if (isPreview()) {
       const controlledBySw = hasActiveSwController();
-      nukeSwAndCaches();
 
       if (controlledBySw) {
+        // SW from a previous session is hijacking the page → escape it.
+        nukeSwAndCaches();
         const attempts = Number(sessionStorage.getItem(PREVIEW_RESET_ATTEMPTS_KEY) || "0");
         if (attempts < PREVIEW_RESET_MAX_ATTEMPTS) {
           sessionStorage.setItem(PREVIEW_RESET_ATTEMPTS_KEY, String(attempts + 1));

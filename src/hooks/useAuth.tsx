@@ -14,13 +14,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 /** Best-effort cleanup of all auth-adjacent local state. Never throws. */
 function purgeLocalAuthArtifacts() {
   try {
-    // Google provider tokens (cached for Calendar API)
     localStorage.removeItem("google_provider_token");
     localStorage.removeItem("google_provider_refresh_token");
     localStorage.removeItem("google_token_expires_at");
   } catch { /* ignore */ }
 
-  // Wipe any sb-* auth tokens that supabase-js may have left behind
   try {
     const toRemove: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -46,6 +44,48 @@ function purgeLocalAuthArtifacts() {
   } catch { /* ignore */ }
 }
 
+/** Best-effort, non-blocking persistence of Google provider tokens. */
+function persistGoogleProviderTokenAsync(currentSession: Session) {
+  if (!currentSession?.provider_token || !currentSession.user?.id) return;
+  // Fire-and-forget; never blocks auth reconciliation.
+  Promise.resolve().then(async () => {
+    try {
+      await supabase.from("user_integrations").upsert({
+        user_id: currentSession.user.id,
+        provider: "google",
+        access_token: currentSession.provider_token!,
+        refresh_token: currentSession.provider_refresh_token || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "user_id,provider" });
+    } catch (e) {
+      console.warn("[JARVIS Auth] Could not save provider token:", e);
+    }
+  });
+}
+
+/** getSession with one short retry on transient failure. NEVER signs out. */
+async function getSessionWithRetry(): Promise<{ session: Session | null; hadError: boolean }> {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (!error) return { session: data.session ?? null, hadError: false };
+    console.warn("[JARVIS Auth] getSession error, retrying:", error.message);
+  } catch (e) {
+    console.warn("[JARVIS Auth] getSession threw, retrying:", e);
+  }
+
+  await new Promise((r) => setTimeout(r, 800));
+
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (!error) return { session: data.session ?? null, hadError: false };
+    console.warn("[JARVIS Auth] getSession failed after retry:", error.message);
+    return { session: null, hadError: true };
+  } catch (e) {
+    console.warn("[JARVIS Auth] getSession threw after retry:", e);
+    return { session: null, hadError: true };
+  }
+}
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -54,74 +94,77 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     let mounted = true;
 
-    const initAuth = async () => {
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) {
-          console.warn("[JARVIS Auth] Session recovery failed, clearing stale tokens:", error.message);
-          await supabase.auth.signOut();
-          if (mounted) { setUser(null); setSession(null); }
-        } else if (mounted) {
-          setSession(data.session);
-          setUser(data.session?.user ?? null);
-        }
-      } catch (err) {
-        console.error("[JARVIS Auth] Init error:", err);
-        if (mounted) { setUser(null); setSession(null); }
-      } finally {
-        if (mounted) { setLoading(false); }
-      }
-    };
-
-    initAuth();
-
+    // 1) Subscribe FIRST so we don't miss INITIAL_SESSION / TOKEN_REFRESHED
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, currentSession) => {
+      (event, currentSession) => {
         if (!mounted) return;
-        console.log("[JARVIS Auth] Event:", event);
+        console.log("[JARVIS Auth] Event:", event, "hasSession:", !!currentSession);
 
         switch (event) {
+          case "INITIAL_SESSION":
           case "SIGNED_IN":
           case "TOKEN_REFRESHED":
-            setSession(currentSession);
+          case "USER_UPDATED": {
+            setSession(currentSession ?? null);
             setUser(currentSession?.user ?? null);
-            if (currentSession?.provider_token) {
-              try {
-                await supabase.from("user_integrations").upsert({
-                  user_id: currentSession.user.id,
-                  provider: "google",
-                  access_token: currentSession.provider_token,
-                  refresh_token: currentSession.provider_refresh_token || null,
-                  updated_at: new Date().toISOString()
-                }, { onConflict: "user_id,provider" });
-              } catch (e) {
-                console.warn("[JARVIS Auth] Could not save provider token:", e);
-              }
-            }
+            if (currentSession) persistGoogleProviderTokenAsync(currentSession);
+            setLoading(false);
             break;
-          case "SIGNED_OUT":
+          }
+          case "SIGNED_OUT": {
             setSession(null);
             setUser(null);
+            setLoading(false);
             break;
-          default:
-            setSession(currentSession);
-            setUser(currentSession?.user ?? null);
+          }
+          default: {
+            // Be conservative on unknown events: reflect Supabase's truth but never wipe on null.
+            if (currentSession) {
+              setSession(currentSession);
+              setUser(currentSession.user);
+            }
+            setLoading(false);
+          }
         }
-        setLoading(false);
       }
     );
+
+    // 2) Then hydrate
+    (async () => {
+      const { session: hydrated, hadError } = await getSessionWithRetry();
+      if (!mounted) return;
+
+      if (hydrated) {
+        setSession(hydrated);
+        setUser(hydrated.user);
+      } else if (hadError) {
+        // Transient error: do NOT sign out. Leave whatever the listener provides.
+        console.warn("[JARVIS Auth] Hydration failed transiently — keeping current state");
+      } else {
+        // Truly no session
+        setSession(null);
+        setUser(null);
+      }
+      setLoading(false);
+    })();
+
+    // 3) Re-hydrate when network comes back
+    const onOnline = () => {
+      console.log("[JARVIS Auth] online — refreshing session");
+      supabase.auth.getSession().catch(() => { /* ignore */ });
+    };
+    window.addEventListener("online", onOnline);
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      window.removeEventListener("online", onOnline);
     };
   }, []);
 
   const signOut = async () => {
     console.log("[JARVIS Auth] signOut() invoked");
 
-    // 1) Best-effort: tell Supabase to invalidate the refresh token (global = all sessions).
-    //    Wrap in a 4s timeout so a hanging network call never blocks logout on iOS.
     try {
       await Promise.race([
         supabase.auth.signOut({ scope: "global" }),
@@ -131,15 +174,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.warn("[JARVIS Auth] supabase.signOut error (ignored):", error);
     }
 
-    // 2) Hard-clear local state so the UI cannot stay stuck on the authenticated tree.
     setUser(null);
     setSession(null);
-
-    // 3) Purge any cached tokens (sb-*-auth-token, google_provider_*).
     purgeLocalAuthArtifacts();
 
-    // 4) Hard redirect — guarantees React Query caches and any in-flight requests
-    //    are dropped, even if a route guard somehow fails to react.
     try {
       window.location.replace("/login");
     } catch {

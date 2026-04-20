@@ -57,7 +57,7 @@ export const useTasks = () => {
           projectName: t.business_projects?.name || undefined,
           contactId: t.contact_id || undefined,
           contactName: t.people_contacts?.name || undefined,
-          isPersonal: t.is_personal ?? false,
+          isPersonal: t.is_personal ?? true,
         }))
       );
     } catch (error: any) {
@@ -68,7 +68,13 @@ export const useTasks = () => {
     }
   };
 
-  const addTask = async (task: Omit<Task, "id" | "createdAt" | "completedAt" | "completed" | "isPersonal"> & { isPersonal?: boolean }) => {
+  const addTask = async (
+    task: Omit<Task, "id" | "createdAt" | "completedAt" | "completed" | "isPersonal" | "contactId" | "contactName" | "projectId" | "projectName"> & {
+      isPersonal?: boolean;
+      contactId?: string | null;
+      projectId?: string | null;
+    }
+  ) => {
     if (!user) return;
 
     try {
@@ -81,9 +87,12 @@ export const useTasks = () => {
           priority: task.priority,
           duration: task.duration,
           completed: false,
-          is_personal: task.isPersonal ?? false,
+          // PRIVADO POR DEFECTO: si no se indica nada, la tarea es personal/privada.
+          is_personal: task.isPersonal ?? true,
+          contact_id: task.contactId ?? null,
+          project_id: task.projectId ?? null,
         })
-        .select()
+        .select("*, business_projects(name), people_contacts(name)")
         .single();
 
       if (error) throw error;
@@ -97,7 +106,11 @@ export const useTasks = () => {
           duration: data.duration,
           completed: data.completed,
           createdAt: new Date(data.created_at),
-          isPersonal: data.is_personal ?? false,
+          isPersonal: data.is_personal ?? true,
+          contactId: data.contact_id || undefined,
+          contactName: (data as any).people_contacts?.name || undefined,
+          projectId: data.project_id || undefined,
+          projectName: (data as any).business_projects?.name || undefined,
         },
         ...prev,
       ]);
@@ -153,7 +166,10 @@ export const useTasks = () => {
     }
   };
 
-  const updateTask = async (id: string, updates: Partial<Pick<Task, "title" | "type" | "priority" | "duration" | "isPersonal">>) => {
+  const updateTask = async (
+    id: string,
+    updates: Partial<Pick<Task, "title" | "type" | "priority" | "duration" | "isPersonal" | "contactId">>,
+  ) => {
     try {
       const previous = tasks.find((t) => t.id === id);
       const dbUpdates: Record<string, any> = {};
@@ -162,6 +178,7 @@ export const useTasks = () => {
       if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
       if (updates.duration !== undefined) dbUpdates.duration = updates.duration;
       if (updates.isPersonal !== undefined) dbUpdates.is_personal = updates.isPersonal;
+      if (updates.contactId !== undefined) dbUpdates.contact_id = updates.contactId || null;
 
       const { error } = await supabase
         .from("tasks")
@@ -190,11 +207,16 @@ export const useTasks = () => {
         }
       }
 
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === id ? { ...t, ...updates } : t
-        )
-      );
+      // Si cambió el contacto, refetch para traer el nombre vinculado.
+      if (updates.contactId !== undefined) {
+        await fetchTasks();
+      } else {
+        setTasks((prev) =>
+          prev.map((t) =>
+            t.id === id ? { ...t, ...updates } : t
+          )
+        );
+      }
       toast.success("Tarea actualizada");
     } catch (error: any) {
       console.error("Error updating task:", error);

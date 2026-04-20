@@ -459,6 +459,7 @@ async function generateHeadlines(
   category: string,
   messagesText: string,
   latestMessageDate: Date | null,
+  dismissals: Array<{ original_title: string; decision: string }> = [],
 ) {
   const todayLabel = formatAbsoluteDate(new Date());
   const systemPrompt = `Eres un analista experto en relaciones interpersonales. Analiza los mensajes y devuelve EXACTAMENTE el JSON pedido. Responde en español. Sé conciso, observador y útil.
@@ -473,10 +474,24 @@ REGLA CRÍTICA DE FECHAS:
 REGLA CRÍTICA DE EVENTOS PASADOS:
 - Si el asunto pendiente se refiere a un evento puntual (partido, concierto, vuelo, cita, reserva, cena, reunión, viaje, entrega) cuya fecha YA ES ANTERIOR a "Hoy real del sistema", ese evento ESTÁ CERRADO. NUNCA lo devuelvas como acción a hacer ni como CTA.
 - En ese caso devuelve title = "Sin asunto vivo" (o un asunto NUEVO posterior si existe), who_owes = "nadie", is_event = false.
-- Solo marca is_event = true cuando el evento esté en el futuro o sin fecha cerrada. Si pones is_event = true rellena event_date en formato ISO (YYYY-MM-DD) con la fecha real del evento.`;
+- Solo marca is_event = true cuando el evento esté en el futuro o sin fecha cerrada. Si pones is_event = true rellena event_date en formato ISO (YYYY-MM-DD) con la fecha real del evento.
+
+REGLA CRÍTICA DE MEMORIA — NO REPETIR ASUNTOS YA DECIDIDOS:
+- Más abajo recibes un bloque "YA RESUELTO / DESCARTADO POR EL USUARIO".
+- Cualquier asunto en ese bloque YA NO ES PENDIENTE. Aunque la conversación lo siga mencionando, NO lo devuelvas como title del pending.
+- Esto incluye SUS VARIANTES: si "Añadir música a vídeo de casting" está marcado como hecho, tampoco propongas "Poner música al casting", "Música del vídeo", "Añadir audio al casting" ni similares. Equivalencia = mismo objetivo aunque cambien las palabras.
+- Si el ÚNICO asunto detectable está en esa lista, devuelve title = "Sin asunto vivo", who_owes = "nadie".`;
+
+  const dismissalsBlock = dismissals.length > 0
+    ? `\n\nYA RESUELTO / DESCARTADO POR EL USUARIO — NO PROPONGAS ESTO NI SUS VARIANTES:\n${
+        dismissals
+          .map((d) => `- "${d.original_title}" (${d.decision === "done" ? "ya hecho" : d.decision === "dismissed" ? "no aplica" : "pospuesto"})`)
+          .join("\n")
+      }`
+    : "";
 
   const userPrompt = `Hoy real del sistema: ${todayLabel}
-Contacto: ${contactName} (categoría: ${category})
+Contacto: ${contactName} (categoría: ${category})${dismissalsBlock}
 
 Conversación reciente (últimos ~200 mensajes), cada línea con fecha absoluta:
 ${messagesText || "(sin mensajes)"}

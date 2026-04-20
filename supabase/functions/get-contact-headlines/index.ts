@@ -69,7 +69,11 @@ serve(async (req) => {
       total - (cached.message_count_at_generation || 0) >= INVALIDATION_DELTA;
 
     if (!needsRegen && cached) {
-      return jsonResp({ ok: true, cached: true, payload: cached.payload });
+      return jsonResp({
+        ok: true,
+        cached: true,
+        payload: sanitizePayload(cached.payload, parseDate(cached.generated_at)),
+      });
     }
 
     if (total === 0) {
@@ -206,10 +210,29 @@ function stripAmbiguousRelativeTail(text: string): string {
   return cleaned || text.trim();
 }
 
+function extractMentionDate(text: string | null | undefined, fallbackDate: Date | null): Date | null {
+  if (!text) return fallbackDate;
+  const absolute = parseDate(text);
+  if (absolute) return absolute;
+
+  const now = new Date();
+  const daysAgo = text.match(/hace\s+(\d+)\s*d[ií]as?/i);
+  if (daysAgo) return new Date(now.getTime() - parseInt(daysAgo[1], 10) * 24 * 3600 * 1000);
+
+  const hoursAgo = text.match(/hace\s+(\d+)\s*horas?/i);
+  if (hoursAgo) return new Date(now.getTime() - parseInt(hoursAgo[1], 10) * 3600 * 1000);
+
+  if (/\banteayer\b/i.test(text)) return new Date(now.getTime() - 2 * 24 * 3600 * 1000);
+  if (/\bayer\b/i.test(text)) return new Date(now.getTime() - 24 * 3600 * 1000);
+
+  return fallbackDate;
+}
+
 function sanitizePayload(payload: any, fallbackMentionDate: Date | null) {
   const safe = payload && typeof payload === "object" ? payload : emptyPayload();
   const rawTitle = typeof safe.pending?.title === "string" ? safe.pending.title.trim() : "Nada pendiente";
   const safeMention = typeof safe.pending?.last_mentioned === "string" ? safe.pending.last_mentioned.trim() : "—";
+  const mentionDate = extractMentionDate(safeMention, fallbackMentionDate);
 
   // Detect explicit event_date from model, else infer from title text
   const modelEventDate = parseDate(safe.pending?.event_date);
@@ -231,11 +254,19 @@ function sanitizePayload(payload: any, fallbackMentionDate: Date | null) {
     if (endOfDay.getTime() < now.getTime()) freshness = "expired";
     else if (endOfDay.getTime() - now.getTime() < 24 * 3600 * 1000) freshness = "expiring";
   } else if (looksLikeEvent) {
-    // Event-shaped title without parsable date: 7-day soft expiry
-    expiresAtIso = new Date(now.getTime() + 7 * 24 * 3600 * 1000).toISOString();
-  } else if (fallbackMentionDate) {
+    // Event-shaped title without exact date: decay aggressively if no fresh evidence
+    if (mentionDate) {
+      const ageHours = (now.getTime() - mentionDate.getTime()) / (3600 * 1000);
+      expiresAtIso = new Date(mentionDate.getTime() + 72 * 3600 * 1000).toISOString();
+      if (ageHours > 72) freshness = "stale";
+      else if (ageHours > 48) freshness = "expiring";
+    } else {
+      expiresAtIso = new Date(now.getTime() + 48 * 3600 * 1000).toISOString();
+      freshness = "expiring";
+    }
+  } else if (mentionDate) {
     // Conversational decay: stale after 14 days without new evidence
-    const ageDays = (now.getTime() - fallbackMentionDate.getTime()) / (24 * 3600 * 1000);
+    const ageDays = (now.getTime() - mentionDate.getTime()) / (24 * 3600 * 1000);
     if (ageDays > 14) freshness = "stale";
   }
 
@@ -275,7 +306,15 @@ function sanitizePayload(payload: any, fallbackMentionDate: Date | null) {
 }
 
 function isCachedPayloadExpired(payload: any): boolean {
-  if (!payload || typeof payload !== "object") return false;
+  if (!payload || typeof payload !== "object") return true;
+  const pending = payload?.pending;
+  if (!pending || typeof pending !== "object") return true;
+  if (!pending.freshness_status) return true;
+  const title = typeof pending.title === "string" ? pending.title : "";
+  const lastMentioned = typeof pending.last_mentioned === "string" ? pending.last_mentioned : "";
+  if (containsAmbiguousRelativeDate(title) || containsAmbiguousRelativeDate(lastMentioned)) return true;
+  if (EVENT_KEYWORDS_RE.test(title) && !pending.expires_at && !pending.event_date) return true;
+  if (pending.freshness_status === "expired" || pending.freshness_status === "stale") return true;
   const exp = payload?.pending?.expires_at;
   if (!exp || typeof exp !== "string") return false;
   const ms = Date.parse(exp);

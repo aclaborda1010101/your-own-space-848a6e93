@@ -1,65 +1,57 @@
 
 
-El usuario lo ha clavado: el problema raíz es que **muchos contactos antiguos no tienen `wa_id` rellenado**, así que cuando llega un mensaje de WhatsApp, el webhook no los encuentra por teléfono y acaba creando duplicados o metiendo el mensaje en el sitio equivocado.
+## Diagnóstico
 
-Necesito:
-1. Detectar cuántos contactos tienen teléfono "humano" pero `wa_id` vacío.
-2. Rellenar `wa_id` automáticamente desde los teléfonos que ya tenemos guardados (campo `phone_numbers`, `metadata.phones`, etc).
-3. Después de eso, fusionar los duplicados que el webhook ya creó (contactos sin nombre o con `pushName` genérico que en realidad son una persona ya existente).
-4. Limpiar caches de IA contaminadas (`contact_headlines`) para los afectados.
-5. Simplificar el webhook para que sea **estrictamente por teléfono**, sin fuzzy matching de nombre.
+Acabo de mirar la BD: tienes **1.341 contactos**, de los cuales:
+- 536 tienen `wa_id` (los que sí funcionan).
+- 804 **no tienen ni `wa_id` ni `phone_numbers`** — están vacíos de teléfono en la base de datos.
+- 1 sin nada.
+
+O sea: el backfill desde la propia BD que planteamos **no puede arreglar nada**, porque la mayoría de tus contactos antiguos perdieron el teléfono al importarse en su día (o se importaron solo con nombre). Por eso WhatsApp no los encuentra y crea duplicados.
+
+**La importación de tu CSV de Contactos de Mac (1.813 filas) es exactamente lo que necesitamos.** Tiene `Teléfono móvil`, `Teléfono de la casa`, `Teléfono del trabajo`, etc.
 
 ## Plan
 
-### 1. Diagnóstico exprés
-Antes de tocar nada, lanzo dos consultas para saber el tamaño del problema:
-- Cuántos contactos tienen `phone_numbers` no vacío pero `wa_id IS NULL`.
-- Cuántos contactos "fantasma" hay (creados por webhook con nombre tipo número o pushName corto) que tienen `wa_id` que coincide con teléfono de un contacto real.
+### 1. Importador de CSV de Contactos de Mac que enriquece, no duplica
+Crear un flujo de importación específico para este formato (o adaptar el VCF actual) que para cada fila del CSV:
+- Normalice los teléfonos a dígitos (quitar `+`, espacios, paréntesis).
+- Busque contacto existente por **nombre exacto** O por cualquier teléfono normalizado.
+- Si existe → **actualiza** `wa_id` (primer móvil válido) y `phone_numbers` (todos los teléfonos), sin tocar el resto de campos.
+- Si no existe → crea contacto nuevo con todos los datos.
+- Cuenta: enriquecidos / creados / saltados.
 
-### 2. Backfill masivo de `wa_id`
-Migración SQL que para cada contacto sin `wa_id`:
-- Coge el primer teléfono válido de `phone_numbers` (o de `metadata->>phone`).
-- Lo normaliza (solo dígitos, prefijo país si falta).
-- Lo guarda en `wa_id` siempre que no colisione con otro contacto que ya lo tenga.
+### 2. Resolución de colisiones de `wa_id`
+Si al rellenar `wa_id` en un contacto choca con otro que ya lo tiene (típicamente un duplicado fantasma creado por el webhook tipo "Dani" suelto):
+- Mover los mensajes del fantasma → contacto real del CSV.
+- Borrar el fantasma.
+- Limpiar `contact_headlines` de ambos.
 
-Si hay colisión (otro contacto ya tiene ese `wa_id`), no sobrescribe; lo marca para revisión manual en una tabla de log temporal.
+### 3. Backfill final + recálculo
+- Recalcular `last_contact` de todos los contactos tocados.
+- Borrar `contact_headlines` de los enriquecidos para que se regeneren con datos limpios.
 
-### 3. Fusión automática de duplicados creados por el webhook
-Para los casos en los que el webhook ya creó un "Dani" / "Juan" / número suelto que coincide con un contacto real:
-- Detectar pares: contacto A real (con teléfono) + contacto B fantasma (con `wa_id` igual al teléfono de A).
-- Mover los mensajes de B → A.
-- Mover el `wa_id` a A (si no lo tenía).
-- Borrar el contacto fantasma B.
-- Recalcular `last_contact` de A.
+### 4. UI
+Botón **"Importar contactos de Mac (CSV)"** en Ajustes / Onboarding que:
+- Acepta este CSV.
+- Muestra preview (cuántos enriquecerá, cuántos creará, cuántas colisiones).
+- Confirmación → ejecuta.
+- Reporte final con contadores.
 
-### 4. Invalidar caches contaminadas
-- Borrar `contact_headlines` de todos los contactos tocados en pasos 2 y 3, para que se regeneren con los datos correctos la próxima vez que se abran.
+## Archivos a tocar
 
-### 5. Endurecer el webhook (`evolution-webhook`)
-Cambiar la lógica de matching a **estrictamente por teléfono**:
-- 1º `wa_id` exacto.
-- 2º últimos 9 dígitos del `wa_id` contra `wa_id` y contra `phone_numbers`.
-- 3º búsqueda en `phone_numbers` con normalización.
-- Si no hay match por teléfono → **crear contacto nuevo siempre**, nunca por nombre.
-
-Eliminar todo el bloque de fuzzy match por `pushName`. El nombre solo se usa para rellenar `name` al crear el contacto nuevo, jamás para fusionar con uno existente.
-
-### 6. Validación
-- Verificar que en Red Estratégica los contactos clave (Adolfo, Daniel, etc.) muestran `last_contact` actualizado y sin sugerencias de otra persona.
-- Mandar un mensaje de prueba desde un número conocido y comprobar que aterriza en el contacto correcto sin duplicar.
-
-## Archivos que toco
-
-- Nueva migración SQL para:
-  - Backfill de `wa_id` desde `phone_numbers`.
-  - Fusión de duplicados detectados.
-  - Limpieza de `contact_headlines` afectadas.
-- `supabase/functions/evolution-webhook/index.ts` para quitar el fuzzy match por nombre.
+- `src/lib/contacts-csv-mac.ts` (nuevo) — parser del formato de Contactos de Mac.
+- `src/components/contacts/ImportMacContactsDialog.tsx` (nuevo) — UI con preview y confirmación.
+- Punto de entrada en Ajustes o en `Onboarding.tsx` para llamar al diálogo.
+- Edge function nueva (o ampliar `import-whatsapp-backup`) si el volumen lo requiere para procesar en background.
+- Migración SQL pequeña post-import para limpiar `contact_headlines` de los IDs tocados.
 
 ## Resultado esperado
 
-- Todos los contactos antiguos con teléfono pasan a tener `wa_id` correcto.
-- Los duplicados que ya se habían creado se fusionan en su contacto real.
-- Cualquier mensaje futuro entra por teléfono al contacto correcto, sin merges raros.
-- Las sugerencias de IA dejan de mezclar conversaciones de personas distintas.
+- Los ~800 contactos sin teléfono pasan a tener `wa_id` y `phone_numbers` correctos.
+- Los duplicados fantasma creados por el webhook se fusionan con su contacto real del CSV.
+- A partir de ahí, cualquier WhatsApp entrante encuentra contacto por teléfono y deja de crear duplicados.
+- Las sugerencias de IA dejan de mezclar conversaciones.
+
+**Nota:** sí, importa el CSV. Es el camino más limpio y rápido. ¿Tiro?
 

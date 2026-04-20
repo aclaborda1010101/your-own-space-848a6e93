@@ -24,6 +24,8 @@ export function NativeNotificationSettings() {
 
   const sendTest = async () => {
     if (!user?.id) return;
+    // Re-check counts before sending so the UI reflects current backend truth.
+    await push.refreshActiveDevices();
     const { data, error } = await supabase.functions.invoke("send-push-notification", {
       body: {
         user_id: user.id,
@@ -37,13 +39,77 @@ export function NativeNotificationSettings() {
       toast.error("Error enviando push", { description: error.message });
       return;
     }
-    if ((data as any)?.sent > 0) {
-      toast.success("Push enviado");
+    const result = data as { sent?: number; failed?: number; results?: any[]; reason?: string } | null;
+    if (result?.sent && result.sent > 0) {
+      toast.success(`Push enviado (${result.sent} dispositivo${result.sent > 1 ? "s" : ""})`);
+    } else if (result?.results?.length) {
+      const firstErr = result.results.find((r) => !r.ok);
+      toast.error("APNs rechazó el envío", {
+        description: firstErr?.error?.slice(0, 200) ?? "Sin detalles",
+      });
     } else {
       toast.warning("Sin dispositivos activos", {
-        description: "Habilita las notificaciones en este dispositivo primero.",
+        description:
+          result?.reason ??
+          "El backend no encontró tokens activos para tu usuario. Pulsa 'Activar' o reinicia la app.",
       });
     }
+  };
+
+  const renderDeviceStatus = () => {
+    if (push.permission !== "granted") return null;
+    if (push.activeDeviceCount > 0) {
+      return (
+        <div className="flex items-start gap-2 p-3 rounded-md bg-primary/5 text-sm border border-primary/20">
+          <CheckCircle2 className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-medium">
+              {push.activeDeviceCount} dispositivo{push.activeDeviceCount > 1 ? "s" : ""} activo
+              {push.activeDeviceCount > 1 ? "s" : ""}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Listo para recibir notificaciones push.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    if (push.token && !push.deviceRegistered) {
+      return (
+        <div className="flex items-start gap-2 p-3 rounded-md bg-muted/50 text-sm">
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-medium">Registrando dispositivo…</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Token APNs recibido, guardando en backend.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="flex items-start gap-2 p-3 rounded-md bg-amber-500/10 text-sm border border-amber-500/30">
+        <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+        <div className="flex-1">
+          <p className="font-medium">Sin dispositivos activos</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Permiso concedido pero el token no está registrado. Pulsa el botón para reintentar.
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="mt-2"
+            onClick={() => push.registerDevice()}
+            disabled={push.registering}
+          >
+            {push.registering ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" />
+            ) : null}
+            Reintentar registro
+          </Button>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {

@@ -2,37 +2,26 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   CalendarCheck,
   CheckSquare,
-  Sparkles,
   Activity,
+  Bot,
   Menu as MenuIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useHaptics } from "@/hooks/useHaptics";
 
-interface BottomNavBarProps {
-  onJarvisPress?: () => void;
-  isJarvisActive?: boolean;
-}
-
-const primary = [
+const items = [
   { icon: CalendarCheck, label: "Hoy", path: "/dashboard" },
   { icon: CheckSquare, label: "Tareas", path: "/tasks" },
+  { icon: Bot, label: "JARVIS", path: "/chat" },
   { icon: Activity, label: "Salud", path: "/health" },
 ];
 
-export const BottomNavBar = ({ onJarvisPress, isJarvisActive = false }: BottomNavBarProps) => {
+export const BottomNavBar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { selection } = useHaptics();
 
   const tap = () => selection();
-
-  const handleJarvis = () => {
-    selection();
-    if (onJarvisPress) onJarvisPress();
-    else navigate("/chat");
-  };
-
   const isMenuActive = location.pathname === "/menu";
 
   return (
@@ -42,46 +31,17 @@ export const BottomNavBar = ({ onJarvisPress, isJarvisActive = false }: BottomNa
     >
       <div className="absolute top-0 left-1/2 -translate-x-1/2 h-px w-[65%] bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
 
-      {/* Background extiende hasta el borde físico inferior; padding interno respeta el home indicator */}
       <div className="relative bg-background/95 backdrop-blur-2xl border-t border-border/60 bg-scanlines pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-end justify-around h-16 px-1">
-          <NavItem item={primary[0]} active={location.pathname === primary[0].path} onClick={tap} />
-          <NavItem item={primary[1]} active={location.pathname === primary[1].path} onClick={tap} />
+          {items.map((item) => (
+            <NavItem
+              key={item.path}
+              item={item}
+              active={location.pathname === item.path}
+              onClick={tap}
+            />
+          ))}
 
-          {/* JARVIS centro */}
-          <button
-            onClick={handleJarvis}
-            className="relative flex flex-col items-center justify-end pb-1 -mt-6 touch-manipulation"
-            aria-label="JARVIS"
-          >
-            <div
-              className={cn(
-                "flex items-center justify-center w-14 h-14 rounded-full transition-all border-2",
-                isJarvisActive
-                  ? "bg-destructive/20 border-destructive shadow-[0_0_24px_hsl(var(--destructive)/0.6)]"
-                  : "bg-gradient-to-br from-primary via-primary to-primary/70 border-primary/40 shadow-[0_0_24px_hsl(var(--primary)/0.7)]",
-              )}
-            >
-              <Sparkles
-                className={cn(
-                  "w-6 h-6",
-                  isJarvisActive ? "animate-pulse text-destructive" : "text-primary-foreground",
-                )}
-              />
-            </div>
-            <span
-              className={cn(
-                "text-[10px] font-mono font-semibold uppercase tracking-wider mt-0.5",
-                isJarvisActive ? "text-destructive" : "text-primary",
-              )}
-            >
-              JARVIS
-            </span>
-          </button>
-
-          <NavItem item={primary[2]} active={location.pathname === primary[2].path} onClick={tap} />
-
-          {/* Menú → /menu */}
           <button
             onClick={() => {
               selection();

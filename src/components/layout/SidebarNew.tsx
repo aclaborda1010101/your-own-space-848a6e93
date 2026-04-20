@@ -34,6 +34,7 @@ import {
   Search,
   Zap,
   TerminalSquare,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -74,6 +75,7 @@ const sections: NavSection[] = [
     collapsible: false,
     items: [
       { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+      { icon: Bot, label: "JARVIS", path: "/chat" },
       { icon: Brain, label: "Bandeja inteligencia", path: "/intelligence/inbox" },
       { icon: TerminalSquare, label: "OpenClaw Hub", path: "/openclaw/hub" },
       { icon: CheckSquare, label: "Tareas", path: "/tasks" },

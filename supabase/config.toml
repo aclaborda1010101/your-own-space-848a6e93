@@ -126,3 +126,6 @@ verify_jwt = false
 [functions.jarvis-stt]
 verify_jwt = false
 
+[functions.jarvis-analyze-attachment]
+verify_jwt = false
+

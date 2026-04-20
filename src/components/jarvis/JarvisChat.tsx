@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Bot, Send, Loader2, RefreshCw, Mic, MicOff, Radio, Square } from "lucide-react";
+import { Bot, Send, Loader2, RefreshCw, Mic, MicOff, Radio, Square, Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -34,8 +34,10 @@ export function JarvisChat({ variant = "page", autoProactive }: JarvisChatProps)
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [hasInit, setHasInit] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const shouldAutoProactive = autoProactive ?? variant === "floating";
 
@@ -234,6 +236,47 @@ export function JarvisChat({ variant = "page", autoProactive }: JarvisChatProps)
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user || !session) return;
+    e.target.value = ""; // reset
+
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("Máximo 20MB por archivo");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop() || "bin";
+      const path = `${user.id}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("jarvis-attachments")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (upErr) throw upErr;
+
+      // Add user-visible message indicating the upload
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: `📎 Archivo adjunto: **${file.name}**` },
+      ]);
+
+      const { data, error } = await supabase.functions.invoke("jarvis-analyze-attachment", {
+        body: { storagePath: path, fileName: file.name, mimeType: file.type },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (error) throw error;
+
+      const summary = (data as any)?.summary || "(sin análisis)";
+      setMessages((prev) => [...prev, { role: "assistant", content: summary }]);
+    } catch (err) {
+      console.error("[JarvisChat] upload error:", err);
+      toast.error("No pude analizar el archivo");
+    } finally {
+      setUploading(false);
+    }
+  };
+
   if (!user) return null;
 
   const isFloating = variant === "floating";
@@ -352,6 +395,26 @@ export function JarvisChat({ variant = "page", autoProactive }: JarvisChatProps)
             ) : (
               <Mic className="h-4 w-4" />
             )}
+          </Button>
+
+          {/* File upload */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileUpload}
+            accept="image/*,application/pdf,text/*,.csv,.json,.md,.txt,.log,.yaml,.yml,.xml,.tsv"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-10 w-10 shrink-0"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading || streaming || realtime.isActive}
+            title="Adjuntar archivo para análisis"
+          >
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
           </Button>
 
           {/* Realtime toggle */}

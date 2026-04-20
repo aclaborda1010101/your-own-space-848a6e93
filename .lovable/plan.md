@@ -1,52 +1,78 @@
 
 
-## Qué pasa
+## Qué quieres
 
-El brief de "mañana" del dashboard te dice "no hay eventos programados" cuando tienes 4 reuniones reales en iCloud. **Es un bug puro**:
+Reorganizar `/red-estrategica` en 3 puntos concretos:
 
-- Tu calendario real vive en **iCloud** (CalDAV) y se consulta vía la edge function `icloud-calendar` (acción `fetch`).
-- Pero la edge function `daily-context-brief` (la que genera el "Brief de mañana") consulta una **tabla `calendar_events` de Supabase que NO EXISTE** en tu base de datos. Lo confirmé con SQL: `relation "calendar_events" does not exist`.
-- Resultado: siempre devuelve `cal_count: 0`, el LLM lee "Sin eventos en el calendario para mañana" y escribe lo que escribe ("día tranquilo, sin eventos…").
-- Lo mismo le pasa a `suggest-actions` (sugerencias del menú activo).
+1. **Toolbar superior limpio en una línea ancho completo**: solo `Buscar contacto` + toggle vista (cards/lista) + `Añadir contacto`. **Fuera** de esta línea: las 3 acciones pesadas (Actualizar novedades, Regenerar perfiles, Re-importar multimedia).
+2. **Acciones pesadas en su propia línea ancho completo, debajo del buscador**: las 3 juntas, separadas visualmente del flujo de búsqueda.
+3. **Filtros (Relación / Salud / Actividad) colapsados en una sola fila con desplegables** (no 3 filas de píldoras siempre visibles).
+4. **Fichas de contacto rediseñadas** al estilo de los KPIs de arriba (Contactos / Activos 7d / Críticos / Podcasts): score grande tipo "8" / "9" en la esquina (no anillo SVG con número minúsculo), más respiración, más jerarquía visual, más información por ficha.
 
-El brief cacheado de hoy en tu BD lo confirma: `context_snapshot.cal_count: 0`. Por eso el mensaje de "tranquilo, ponte al día".
+## Cómo lo voy a hacer
 
-## Plan
+### Layout nuevo de la zona superior (`src/pages/RedEstrategica.tsx`)
 
-### 1) Arreglar `supabase/functions/daily-context-brief/index.ts`
-Sustituir la consulta a la tabla fantasma `calendar_events` por una llamada interna a la edge function `icloud-calendar` con `action: "fetch"` y rango `[mañana 00:00, mañana 23:59]`:
+```text
+┌────────────────────────────────────────────────────────────────────┐
+│ [🔍 Buscar contacto..............]  [⊞|≡]   [+ Añadir contacto]    │  ← Línea 1
+├────────────────────────────────────────────────────────────────────┤
+│ [↻ Actualizar novedades]  [🧠 Regenerar perfiles]  [🎙 Re-import]   │  ← Línea 2 (full width, grid de 3)
+├────────────────────────────────────────────────────────────────────┤
+│ [Relación: Todas ▾]  [Salud: Toda ▾]  [Actividad: Toda ▾]   3/19   │  ← Línea 3 (dropdowns)
+└────────────────────────────────────────────────────────────────────┘
+```
 
-- Reusa el mismo Bearer token del usuario (ya lo tenemos en `authHeader`).
-- Mapeo: la respuesta de iCloud devuelve `{ id, title, date, time, duration, location, allDay }`. Genero el `calendarBlock` actual a partir de eso (`time`, `title`, `location`).
-- Manejo robusto: si `connected: false` o falla, devuelvo "Sin datos de calendario disponibles" en vez de "Sin eventos" (no es lo mismo; así el LLM no inventa que estás libre).
-- Filtrar `allDay` aparte para no contarlos como reuniones.
+- **Línea 1**: `flex` con search ocupando todo el espacio (`flex-1`), toggle de vista compacto, botón añadir contacto. Mismo estilo redondeado actual.
+- **Línea 2**: `grid grid-cols-1 sm:grid-cols-3 gap-3`. Los 3 botones ahora son del mismo ancho, igual de prominentes, con icono + label completo siempre visible (no solo en `sm:`). En móvil se apilan verticales.
+- **Línea 3**: 3 dropdowns shadcn (`DropdownMenu` con `DropdownMenuRadioGroup`). Cada uno muestra el filtro activo en el trigger ("Relación: Profesional") con un check ✓ junto a la opción seleccionada. A la derecha, el contador `X de Y` y `Limpiar filtros` cuando hay alguno activo. Mucho más compacto: pasamos de ocupar ~140px verticales a ~50px.
 
-### 2) Invalidar el brief erróneo cacheado
-El brief cacheado de hoy ya tiene `cal_count: 0`. Hay que **forzar regeneración** una vez:
-- Opción rápida (sin migración): el frontend llama `daily-context-brief?force=true` la próxima vez que abra el dashboard si el `context_snapshot.cal_count === 0` y hay eventos reales.
-- O simple: borrar la fila cacheada de hoy con `scope='tomorrow'` para tu user_id (lo hago vía migración SQL one-shot al desplegar).
+### Rediseño de la `ContactCard` — estilo "KPI de persona"
 
-Voy con la opción simple: la migración limpia `daily_briefs` donde `scope='tomorrow' AND brief_date >= CURRENT_DATE`. La próxima carga regenera con el fix.
+Actualmente la ficha tiene avatar + nombre + 2 chips minúsculos + anillo SVG raquítico con un "8" diminuto. La voy a rehacer para que se sienta de la misma familia visual que los Kpi de arriba (mismo `GlassCard` con borde tonal según salud, número grande tipográfico, padding generoso):
 
-### 3) Arreglar `supabase/functions/suggest-actions/index.ts`
-Mismo bug, mismo arreglo: cambiar el `from('calendar_events')` por una llamada interna a `icloud-calendar fetch` para las próximas 24h. Mantengo el resto de la lógica (tareas, hábitos, knowledge base).
+```text
+┌─────────────────────────────────────┐
+│ AB  Adolfo Belloso          ┌───┐   │
+│     [💼 Profesional]        │ 8 │   │  ← número grande, tipo Kpi
+│                             └───┘   │
+│ ─────────────────────────────────── │
+│ ✓ 24d sin contacto · 🎧 podcast     │  ← meta-fila compacta
+│                                     │
+│ "Importado desde grupo WhatsApp:    │  ← contexto / último tema
+│  2024 Las Vegas Team"               │
+│                                     │
+│ [⚡ Seguimiento]      [+ Redactar]   │  ← acciones (si aplica)
+└─────────────────────────────────────┘
+```
 
-### 4) Mejora del prompt de `tomorrow` (pequeño endurecimiento)
-En el prompt, añadir esta línea al system: *"Si el bloque de calendario está vacío o dice 'Sin datos disponibles', NO afirmes que el día está libre — di literalmente 'No he podido confirmar tu agenda con iCloud' y pide al usuario revisar la conexión."* Así si el iCloud falla en el futuro, no vuelve a inventar "día tranquilo".
+Cambios concretos:
 
-## Ficheros que tocaré
+- **Score como número grande (no anillo)**: caja redondeada arriba a la derecha de 56×56px con el número en `font-display text-3xl font-semibold`, fondo y borde tonal según rango (`bg-success/15 border-success/40` si ≥7, `warning` 4-6, `destructive` <4) → mismo lenguaje visual que los KPIs `19`, `12`, `0`, `2` de arriba. Tooltip al hover explica el cálculo (lo que ya tiene).
+- **Avatar más grande** (56×56) alineado con el score → composición equilibrada izq/der.
+- **Chip de categoría** en su línea propia debajo del nombre, no apretado al lado del recency.
+- **Meta-fila** con separador `border-t`: recency + podcast + nº mensajes WhatsApp si los hay (`r.wa_message_count`) → más información útil.
+- **Contexto** (`last_topic`) como cita en cursiva con `line-clamp-2`, más respirado.
+- **Acciones inferiores** sólo cuando `needsFollowUp`, con el mismo botón "Redactar".
+- **Hover**: borde se ilumina hacia primary, ligero glow (igual que los KPIs).
+- **Eliminar (X)** sigue arriba a la derecha, ahora no compite con el anillo (que ya no está ahí).
 
-- `supabase/functions/daily-context-brief/index.ts` — sustituir consulta + endurecer prompt.
-- `supabase/functions/suggest-actions/index.ts` — sustituir consulta.
-- Migración SQL — borrar el brief cacheado de hoy/mañana para forzar regeneración con datos reales.
+### Lo que NO toco
 
-## Lo que NO toco
+- La lógica de filtrado (`filtered`, `computeScore`, KPIs, carga, acciones) — solo cambia la presentación.
+- El comportamiento de las 3 acciones pesadas — solo se reubican.
+- La vista lista (`view === "list"`) — sigue igual, ya es compacta.
+- `HealthMeter` — se queda para la ficha de detalle del contacto, donde sí tiene sentido el anillo grande.
+- `KpiCard` superior — está bien, es la referencia estética.
 
-- `jarvis-core` y `jarvis-gateway` — estos ya reciben los eventos correctos desde el frontend (vía `useCalendar` → iCloud). Funcionan bien.
-- `daily-briefing` (Morning Briefing) — no toca calendario directamente, recibe contexto montado por separado.
-- La edge function `icloud-calendar` — funciona, no se cambia.
+### Ficheros que tocaré
+
+1. **`src/pages/RedEstrategica.tsx`** — reorganizar las 3 líneas del toolbar y reemplazar el bloque de píldoras por dropdowns.
+2. **`src/components/contact/ContactCard.tsx`** — rediseño completo de la card con score grande tipo KPI y mejor jerarquía.
 
 ## Resultado esperado
 
-Refrescas el dashboard → el "Brief de mañana" dirá algo tipo *"Mañana arrancas a las 09:00 con 4 reuniones encadenadas hasta mediodía. Foco: preparar lo de Hiba antes de la primera. Tarde libre para deep work."* en vez de "día tranquilo".
+- Toolbar superior limpio y predecible: una línea para buscar/añadir, otra para acciones pesadas, otra para filtros desplegables. Pasamos de ~7 filas verticales a 3.
+- Las cards se sienten de la misma familia que los KPIs de arriba: el `8`, `9`, `7` se lee de un vistazo a 3 metros, no hay que entrecerrar los ojos.
+- Cada ficha aporta más información útil (mensajes, contexto, recency) sin sentirse cargada.
 

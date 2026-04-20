@@ -17,7 +17,7 @@ interface FunctionCall {
   arguments: string;
 }
 
-// OpenAI Realtime model
+// OpenAI Realtime model — must match supabase/functions/jarvis-voice/index.ts
 const OPENAI_REALTIME_MODEL = 'gpt-4o-realtime-preview-2024-12-17';
 
 export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
@@ -481,15 +481,20 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       updateState('connecting');
       setIsActive(true);
       
-      // Get ephemeral token from edge function
+      // Get ephemeral token from edge function with explicit auth header
       console.log('[JARVIS] Getting ephemeral token...');
-      const { data, error } = await supabase.functions.invoke('jarvis-voice');
-      
+      const accessToken = sessionData.session.access_token;
+      const { data, error } = await supabase.functions.invoke('jarvis-voice', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
       if (error || !data?.client_secret?.value) {
         console.error('[JARVIS] Failed to get ephemeral token:', error, data);
         throw new Error('No se pudo obtener el token de sesión');
       }
-      
+
       const ephemeralKey = data.client_secret.value;
       console.log('[JARVIS] Got ephemeral token, requesting microphone access...');
       

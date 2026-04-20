@@ -1,16 +1,24 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { validateAuth } from "../_shared/auth-helper.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, upgrade, connection, sec-websocket-key, sec-websocket-version, sec-websocket-extensions, sec-websocket-protocol',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version, upgrade, connection, sec-websocket-key, sec-websocket-version, sec-websocket-extensions, sec-websocket-protocol',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
+
+// Must match src/hooks/useJarvisRealtime.tsx OPENAI_REALTIME_MODEL
+const OPENAI_REALTIME_MODEL = "gpt-4o-realtime-preview-2024-12-17";
 
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  // Auth check — bind ephemeral token to authenticated user
+  const { user, error: authError } = await validateAuth(req, corsHeaders);
+  if (authError) return authError;
 
   const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
   if (!OPENAI_API_KEY) {
@@ -22,9 +30,8 @@ serve(async (req) => {
   }
 
   try {
-    // Generate ephemeral token for WebRTC
-    console.log('Requesting ephemeral token from OpenAI...');
-    
+    console.log(`[jarvis-voice] User ${user!.id} requesting ephemeral token...`);
+
     const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
       method: "POST",
       headers: {
@@ -32,7 +39,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-realtime-preview-2024-10-01",
+        model: OPENAI_REALTIME_MODEL,
         voice: "alloy",
         instructions: `Eres JARVIS, el asistente personal de productividad del usuario. Tu estilo es el de un mayordomo tecnológico de élite: formal, eficiente, discreto y anticipador.
 
@@ -147,31 +154,19 @@ INSTRUCCIONES:
             type: "function",
             name: "list_pending_tasks",
             description: "Lista las tareas pendientes del usuario",
-            parameters: {
-              type: "object",
-              properties: {},
-              required: []
-            }
+            parameters: { type: "object", properties: {}, required: [] }
           },
           {
             type: "function",
             name: "get_today_summary",
             description: "Obtiene un resumen del día actual: tareas completadas, pendientes, check-in, etc.",
-            parameters: {
-              type: "object",
-              properties: {},
-              required: []
-            }
+            parameters: { type: "object", properties: {}, required: [] }
           },
           {
             type: "function",
             name: "get_my_stats",
             description: "Obtiene estadísticas generales del usuario: racha, sesiones de pomodoro, productividad",
-            parameters: {
-              type: "object",
-              properties: {},
-              required: []
-            }
+            parameters: { type: "object", properties: {}, required: [] }
           },
           {
             type: "function",
@@ -199,9 +194,7 @@ INSTRUCCIONES:
           }
         ],
         tool_choice: "auto",
-        input_audio_transcription: {
-          model: "whisper-1"
-        },
+        input_audio_transcription: { model: "whisper-1" },
         turn_detection: {
           type: "server_vad",
           threshold: 0.3,
@@ -221,8 +214,8 @@ INSTRUCCIONES:
     }
 
     const data = await response.json();
-    console.log('Session created successfully');
-    
+    console.log(`[jarvis-voice] Session created for user ${user!.id}`);
+
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

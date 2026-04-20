@@ -36,6 +36,9 @@ verify_jwt = false
 [functions.evolution-webhook]
 verify_jwt = false
 
+[functions.process-whatsapp-media]
+verify_jwt = false
+
 [functions.generate-response-draft]
 verify_jwt = false
 

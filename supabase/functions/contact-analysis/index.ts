@@ -1276,51 +1276,72 @@ Cada insight debe citar fechas y contenido real. Las alertas son SIEMPRE sobre e
 
     if (updateErr) throw updateErr;
 
-    // 17. Bio-to-Tasks sync: persist acciones_pendientes as tasks
+    // 17. Bio-to-Suggestions sync: las acciones_pendientes NO se crean como tareas.
+    // Entran en la Bandeja de inteligencia (suggestions) para que el usuario decida.
     try {
-      let syncedTasks = 0;
+      let queuedSuggestions = 0;
       for (const ambito of scopes) {
         const profile = profileByScope[ambito];
         const acciones = profile?.acciones_pendientes;
         if (!Array.isArray(acciones) || acciones.length === 0) continue;
 
         const taskType = ambito === 'profesional' ? 'work' : 'life';
+        const pretexto = profile?.proxima_accion?.pretexto || '';
 
         for (const accion of acciones) {
           if (!accion?.accion) continue;
           const accionTitle = String(accion.accion).substring(0, 200);
-          
-          // Check if similar task already exists for this contact
-          const { data: existing } = await supabase
+          const titleKey = accionTitle.substring(0, 30);
+
+          // Anti-spam: no duplicar si ya existe una sugerencia pendiente/aceptada equivalente
+          // o si el usuario ya tiene una tarea abierta con título similar para este contacto.
+          const { data: existingSugg } = await supabase
+            .from("suggestions")
+            .select("id")
+            .eq("user_id", userId)
+            .in("status", ["pending", "accepted"])
+            .filter("content->>contact_id", "eq", contact_id)
+            .ilike("content->>title", `%${titleKey}%`)
+            .limit(1);
+          if (existingSugg && existingSugg.length > 0) continue;
+
+          const { data: existingTask } = await supabase
             .from("tasks")
             .select("id")
             .eq("user_id", userId)
             .eq("contact_id", contact_id)
             .eq("completed", false)
-            .ilike("title", `%${accionTitle.substring(0, 30)}%`)
+            .ilike("title", `%${titleKey}%`)
             .limit(1);
+          if (existingTask && existingTask.length > 0) continue;
 
-          if (existing && existing.length > 0) continue;
-
-          const pretexto = profile?.proxima_accion?.pretexto || '';
-          
-          await supabase.from("tasks").insert({
+          await supabase.from("suggestions").insert({
             user_id: userId,
-            title: accionTitle,
-            type: taskType,
-            priority: 'P1',
-            duration: 15,
-            completed: false,
-            contact_id: contact_id,
+            suggestion_type: "task_from_plaud", // reusa el handler existente en useSuggestions.acceptTask
+            status: "pending",
+            content: {
+              title: accionTitle,
+              description: accionTitle,
+              type: taskType,
+              priority: "medium",
+              duration: 30,
+              contact_id: contact_id,
+              contact_name: contact.name,
+              source: "contact-analysis",
+              ambito,
+              pretexto,
+            },
+            confidence: 0.7,
+            reasoning: pretexto || `Detectado en el análisis de ${contact.name} (ámbito ${ambito})`,
           });
-          syncedTasks++;
+          queuedSuggestions++;
         }
       }
-      if (syncedTasks > 0) {
-        console.log(`Synced ${syncedTasks} new tasks from AI analysis for contact ${contact.name}`);
+      if (queuedSuggestions > 0) {
+        console.log(`Queued ${queuedSuggestions} suggestions in Intelligence Inbox for contact ${contact.name}`);
       }
     } catch (syncErr) {
-      console.error("Error syncing tasks from profile:", syncErr);
+      console.error("Error queuing suggestions from profile:", syncErr);
       // Non-fatal: don't block the response
     }
 

@@ -114,7 +114,7 @@ export function ImportMacContactsDialog() {
               <div>➕ <b>{preview.created}</b> nuevos a crear</div>
               <div>⏭️ <b>{preview.skipped}</b> ya completos (sin cambios)</div>
               {preview.ghostsMerged > 0 && (
-                <div className="text-amber-600 flex items-center gap-1">
+                <div className="text-warning flex items-center gap-1">
                   <AlertTriangle className="h-3.5 w-3.5" />
                   <b>{preview.ghostsMerged}</b> duplicados fantasma se fusionarán
                 </div>
@@ -132,7 +132,7 @@ export function ImportMacContactsDialog() {
 
         {result && (
           <div className="space-y-3">
-            <div className="flex items-center gap-2 text-green-600">
+            <div className="flex items-center gap-2 text-success">
               <CheckCircle2 className="h-5 w-5" />
               <span className="font-medium">Importación completada</span>
             </div>

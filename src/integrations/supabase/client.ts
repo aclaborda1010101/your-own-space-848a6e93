@@ -51,7 +51,10 @@ function createSafeAuthStorage(): Storage {
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     storage: createSafeAuthStorage(),
+    storageKey: 'sb-jarvis-auth',
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
+    flowType: 'pkce',
   }
 });

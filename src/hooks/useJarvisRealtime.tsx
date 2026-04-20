@@ -813,7 +813,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
             instructions: richInstructions,
             audio: {
               input: {
-                transcription: { model: 'whisper-1' },
+                transcription: { model: 'gpt-4o-mini-transcribe' },
                 turn_detection: {
                   type: 'server_vad',
                   threshold: 0.5,
@@ -821,7 +821,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
                   silence_duration_ms: 500,
                 },
               },
-              output: { voice: 'alloy' },
+              output: { voice },
             },
             tools: [
               // ── tareas ─────────────────────────────────────────────

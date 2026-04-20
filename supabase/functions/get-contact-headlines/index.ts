@@ -165,12 +165,16 @@ function formatAbsoluteDate(date: Date): string {
 }
 
 function formatShortAbsoluteDate(date: Date): string {
-  return new Intl.DateTimeFormat("es-ES", {
+  const parts = new Intl.DateTimeFormat("es-ES", {
     day: "numeric",
     month: "short",
     year: "numeric",
     timeZone: MADRID_TZ,
-  }).format(date);
+  }).formatToParts(date);
+  const day = parts.find((p) => p.type == "day")?.value ?? "";
+  const month = parts.find((p) => p.type == "month")?.value ?? "";
+  const year = parts.find((p) => p.type == "year")?.value ?? "";
+  return `${day} ${month} ${year}`.trim();
 }
 
 function formatMessageForModel(message: {

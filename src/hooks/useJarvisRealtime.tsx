@@ -532,8 +532,16 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
         
         try {
           const parsedArgs = JSON.parse(fnArgs || '{}');
-          const result = await executeFunction(fnName, parsedArgs);
-          
+          const t0 = Date.now();
+          // 12s timeout to avoid silent hangs when an edge function or RPC stalls
+          const result = await Promise.race<string>([
+            executeFunction(fnName, parsedArgs),
+            new Promise<string>((resolve) =>
+              setTimeout(() => resolve(JSON.stringify({ error: 'timeout (12s)' })), 12000),
+            ),
+          ]);
+          console.log(`[JARVIS] tool=${fnName} took ${Date.now() - t0}ms`);
+
           // Send function output back to OpenAI
           sendEvent({
             type: 'conversation.item.create',
@@ -543,7 +551,7 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
               output: result,
             },
           });
-          
+
           // Request model to continue generating response
           sendEvent({ type: 'response.create' });
         } catch (err) {
@@ -658,12 +666,13 @@ export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
       setIsActive(true);
       
       // Get ephemeral token from edge function with explicit auth header
-      console.log('[JARVIS] Getting ephemeral token...');
+      console.log('[JARVIS] Getting ephemeral token... voice=', voice);
       const accessToken = sessionData.session.access_token;
       const { data, error } = await supabase.functions.invoke('jarvis-voice', {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
+        body: { voice },
       });
 
       if (error || !data?.client_secret?.value) {

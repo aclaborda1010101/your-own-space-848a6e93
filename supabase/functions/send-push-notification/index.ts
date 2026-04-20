@@ -7,7 +7,7 @@
 //   - APNS_BUNDLE_ID      (e.g. com.maniasstudio.jarvis)  — fallback used if missing
 //   - APNS_KEY_P8         (raw .p8 contents incl. -----BEGIN PRIVATE KEY-----)
 //                         (also accepts legacy name APNS_KEY for backwards compat)
-//   - APNS_USE_SANDBOX    ("true" for dev/TestFlight, otherwise prod)
+//   - APNS_USE_SANDBOX    ("true" solo para desarrollo local; TestFlight/App Store usan production)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
   }
 
   const bundleId = Deno.env.get("APNS_BUNDLE_ID") || "com.maniasstudio.jarvis";
-  const useSandbox = (Deno.env.get("APNS_USE_SANDBOX") ?? "true").toLowerCase() === "true";
+  const useSandbox = (Deno.env.get("APNS_USE_SANDBOX") ?? "false").toLowerCase() === "true";
   const host = useSandbox ? "https://api.sandbox.push.apple.com" : "https://api.push.apple.com";
 
   // 4. Send

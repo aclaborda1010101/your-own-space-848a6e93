@@ -1,57 +1,39 @@
 
-
-## Diagnóstico
-
-Acabo de mirar la BD: tienes **1.341 contactos**, de los cuales:
-- 536 tienen `wa_id` (los que sí funcionan).
-- 804 **no tienen ni `wa_id` ni `phone_numbers`** — están vacíos de teléfono en la base de datos.
-- 1 sin nada.
-
-O sea: el backfill desde la propia BD que planteamos **no puede arreglar nada**, porque la mayoría de tus contactos antiguos perdieron el teléfono al importarse en su día (o se importaron solo con nombre). Por eso WhatsApp no los encuentra y crea duplicados.
-
-**La importación de tu CSV de Contactos de Mac (1.813 filas) es exactamente lo que necesitamos.** Tiene `Teléfono móvil`, `Teléfono de la casa`, `Teléfono del trabajo`, etc.
+El usuario quiere que YO ejecute la importación directamente desde el sandbox (con el CSV/XLSX que ya subió), en vez de hacerla él desde la UI. Razón: la UI no está cogiendo bien algunos contactos (Juan Jácome, Obra Militar...) cuyos teléfonos están en la columna AM/Nota.
 
 ## Plan
 
-### 1. Importador de CSV de Contactos de Mac que enriquece, no duplica
-Crear un flujo de importación específico para este formato (o adaptar el VCF actual) que para cada fila del CSV:
-- Normalice los teléfonos a dígitos (quitar `+`, espacios, paréntesis).
-- Busque contacto existente por **nombre exacto** O por cualquier teléfono normalizado.
-- Si existe → **actualiza** `wa_id` (primer móvil válido) y `phone_numbers` (todos los teléfonos), sin tocar el resto de campos.
-- Si no existe → crea contacto nuevo con todos los datos.
-- Cuenta: enriquecidos / creados / saltados.
+Ejecutar la importación de teléfonos directamente contra la BD usando el XLSX que subió, sin depender de la UI:
 
-### 2. Resolución de colisiones de `wa_id`
-Si al rellenar `wa_id` en un contacto choca con otro que ya lo tiene (típicamente un duplicado fantasma creado por el webhook tipo "Dani" suelto):
-- Mover los mensajes del fantasma → contacto real del CSV.
-- Borrar el fantasma.
-- Limpiar `contact_headlines` de ambos.
+1. **Leer el XLSX** (`Contactos_-_2026-02-19_08_05_00-3.xlsx`) en el sandbox con Python (openpyxl/pandas).
+2. **Extraer teléfonos** de TODAS las columnas relevantes:
+   - Columna I (`Teléfono móvil`) y resto de columnas de teléfono.
+   - Columna AM (`Nota`) — regex para `+34...`, `6XX...`, `7XX...`, `9XX...`.
+3. **Normalizar** a formato `34XXXXXXXXX` (quitar `+`, espacios, guiones; añadir `34` si es número español de 9 dígitos).
+4. **Match contra `people_contacts`** del usuario (Agustín):
+   - Por nombre normalizado (sin tildes, lowercase).
+   - Por cualquier teléfono ya existente en `wa_id` o `phone_numbers`.
+5. **Update directo via psql/INSERT tool**:
+   - Si existe y le falta `wa_id` → poner el primer móvil válido.
+   - Mergear `phone_numbers` (unión sin duplicados).
+   - **No tocar** ningún otro campo.
+6. **Resolver colisiones**: si el `wa_id` que voy a poner ya existe en otro contacto fantasma → mover mensajes al real y borrar el fantasma.
+7. **Limpiar `contact_headlines`** de los contactos tocados para que se regeneren.
+8. **Reporte final** en chat: cuántos enriquecidos, cuántos fantasmas mergeados, cuántos sin match (los que habría que crear nuevos), y mostrar concretamente qué pasó con "Juan Jácome" y "Obra Militar" para confirmar que se arreglaron.
 
-### 3. Backfill final + recálculo
-- Recalcular `last_contact` de todos los contactos tocados.
-- Borrar `contact_headlines` de los enriquecidos para que se regeneren con datos limpios.
+## Lo que NO voy a hacer
 
-### 4. UI
-Botón **"Importar contactos de Mac (CSV)"** en Ajustes / Onboarding que:
-- Acepta este CSV.
-- Muestra preview (cuántos enriquecerá, cuántos creará, cuántas colisiones).
-- Confirmación → ejecuta.
-- Reporte final con contadores.
+- No tocar la UI de import (ya está, queda como fallback).
+- No crear contactos nuevos masivamente — solo enriquecer los existentes. Si hay nombres del XLSX que no matchean con ningún contacto en BD, los listo al final para que decidas si los quieres crear.
 
-## Archivos a tocar
+## Archivos / acciones
 
-- `src/lib/contacts-csv-mac.ts` (nuevo) — parser del formato de Contactos de Mac.
-- `src/components/contacts/ImportMacContactsDialog.tsx` (nuevo) — UI con preview y confirmación.
-- Punto de entrada en Ajustes o en `Onboarding.tsx` para llamar al diálogo.
-- Edge function nueva (o ampliar `import-whatsapp-backup`) si el volumen lo requiere para procesar en background.
-- Migración SQL pequeña post-import para limpiar `contact_headlines` de los IDs tocados.
+- Script Python en `/tmp/enrich_contacts.py` (efímero) para parsear XLSX y generar SQL.
+- Llamadas `psql` + insert tool para los UPDATE/DELETE sobre `people_contacts`, `contact_messages`, `contact_headlines`.
+- Sin cambios en código de la app.
 
 ## Resultado esperado
 
-- Los ~800 contactos sin teléfono pasan a tener `wa_id` y `phone_numbers` correctos.
-- Los duplicados fantasma creados por el webhook se fusionan con su contacto real del CSV.
-- A partir de ahí, cualquier WhatsApp entrante encuentra contacto por teléfono y deja de crear duplicados.
-- Las sugerencias de IA dejan de mezclar conversaciones.
-
-**Nota:** sí, importa el CSV. Es el camino más limpio y rápido. ¿Tiro?
-
+- Juan Jácome, Obra Militar y el resto de contactos con teléfono en la columna Nota pasan a tener `wa_id` + `phone_numbers` correctos.
+- WhatsApp entrante de esos números los encuentra y deja de crear duplicados.
+- Reporte exacto de qué se tocó.

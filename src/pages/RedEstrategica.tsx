@@ -453,6 +453,7 @@ export default function RedEstrategica() {
     last_topic: r.context,
     has_podcast: podcastIds.has(r.id),
     last_contact: r.last_contact,
+    wa_message_count: r.wa_message_count,
   }));
 
   const hasActiveFilters =

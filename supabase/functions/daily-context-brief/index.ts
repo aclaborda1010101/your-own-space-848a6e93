@@ -172,9 +172,32 @@ Deno.serve(async (req) => {
       ? `Dieta: ${prefs.diet_type || "balanceada"}, objetivo: ${prefs.goals || "salud"}, target: ${prefs.calories_target}kcal/${prefs.proteins_target}P/${prefs.carbs_target}C/${prefs.fats_target}G, restricciones: ${(prefs.restrictions || []).join(", ") || "ninguna"}, alergias: ${(prefs.allergies || []).join(", ") || "ninguna"}`
       : "Sin preferencias nutricionales configuradas";
 
-    const calendarBlock = calEvents.length > 0
-      ? `Eventos mañana (${calEvents.length}): ${calEvents.map((e: any) => `${new Date(e.start_time).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })} ${e.title}${e.location ? ` @ ${e.location}` : ""}`).join("; ")}`
-      : "Sin eventos en el calendario para mañana";
+    const formatEventTime = (e: any) => {
+      // iCloud-calendar devuelve { time: "HH:MM" } ya formateado en TZ del usuario
+      if (e?.time && typeof e.time === "string") return e.time;
+      if (e?.start_time) {
+        try { return new Date(e.start_time).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
+      }
+      return "";
+    };
+
+    let calendarBlock: string;
+    if (calStatus === "disconnected") {
+      calendarBlock = "Sin datos de calendario disponibles (iCloud no conectado)";
+    } else if (calStatus === "error") {
+      calendarBlock = "Sin datos de calendario disponibles (no he podido confirmar con iCloud)";
+    } else if (calEvents.length === 0 && calAllDay.length === 0) {
+      calendarBlock = "Sin eventos en el calendario para mañana";
+    } else {
+      const parts: string[] = [];
+      if (calEvents.length > 0) {
+        parts.push(`Reuniones mañana (${calEvents.length}): ${calEvents.map((e: any) => `${formatEventTime(e)} ${e.title || "(sin título)"}${e.location ? ` @ ${e.location}` : ""}`).join("; ")}`);
+      }
+      if (calAllDay.length > 0) {
+        parts.push(`Eventos todo el día: ${calAllDay.map((e: any) => e.title || "(sin título)").join(", ")}`);
+      }
+      calendarBlock = parts.join(" | ");
+    }
 
     const plaudBlock = plaud.length > 0
       ? `Últimas grabaciones Plaud: ${plaud.slice(0, 3).map((p: any) => `"${p.title || "sin título"}"${p.summary ? `: ${String(p.summary).slice(0, 120)}` : ""}`).join(" | ")}`

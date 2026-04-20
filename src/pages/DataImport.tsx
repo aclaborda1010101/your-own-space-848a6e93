@@ -3411,6 +3411,22 @@ const DataImport = () => {
           ))}
         </div>
       )}
+
+      <PlaudImportDialog
+        open={plaudDialogOpen}
+        onOpenChange={(o) => {
+          setPlaudDialogOpen(o);
+          if (!o) {
+            plaudSuggestions.reset();
+          }
+        }}
+        loading={plaudSuggestions.loading}
+        error={plaudSuggestions.error}
+        suggestion={plaudSuggestions.data}
+        excerpt={plaudPendingText.slice(0, 4000)}
+        title={plaudFile?.name || ""}
+        onConfirm={commitPlaudImport}
+      />
     </main>
   );
 };

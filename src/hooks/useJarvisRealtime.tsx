@@ -4,10 +4,13 @@ import { toast } from 'sonner';
 
 export type RealtimeState = 'idle' | 'connecting' | 'listening' | 'speaking' | 'processing';
 
+export type RealtimeVoice = 'ash' | 'verse' | 'ballad' | 'echo' | 'alloy' | 'sage' | 'shimmer';
+
 interface UseJarvisRealtimeOptions {
   onTranscript?: (text: string) => void;
   onResponse?: (text: string) => void;
   onStateChange?: (state: RealtimeState) => void;
+  voice?: RealtimeVoice;
 }
 
 // Function execution types
@@ -21,7 +24,8 @@ interface FunctionCall {
 const OPENAI_REALTIME_MODEL = 'gpt-realtime';
 
 export function useJarvisRealtime(options: UseJarvisRealtimeOptions = {}) {
-  const { onTranscript, onResponse, onStateChange } = options;
+  const { onTranscript, onResponse, onStateChange, voice: initialVoice = 'ash' } = options;
+  const [voice, setVoice] = useState<RealtimeVoice>(initialVoice);
   
   const [state, setState] = useState<RealtimeState>('idle');
   const [isActive, setIsActive] = useState(false);

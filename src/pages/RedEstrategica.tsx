@@ -118,6 +118,59 @@ function Kpi({ label, value, hint, icon, tone = "primary" }: KpiProps) {
   );
 }
 
+interface FilterOption { value: string; label: string; }
+interface FilterDropdownProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: FilterOption[];
+}
+
+function FilterDropdown({ icon, label, value, onChange, options }: FilterDropdownProps) {
+  const current = options.find((o) => o.value === value) ?? options[0];
+  const isActive = value !== "all";
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className={cn(
+            "h-9 px-3 rounded-full border bg-card/40 backdrop-blur-xl text-xs font-medium inline-flex items-center gap-2 transition-all",
+            isActive
+              ? "border-primary/50 text-primary bg-primary/10 shadow-[0_0_16px_-4px_hsl(var(--primary)/0.4)]"
+              : "border-border/60 text-muted-foreground hover:border-primary/40 hover:text-foreground",
+          )}
+        >
+          <span className="opacity-80">{icon}</span>
+          <span>{label}:</span>
+          <span className={cn("font-semibold", isActive ? "text-primary" : "text-foreground")}>
+            {current.label}
+          </span>
+          <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[200px]">
+        <DropdownMenuLabel className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+          {label}
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
+          {options.map((o) => (
+            <DropdownMenuRadioItem
+              key={o.value}
+              value={o.value}
+              className="text-sm cursor-pointer pl-8"
+            >
+              {value === o.value && <Check className="w-3.5 h-3.5 absolute left-2 text-primary" />}
+              {o.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export default function RedEstrategica() {
   const { user } = useAuth();
   const navigate = useNavigate();

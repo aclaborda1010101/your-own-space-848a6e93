@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
     let matchedByPhone = 0, matchedByName = 0, enriched = 0, ghostsMerged = 0;
     let created = 0, skipped = 0;
     const unmatched: Array<{ name: string; phones: string[] }> = [];
-    const toCreate: Array<{ user_id: string; name: string; wa_id: string; phone_numbers: string[]; source: string }> = [];
+    const toCreate: Array<{ user_id: string; name: string; wa_id: string; phone_numbers: string[]; metadata: Record<string, unknown> }> = [];
 
     for (const r of rows as Array<{ name: string; name_norm: string; desired_wa: string; phones: string[] }>) {
       let match: typeof contacts[number] | undefined;

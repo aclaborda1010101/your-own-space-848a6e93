@@ -1,0 +1,1 @@
+ALTER TABLE public.tasks ALTER COLUMN is_personal SET DEFAULT true;

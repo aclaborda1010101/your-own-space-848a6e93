@@ -115,7 +115,14 @@ export const useSignalSuggestions = () => {
     try {
       const { data, error } = await supabase.functions.invoke("detect-task-signals", { body: opts ?? {} });
       if (error) throw error;
-      toast.success(`Escaneo completado: ${data?.created ?? 0} nuevas sugerencias`);
+      const created = data?.created ?? 0;
+      const skipped = data?.skipped ?? 0;
+      const skipMsg = skipped > 0 ? ` · ${skipped} omitidas (ya las habías visto)` : "";
+      if (created === 0 && skipped === 0) {
+        toast.success("Escaneo completado: sin novedades");
+      } else {
+        toast.success(`Escaneo completado: ${created} nuevas${skipMsg}`);
+      }
       await fetchAll();
     } catch (e: any) {
       console.error(e);

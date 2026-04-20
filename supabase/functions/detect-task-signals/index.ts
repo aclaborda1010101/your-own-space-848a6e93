@@ -5,11 +5,11 @@
 // resultantes entran en la cola `suggestions` con status='pending' para que
 // el usuario las valide. NO crea tareas/eventos automáticamente.
 //
-// POST /detect-task-signals
-//   { contact_id?: string, force?: boolean, threshold?: number }
-//
-// Si no se pasa contact_id, escanea TODOS los contactos del usuario que han
-// cruzado el umbral de mensajes nuevos desde el último escaneo.
+// MEMORIA: antes de llamar al LLM cargamos lo ya aceptado/rechazado/snoozed
+// para ese contacto y lo inyectamos al prompt como "YA DECIDIDO — NO PROPONER".
+// Además, antes de insertar comprobamos firma contra CUALQUIER status para
+// evitar que se reinserten variantes ya decididas (el índice unique parcial
+// sólo cubre pending y dejaba escapar duplicados tras aceptar/rechazar).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
@@ -21,6 +21,7 @@ const corsHeaders = {
 
 const DEFAULT_THRESHOLD = 30;
 const MAX_MESSAGES_PER_BATCH = 60; // ventana de contexto razonable
+const MAX_HISTORY_PER_CONTACT = 30; // sugerencias previas que mostramos al LLM
 const MODEL = "google/gemini-2.5-flash"; // barato y suficiente
 
 type Suggestion = {
@@ -36,6 +37,13 @@ type Suggestion = {
   confidence: number;
   reasoning: string;
   source_message_ids?: string[];
+};
+
+type PriorDecision = {
+  status: "accepted" | "rejected" | "snoozed";
+  title: string;
+  type: string;
+  signature: string | null;
 };
 
 Deno.serve(async (req) => {
@@ -67,19 +75,21 @@ Deno.serve(async (req) => {
     // 1. Determine which contacts to scan
     const contactIds = await pickContactsToScan(admin, userId, { onlyContact, force, threshold });
     if (contactIds.length === 0) {
-      return j({ scanned: 0, created: 0, message: "no contacts above threshold" });
+      return j({ scanned: 0, created: 0, skipped: 0, message: "no contacts above threshold" });
     }
 
     let totalCreated = 0;
+    let totalSkipped = 0;
     const perContact: Array<{ contact_id: string; created: number; skipped: number }> = [];
 
     for (const contact_id of contactIds) {
       const result = await scanContact(admin, userId, contact_id);
       totalCreated += result.created;
+      totalSkipped += result.skipped;
       perContact.push({ contact_id, created: result.created, skipped: result.skipped });
     }
 
-    return j({ scanned: contactIds.length, created: totalCreated, per_contact: perContact });
+    return j({ scanned: contactIds.length, created: totalCreated, skipped: totalSkipped, per_contact: perContact });
   } catch (e) {
     console.error("[detect-task-signals]", e);
     return j({ error: String(e) }, 500);
@@ -157,12 +167,40 @@ async function scanContact(
     )
     .join("\n");
 
-  const suggestions = await extractWithLLM(contact, conversation);
+  // Cargar memoria: lo ya decidido para este contacto
+  const priorDecisions = await loadPriorDecisions(admin, userId, contactId);
+  const priorSignatures = new Set(
+    priorDecisions
+      .map((p) => p.signature)
+      .filter((s): s is string => !!s),
+  );
+
+  const suggestions = await extractWithLLM(contact, conversation, priorDecisions);
 
   let created = 0;
   let skipped = 0;
   for (const s of suggestions) {
     const signature = makeSignature(userId, contactId, s);
+
+    // Pre-check: si la firma ya existe con CUALQUIER status, saltar.
+    // Esto cierra el agujero del índice parcial (que sólo cubre pending).
+    if (priorSignatures.has(signature)) {
+      skipped++;
+      continue;
+    }
+    const { data: existing } = await admin
+      .from("suggestions")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("signature", signature)
+      .limit(1)
+      .maybeSingle();
+    if (existing) {
+      skipped++;
+      priorSignatures.add(signature);
+      continue;
+    }
+
     const sourceIds = (s.source_message_ids ?? []).filter((id) =>
       orderedMessages.some((m) => m.id === id),
     );
@@ -193,6 +231,7 @@ async function scanContact(
       skipped++;
     } else {
       created++;
+      priorSignatures.add(signature);
     }
   }
 
@@ -213,15 +252,59 @@ async function scanContact(
   return { created, skipped };
 }
 
+async function loadPriorDecisions(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  contactId: string,
+): Promise<PriorDecision[]> {
+  const { data, error } = await admin
+    .from("suggestions")
+    .select("status, content, suggestion_type, signature")
+    .eq("user_id", userId)
+    .eq("contact_id", contactId)
+    .in("status", ["accepted", "rejected", "snoozed"])
+    .order("created_at", { ascending: false })
+    .limit(MAX_HISTORY_PER_CONTACT);
+  if (error) {
+    console.warn("[detect-task-signals] loadPriorDecisions error", error.message);
+    return [];
+  }
+  return (data ?? []).map((r: any) => ({
+    status: r.status,
+    title: (r.content?.title as string) || "(sin título)",
+    type: r.suggestion_type,
+    signature: r.signature ?? null,
+  }));
+}
+
 async function extractWithLLM(
   contact: { id: string; name: string; company: string | null },
   conversation: string,
+  priorDecisions: PriorDecision[],
 ): Promise<Suggestion[]> {
   const apiKey = Deno.env.get("LOVABLE_API_KEY");
   if (!apiKey) {
     console.warn("[detect-task-signals] LOVABLE_API_KEY missing — skipping extraction");
     return [];
   }
+
+  const accepted = priorDecisions.filter((p) => p.status === "accepted");
+  const rejected = priorDecisions.filter((p) => p.status === "rejected");
+  const snoozed = priorDecisions.filter((p) => p.status === "snoozed");
+
+  const memoryBlock = priorDecisions.length === 0
+    ? "(sin historial previo)"
+    : [
+        accepted.length > 0
+          ? `ACEPTADAS (ya están como tarea, NO las repitas):\n${accepted.map((p) => `- ${p.title}`).join("\n")}`
+          : "",
+        rejected.length > 0
+          ? `RECHAZADAS (el usuario las descartó, NO las propongas otra vez):\n${rejected.map((p) => `- ${p.title}`).join("\n")}`
+          : "",
+        snoozed.length > 0
+          ? `POSPUESTAS (ya las verá más tarde, NO insistas):\n${snoozed.map((p) => `- ${p.title}`).join("\n")}`
+          : "",
+      ].filter(Boolean).join("\n\n");
 
   const systemPrompt = `Eres JARVIS, un asistente que detecta SEÑALES accionables en conversaciones reales.
 Tu tarea: analizar la conversación con ${contact.name}${contact.company ? ` (${contact.company})` : ""} y devolver SOLO sugerencias claras.
@@ -232,6 +315,14 @@ REGLAS DURAS:
 - Si el usuario YO ya respondió que sí/no o cerró el tema, NO lo sugieras.
 - Cada sugerencia debe poder justificarse con 1-3 mensajes concretos.
 - Confidence honesto: 0.4-0.6 si es ambiguo, 0.7-0.85 si es claro, 0.9+ solo si es explícito.
+
+MEMORIA — YA DECIDIDO POR EL USUARIO:
+${memoryBlock}
+
+REGLA CRÍTICA SOBRE LA MEMORIA:
+- Si una sugerencia es semánticamente equivalente a algo en YA DECIDIDO, NO la incluyas.
+- Equivalencia = mismo objetivo aunque cambien las palabras (ej: "Crear usuarios Lexintel" ≡ "Crear 3 usuarios para Lexintel").
+- Sólo propón algo si es claramente un asunto NUEVO, distinto, o un seguimiento posterior con información nueva.
 
 Tipos válidos:
 - task_from_signal: el usuario debería hacer algo concreto
@@ -278,9 +369,33 @@ Máximo 5 sugerencias.`;
   }
 }
 
-function makeSignature(userId: string, contactId: string, s: Suggestion): string {
-  const norm = `${s.type}::${(s.title || "").toLowerCase().trim().slice(0, 80)}::${contactId}`;
-  return norm;
+// Normalización agresiva del título para que variantes léxicas produzcan
+// la misma firma. Quita tildes, números, palabras de relleno y colapsa espacios.
+const FILLER_WORDS = new Set([
+  "el", "la", "los", "las", "un", "una", "unos", "unas",
+  "de", "del", "al", "a", "ante", "con", "para", "por", "en", "sobre", "y", "o",
+  "que", "se", "le", "lo", "les",
+  "crear", "hacer", "realizar", "preparar", "enviar", "mandar", "poner",
+  "tema", "asunto", "cosa", "tarea",
+]);
+
+function normalizeTitle(title: string): string {
+  return (title || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // tildes
+    .replace(/[0-9]+/g, " ")         // números
+    .replace(/[^\p{L}\s]/gu, " ")    // puntuación
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && !FILLER_WORDS.has(w))
+    .sort()                          // mismo conjunto de palabras → misma firma
+    .join(" ")
+    .slice(0, 120);
+}
+
+function makeSignature(_userId: string, contactId: string, s: Suggestion): string {
+  const norm = normalizeTitle(s.title);
+  return `${s.type}::${norm}::${contactId}`;
 }
 
 function clamp01(n: number): number {

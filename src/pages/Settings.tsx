@@ -20,6 +20,7 @@ import { SharedWithMeCard } from "@/components/settings/SharedWithMeCard";
 import { SharingManagerCard } from "@/components/settings/SharingManagerCard";
 import { WhatsAppConnectionCard } from "@/components/settings/WhatsAppConnectionCard";
 import { JarvisLearningCard } from "@/components/settings/JarvisLearningCard";
+import { ImportMacContactsDialog } from "@/components/contacts/ImportMacContactsDialog";
 const SettingsSection = ({
   icon,
   title,
@@ -171,6 +172,16 @@ const Settings = () => {
 
       <SettingsSection icon={<HardDrive className="h-4 w-4 sm:h-5 sm:w-5" />} title="Exportar datos" description="Descarga tu informacion">
         <DataExportCard />
+      </SettingsSection>
+
+      <SettingsSection icon={<Users className="h-4 w-4 sm:h-5 sm:w-5" />} title="Importar contactos de Mac" description="Enriquece tus contactos con teléfonos desde el CSV de Contactos de Mac (arregla los WhatsApp duplicados)">
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Exporta tu agenda desde la app Contactos de Mac (Archivo → Exportar → Exportar vCard… o Tarjetas → CSV) y súbela aquí.
+            Enriquecerá tus contactos existentes con los teléfonos correctos para que WhatsApp deje de crear duplicados.
+          </p>
+          <ImportMacContactsDialog />
+        </div>
       </SettingsSection>
 
       <SettingsSection icon={<RotateCcw className="h-4 w-4 sm:h-5 sm:w-5" />} title="Setup Inicial" description="Relanzar el wizard de configuracion">

@@ -118,6 +118,7 @@ export default function RedEstrategica() {
   const [hasPodcast, setHasPodcast] = useState<"all" | "yes" | "no">("all");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingAll, setRefreshingAll] = useState(false);
+  const [reimporting, setReimporting] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
   async function removeFromNetwork(contactId: string, name: string) {
@@ -222,6 +223,32 @@ export default function RedEstrategica() {
       });
     } finally {
       setRefreshingAll(false);
+    }
+  }
+
+  async function reimportMultimedia() {
+    if (reimporting) return;
+    setReimporting(true);
+    const tId = toast.loading("Re-importando multimedia de WhatsApp…", {
+      description: "Buscando audios, imágenes y PDFs de los últimos 21 días en tus contactos activos.",
+    });
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "reimport-whatsapp-recent",
+        { body: { daysBack: 21 } },
+      );
+      if (error) throw error;
+      toast.success(data?.message || "Re-importación encolada.", {
+        id: tId,
+        description: `Escaneando ${data?.contactsScanned ?? 0} contactos. Las transcripciones aparecerán en cada chat según se procesen.`,
+      });
+    } catch (e) {
+      toast.error("No se pudo iniciar la re-importación", {
+        id: tId,
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setReimporting(false);
     }
   }
 
@@ -467,6 +494,19 @@ export default function RedEstrategica() {
             <Brain className={cn("w-4 h-4", refreshingAll && "animate-pulse")} />
             <span className="hidden sm:inline">
               {refreshingAll ? "Regenerando…" : "Regenerar perfiles"}
+            </span>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={reimportMultimedia}
+            disabled={reimporting}
+            className="h-11 rounded-full gap-2 px-4"
+            title="Re-importa los últimos 21 días desde Evolution para recuperar audios, imágenes y PDFs que se descartaron."
+          >
+            <Mic className={cn("w-4 h-4", reimporting && "animate-pulse")} />
+            <span className="hidden sm:inline">
+              {reimporting ? "Re-importando…" : "Re-importar multimedia"}
             </span>
           </Button>
         </div>

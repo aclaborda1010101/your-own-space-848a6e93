@@ -113,3 +113,6 @@ verify_jwt = false
 
 [functions.openclaw-heartbeat]
 verify_jwt = false
+
+[functions.reimport-whatsapp-recent]
+verify_jwt = false

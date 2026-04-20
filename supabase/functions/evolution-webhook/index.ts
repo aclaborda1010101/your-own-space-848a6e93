@@ -43,15 +43,45 @@ serve(async (req) => {
       });
     }
 
-    const textContent =
+    // ── Detect message type (text vs media) ──
+    let textContent: string | null =
       message?.conversation ||
       message?.extendedTextMessage?.text ||
       null;
 
+    type MediaKind = "audio" | "image" | "document" | "video" | null;
+    let mediaKind: MediaKind = null;
+    let mediaCaption = "";
+    let mediaFileName = "";
+    let mediaMimeType = "";
+
     if (!textContent) {
-      return new Response(JSON.stringify({ ok: true, skipped: "no_text" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (message?.audioMessage) {
+        mediaKind = "audio";
+        mediaMimeType = message.audioMessage.mimetype || "audio/ogg";
+        textContent = "[⏳ Procesando audio…]";
+      } else if (message?.imageMessage) {
+        mediaKind = "image";
+        mediaCaption = message.imageMessage.caption || "";
+        mediaMimeType = message.imageMessage.mimetype || "image/jpeg";
+        textContent = "[⏳ Procesando imagen…]";
+      } else if (message?.documentMessage || message?.documentWithCaptionMessage) {
+        const doc = message.documentMessage || message.documentWithCaptionMessage?.message?.documentMessage;
+        mediaKind = "document";
+        mediaCaption = doc?.caption || "";
+        mediaFileName = doc?.fileName || "documento";
+        mediaMimeType = doc?.mimetype || "application/octet-stream";
+        textContent = `[⏳ Procesando documento: ${mediaFileName}…]`;
+      } else if (message?.videoMessage) {
+        mediaKind = "video";
+        mediaCaption = message.videoMessage.caption || "";
+        mediaMimeType = message.videoMessage.mimetype || "video/mp4";
+        textContent = mediaCaption ? `[🎬 Vídeo] ${mediaCaption}` : "[🎬 Vídeo recibido]";
+      } else {
+        return new Response(JSON.stringify({ ok: true, skipped: "no_text" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const remoteJid = key.remoteJid || "";
@@ -271,6 +301,35 @@ serve(async (req) => {
     }
 
     console.log(`Message persisted: ${insertedMessage.id} (${direction}) from ${senderName}${contactId ? "" : " [UNLINKED]"}`);
+
+    // ============================
+    // FIRE MEDIA PROCESSOR (audio/image/document) in background
+    // ============================
+    if (mediaKind === "audio" || mediaKind === "image" || mediaKind === "document") {
+      const mediaJob = fetch(`${supabaseUrl}/functions/v1/process-whatsapp-media`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${supabaseKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messageId: insertedMessage.id,
+          contactId,
+          userId,
+          instance: instanceName,
+          messageKey: key,
+          mediaKind,
+          mimeType: mediaMimeType,
+          fileName: mediaFileName,
+          caption: mediaCaption,
+        }),
+      }).catch((err) => console.error("[process-whatsapp-media] fire error:", err));
+      // @ts-ignore EdgeRuntime is provided by Supabase runtime
+      if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any)?.waitUntil) {
+        // @ts-ignore
+        (EdgeRuntime as any).waitUntil(mediaJob);
+      }
+    }
 
     // ============================
     // FIRE INTELLIGENCE (only if contact known)

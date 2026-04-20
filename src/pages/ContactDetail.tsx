@@ -101,7 +101,7 @@ export default function ContactDetail() {
     completed_at: string | null;
   }>>([]);
 
-  const { payload: headlines, loading: hLoading } = useContactHeadlines(contactId || null);
+  const { payload: headlines, loading: hLoading, refresh: refreshHeadlines } = useContactHeadlines(contactId || null);
   const { podcast, segment, busy, regenerate, setFormat } = useContactPodcast(contactId || null);
   const { profile, allContacts, contactLinks, linkContact, ignoreContact, reload: reloadProfile } =
     useContactProfile(contactId, user?.id);

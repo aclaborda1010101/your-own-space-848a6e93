@@ -61,9 +61,11 @@ serve(async (req) => {
       .eq("user_id", userId)
       .maybeSingle();
 
+    const cachedExpired = isCachedPayloadExpired(cached?.payload);
     const needsRegen =
       force ||
       !cached ||
+      cachedExpired ||
       total - (cached.message_count_at_generation || 0) >= INVALIDATION_DELTA;
 
     if (!needsRegen && cached) {

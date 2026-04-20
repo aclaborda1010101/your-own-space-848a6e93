@@ -150,25 +150,36 @@ export function useVoiceRecognition(options: UseVoiceRecognitionOptions = {}) {
             : mimeType.includes('ogg') ? 'ogg' 
             : 'wav';
           
-          // Send to Supabase Edge Function (Groq Whisper)
+          // Get active session — required for STT auth
+          const { data: sessionData } = await supabase.auth.getSession();
+          const accessToken = sessionData?.session?.access_token;
+
+          if (!accessToken) {
+            throw new Error('Sesión no válida. Por favor, inicia sesión de nuevo.');
+          }
+
+          // Send to Supabase Edge Function (Groq Whisper) with explicit auth
           const formData = new FormData();
           formData.append('file', audioBlob, `recording.${extension}`);
           formData.append('language', language);
-          
+
           console.log('[VoiceRecognition] Sending to STT Edge Function...');
           const startTime = Date.now();
-          
+
           const { data, error: invokeError } = await supabase.functions.invoke('speech-to-text', {
             body: formData,
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
           });
-          
+
           const elapsed = Date.now() - startTime;
           console.log(`[VoiceRecognition] STT response in ${elapsed}ms`);
-          
+
           if (invokeError) {
             throw new Error(invokeError.message || 'STT request failed');
           }
-          
+
           const transcribedText = (data?.text || '').trim();
           
           if (transcribedText) {

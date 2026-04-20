@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 export type RecognitionState = 'idle' | 'recording' | 'processing' | 'error';
 
@@ -157,21 +158,18 @@ export function useVoiceRecognition(options: UseVoiceRecognitionOptions = {}) {
           console.log('[VoiceRecognition] Sending to STT Edge Function...');
           const startTime = Date.now();
           
-          const response = await fetch(STT_ENDPOINT, {
-            method: 'POST',
+          const { data, error: invokeError } = await supabase.functions.invoke('speech-to-text', {
             body: formData,
           });
           
           const elapsed = Date.now() - startTime;
           console.log(`[VoiceRecognition] STT response in ${elapsed}ms`);
           
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+          if (invokeError) {
+            throw new Error(invokeError.message || 'STT request failed');
           }
           
-          const data = await response.json();
-          const transcribedText = data.text?.trim();
+          const transcribedText = (data?.text || '').trim();
           
           if (transcribedText) {
             console.log('[VoiceRecognition] Transcribed:', transcribedText);

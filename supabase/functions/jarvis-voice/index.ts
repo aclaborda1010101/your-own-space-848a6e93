@@ -32,7 +32,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4o-realtime-preview-2024-12-17",
+        model: "gpt-4o-realtime-preview-2024-10-01",
         voice: "alloy",
         instructions: `Eres JARVIS, el asistente personal de productividad del usuario. Tu estilo es el de un mayordomo tecnológico de élite: formal, eficiente, discreto y anticipador.
 

@@ -28,50 +28,91 @@ const DEFAULTS: NotificationPreferences = {
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Madrid",
 };
 
+const LOAD_TIMEOUT_MS = 8000;
+
+function withTimeout<T>(p: PromiseLike<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`Timeout (${ms}ms) en ${label}`)), ms);
+    Promise.resolve(p).then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); },
+    );
+  });
+}
+
 export function useNotificationPreferences() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [prefs, setPrefs] = useState<NotificationPreferences>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!user?.id) {
+    // While auth is still resolving, don't keep the spinner forever — show defaults.
+    if (authLoading) {
       setLoading(false);
       return;
     }
+    if (!user?.id) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     setLoading(true);
-    const { data, error } = await supabase
-      .from("notification_preferences")
-      .select("*")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    setError(null);
+    try {
+      const { data, error: dbErr } = await withTimeout(
+        supabase
+          .from("notification_preferences")
+          .select("*")
+          .eq("user_id", user.id)
+          .maybeSingle(),
+        LOAD_TIMEOUT_MS,
+        "load notification_preferences",
+      );
 
-    if (error) {
-      console.warn("[notif-prefs] load:", error);
-    }
+      if (dbErr) throw dbErr;
 
-    if (data) {
-      setPrefs({
-        enabled: data.enabled,
-        tasks_enabled: data.tasks_enabled,
-        calendar_enabled: data.calendar_enabled,
-        jarvis_enabled: data.jarvis_enabled,
-        plaud_enabled: data.plaud_enabled,
-        calendar_lead_minutes: data.calendar_lead_minutes,
-        quiet_hours_enabled: data.quiet_hours_enabled,
-        quiet_hours_start: data.quiet_hours_start,
-        quiet_hours_end: data.quiet_hours_end,
-        timezone: data.timezone,
-      });
-    } else {
-      // Crea registro con defaults
-      await supabase.from("notification_preferences").insert({
-        user_id: user.id,
-        ...DEFAULTS,
-      });
+      if (data) {
+        setPrefs({
+          enabled: data.enabled,
+          tasks_enabled: data.tasks_enabled,
+          calendar_enabled: data.calendar_enabled,
+          jarvis_enabled: data.jarvis_enabled,
+          plaud_enabled: data.plaud_enabled,
+          calendar_lead_minutes: data.calendar_lead_minutes,
+          quiet_hours_enabled: data.quiet_hours_enabled,
+          quiet_hours_start: data.quiet_hours_start,
+          quiet_hours_end: data.quiet_hours_end,
+          timezone: data.timezone,
+        });
+      } else {
+        // Try to create row with defaults — ignore failures (RLS / offline).
+        try {
+          await withTimeout(
+            supabase.from("notification_preferences").insert({
+              user_id: user.id,
+              ...DEFAULTS,
+            }),
+            LOAD_TIMEOUT_MS,
+            "insert default notification_preferences",
+          );
+        } catch (insertErr) {
+          console.warn("[notif-prefs] insert defaults failed:", insertErr);
+        }
+        setPrefs(DEFAULTS);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.warn("[notif-prefs] load failed:", msg);
+      setError(msg);
+      // Keep DEFAULTS so UI can still render and the user can interact.
+      setPrefs((prev) => prev ?? DEFAULTS);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, [user?.id]);
+  }, [user?.id, authLoading]);
 
   useEffect(() => {
     void load();
@@ -83,16 +124,32 @@ export function useNotificationPreferences() {
       setSaving(true);
       const next = { ...prefs, ...patch };
       setPrefs(next);
-      const { error } = await supabase
-        .from("notification_preferences")
-        .upsert({ user_id: user.id, ...next }, { onConflict: "user_id" });
-      if (error) console.warn("[notif-prefs] save:", error);
-      setSaving(false);
+      try {
+        const { error: dbErr } = await withTimeout(
+          supabase
+            .from("notification_preferences")
+            .upsert({ user_id: user.id, ...next }, { onConflict: "user_id" }),
+          LOAD_TIMEOUT_MS,
+          "save notification_preferences",
+        );
+        if (dbErr) {
+          console.warn("[notif-prefs] save:", dbErr);
+          setError(dbErr.message);
+        } else {
+          setError(null);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn("[notif-prefs] save failed:", msg);
+        setError(msg);
+      } finally {
+        setSaving(false);
+      }
     },
     [prefs, user?.id],
   );
 
-  return { prefs, loading, saving, update, reload: load };
+  return { prefs, loading, saving, error, update, reload: load };
 }
 
 export default useNotificationPreferences;

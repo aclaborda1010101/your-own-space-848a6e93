@@ -116,10 +116,6 @@ serve(async (req) => {
     });
     const noProfile = sorted.filter((c) => !hasProfile(c));
     const withProfile = sorted.filter(hasProfile);
-    const e1 = null, e2 = null;
-
-    if (e1) throw e1;
-    if (e2) throw e2;
 
     const seen = new Set<string>();
     const merged: Array<{ id: string; name: string; personality_profile: any }> = [];

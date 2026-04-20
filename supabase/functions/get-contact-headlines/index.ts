@@ -375,7 +375,12 @@ REGLA CRÍTICA DE FECHAS:
 - Si dentro de un mensaje aparece una referencia relativa como "mañana", "ayer", "el sábado" o "el domingo", interprétala SIEMPRE respecto a la fecha absoluta de esa línea, no respecto al día actual.
 - NO devuelvas en el título ni en last_mentioned expresiones ambiguas como "ayer", "mañana", "el sábado", "el pasado domingo".
 - Reescribe siempre con fecha absoluta o con una formulación neutra y atemporal.
-- Ejemplos correctos: "entradas para el partido del domingo 20 de abril", "comida con Min", "mencionado el 12 abr 2026".`;
+- Ejemplos correctos: "entradas para el partido del domingo 20 de abril", "comida con Min", "mencionado el 12 abr 2026".
+
+REGLA CRÍTICA DE EVENTOS PASADOS:
+- Si el asunto pendiente se refiere a un evento puntual (partido, concierto, vuelo, cita, reserva, cena, reunión, viaje, entrega) cuya fecha YA ES ANTERIOR a "Hoy real del sistema", ese evento ESTÁ CERRADO. NUNCA lo devuelvas como acción a hacer ni como CTA.
+- En ese caso devuelve title = "Sin asunto vivo" (o un asunto NUEVO posterior si existe), who_owes = "nadie", is_event = false.
+- Solo marca is_event = true cuando el evento esté en el futuro o sin fecha cerrada. Si pones is_event = true rellena event_date en formato ISO (YYYY-MM-DD) con la fecha real del evento.`;
 
   const userPrompt = `Hoy real del sistema: ${todayLabel}
 Contacto: ${contactName} (categoría: ${category})

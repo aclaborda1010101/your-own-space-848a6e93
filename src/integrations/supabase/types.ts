@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      _tmp_mac_import: {
+        Row: {
+          desired_wa: string
+          id: number
+          name: string
+          name_norm: string
+          phones: string[]
+        }
+        Insert: {
+          desired_wa: string
+          id?: number
+          name: string
+          name_norm: string
+          phones: string[]
+        }
+        Update: {
+          desired_wa?: string
+          id?: number
+          name?: string
+          name_norm?: string
+          phones?: string[]
+        }
+        Relationships: []
+      }
       agent_chat_messages: {
         Row: {
           actions_taken: Json | null
@@ -11632,6 +11656,7 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      unaccent: { Args: { "": string }; Returns: string }
       user_owns_audit: { Args: { p_audit_id: string }; Returns: boolean }
       user_owns_business_project: {
         Args: { p_project_id: string }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { EditTaskDialog } from "@/components/tasks/EditTaskDialog";
 import { SuggestedTasksDialog, useTaskSuggestionsCount } from "@/components/tasks/SuggestedTasksDialog";
+import { ContactSelect } from "@/components/tasks/ContactSelect";
 import {
   buildDefaultWorkspace,
   TaskWorkspaceDetail,
@@ -18,18 +19,20 @@ import { Switch } from "@/components/ui/switch";
 import { SwipeableTask } from "@/components/tasks/SwipeableTask";
 import { useTasks } from "@/hooks/useTasks";
 import { useCalendar } from "@/hooks/useCalendar";
-import { 
-  Plus, 
-  CheckSquare, 
-  Briefcase, 
-  Heart, 
+import {
+  Plus,
+  CheckSquare,
+  Briefcase,
+  Heart,
   Wallet,
   Loader2,
   Lock,
+  Users,
   Sparkles,
   Flame,
   CalendarCheck,
   ChevronDown,
+  User as UserIcon,
 } from "lucide-react";
 import { PageHero } from "@/components/ui/PageHero";
 import { cn } from "@/lib/utils";
@@ -51,7 +54,9 @@ const TASK_WORKSPACE_STORAGE_KEY = "jarvis-task-workspace-v1";
 const Tasks = () => {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskType, setNewTaskType] = useState<"work" | "life" | "finance">("work");
-  const [newTaskPersonal, setNewTaskPersonal] = useState(false);
+  // Privada por defecto (shared = false)
+  const [newTaskShared, setNewTaskShared] = useState(false);
+  const [newTaskContactId, setNewTaskContactId] = useState<string | null>(null);
   const [view, setView] = useState<"today" | "week">("today");
   const [editingTask, setEditingTask] = useState<any>(null);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -138,11 +143,13 @@ const Tasks = () => {
       type: newTaskType,
       priority: "P1",
       duration: 30,
-      isPersonal: newTaskPersonal,
+      isPersonal: !newTaskShared,
+      contactId: newTaskContactId,
     });
 
     setNewTaskTitle("");
-    setNewTaskPersonal(false);
+    setNewTaskShared(false);
+    setNewTaskContactId(null);
   };
 
   const convertToBlock = async (taskTitle: string, duration: number) => {

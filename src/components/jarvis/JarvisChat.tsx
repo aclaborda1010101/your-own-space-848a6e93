@@ -363,15 +363,50 @@ export function JarvisChat({ variant = "page", autoProactive }: JarvisChatProps)
 
       {/* Realtime status banner */}
       {realtime.isActive && (
-        <div className="border-t border-border/40 bg-primary/5 px-4 py-2 text-xs text-primary flex items-center gap-2">
+        <div className="border-t border-border/40 bg-primary/5 px-4 py-2 text-xs text-primary flex items-center gap-2 flex-wrap">
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
           </span>
           Modo en vivo · {realtime.state}
+          <span className="ml-auto flex items-center gap-1 text-muted-foreground">
+            <span>Voz:</span>
+            <select
+              value={realtime.voice}
+              onChange={(e) => realtime.setVoice(e.target.value as any)}
+              className="bg-transparent border border-border/40 rounded px-1.5 py-0.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary/40"
+              title="Cambiar voz (se aplica al reiniciar la sesión)"
+            >
+              <option value="ash">Ash (♂ cálido)</option>
+              <option value="verse">Verse (♂ expresivo)</option>
+              <option value="ballad">Ballad (♂ británico)</option>
+              <option value="echo">Echo (♂ neutro)</option>
+              <option value="sage">Sage (♀ serena)</option>
+              <option value="alloy">Alloy (neutro)</option>
+            </select>
+          </span>
           {realtime.transcript && (
-            <span className="ml-2 truncate text-muted-foreground">"{realtime.transcript}"</span>
+            <span className="basis-full truncate text-muted-foreground">"{realtime.transcript}"</span>
           )}
+        </div>
+      )}
+
+      {/* Voice picker when NOT active */}
+      {!realtime.isActive && (
+        <div className="border-t border-border/40 bg-card/30 px-4 py-1.5 text-[11px] text-muted-foreground flex items-center gap-2">
+          <span>Voz JARVIS Realtime:</span>
+          <select
+            value={realtime.voice}
+            onChange={(e) => realtime.setVoice(e.target.value as any)}
+            className="bg-transparent border border-border/40 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary/40"
+          >
+            <option value="ash">Ash (♂ cálido)</option>
+            <option value="verse">Verse (♂ expresivo)</option>
+            <option value="ballad">Ballad (♂ británico)</option>
+            <option value="echo">Echo (♂ neutro)</option>
+            <option value="sage">Sage (♀ serena)</option>
+            <option value="alloy">Alloy (neutro)</option>
+          </select>
         </div>
       )}
 

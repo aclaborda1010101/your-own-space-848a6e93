@@ -1,39 +1,31 @@
 
-El usuario quiere que YO ejecute la importación directamente desde el sandbox (con el CSV/XLSX que ya subió), en vez de hacerla él desde la UI. Razón: la UI no está cogiendo bien algunos contactos (Juan Jácome, Obra Militar...) cuyos teléfonos están en la columna AM/Nota.
+## Diagnóstico
 
-## Plan
+`Adolfo Alvaro Benito` está en el XLSX con teléfonos (`34627460836`, `34914200544`), pero el `mac-import-direct` no lo enriqueció porque el match por nombre falló en algún punto (probablemente normalización de tildes/espacios distinta entre lo que generé en Python y lo que tenía la BD, o el contacto se cargó después del momento del run).
 
-Ejecutar la importación de teléfonos directamente contra la BD usando el XLSX que subió, sin depender de la UI:
+Esto significa que **hay más casos como Adolfo** entre los 970 contactos viejos que siguen sin teléfono. El reporte dijo "304 enriquecidos" — pero seguramente había bastantes más matcheables que se escaparon.
 
-1. **Leer el XLSX** (`Contactos_-_2026-02-19_08_05_00-3.xlsx`) en el sandbox con Python (openpyxl/pandas).
-2. **Extraer teléfonos** de TODAS las columnas relevantes:
-   - Columna I (`Teléfono móvil`) y resto de columnas de teléfono.
-   - Columna AM (`Nota`) — regex para `+34...`, `6XX...`, `7XX...`, `9XX...`.
-3. **Normalizar** a formato `34XXXXXXXXX` (quitar `+`, espacios, guiones; añadir `34` si es número español de 9 dígitos).
-4. **Match contra `people_contacts`** del usuario (Agustín):
-   - Por nombre normalizado (sin tildes, lowercase).
-   - Por cualquier teléfono ya existente en `wa_id` o `phone_numbers`.
-5. **Update directo via psql/INSERT tool**:
-   - Si existe y le falta `wa_id` → poner el primer móvil válido.
-   - Mergear `phone_numbers` (unión sin duplicados).
-   - **No tocar** ningún otro campo.
-6. **Resolver colisiones**: si el `wa_id` que voy a poner ya existe en otro contacto fantasma → mover mensajes al real y borrar el fantasma.
-7. **Limpiar `contact_headlines`** de los contactos tocados para que se regeneren.
-8. **Reporte final** en chat: cuántos enriquecidos, cuántos fantasmas mergeados, cuántos sin match (los que habría que crear nuevos), y mostrar concretamente qué pasó con "Juan Jácome" y "Obra Militar" para confirmar que se arreglaron.
+## Plan: re-pasada de enriquecimiento usando SQL directo
 
-## Lo que NO voy a hacer
+En vez de volver a tirar la edge function (que ya borré + tenía bugs de normalización), hago el match **directamente en SQL** dentro de la BD usando `unaccent` de Postgres, que es lo que mejor normaliza:
 
-- No tocar la UI de import (ya está, queda como fallback).
-- No crear contactos nuevos masivamente — solo enriquecer los existentes. Si hay nombres del XLSX que no matchean con ningún contacto en BD, los listo al final para que decidas si los quieres crear.
+1. La tabla `_tmp_mac_import` sigue viva con los 1.779 registros del XLSX.
+2. Hago un `UPDATE` de `people_contacts` cruzando por `unaccent(lower(name))` igualados, donde el contacto en BD tenga `wa_id IS NULL` Y `phone_numbers IS NULL`.
+3. Para cada match: pongo `wa_id = desired_wa` y `phone_numbers = phones` del staging.
+4. Limpio `contact_headlines` de los IDs tocados para que se regeneren con la info correcta.
+5. Reporte: cuántos enriquecidos extra, y verifico explícitamente Adolfo + 4-5 ejemplos más.
 
-## Archivos / acciones
+Como es un `UPDATE` masivo, lo hago vía migración (única forma de updates sin pasar por edge function).
 
-- Script Python en `/tmp/enrich_contacts.py` (efímero) para parsear XLSX y generar SQL.
-- Llamadas `psql` + insert tool para los UPDATE/DELETE sobre `people_contacts`, `contact_messages`, `contact_headlines`.
-- Sin cambios en código de la app.
+## Lo que NO hago
+
+- No toco contactos que ya tienen `wa_id` (no sobrescribo).
+- No creo nuevos.
+- No toco UI ni código de la app.
 
 ## Resultado esperado
 
-- Juan Jácome, Obra Militar y el resto de contactos con teléfono en la columna Nota pasan a tener `wa_id` + `phone_numbers` correctos.
-- WhatsApp entrante de esos números los encuentra y deja de crear duplicados.
-- Reporte exacto de qué se tocó.
+- Adolfo Álvaro Benito y el resto de "huérfanos por bug de normalización" pasan a tener su teléfono.
+- Reporte con número exacto de enriquecidos extra y verificación de Adolfo.
+
+¿Tiro?

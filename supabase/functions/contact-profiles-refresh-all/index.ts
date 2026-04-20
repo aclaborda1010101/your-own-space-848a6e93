@@ -91,28 +91,32 @@ serve(async (req) => {
 
     const admin = createClient(supabaseUrl, serviceRoleKey) as any;
 
-    // PRIORITIZACIÓN:
-    // 1) Sin personality_profile (nunca analizados) primero.
-    // 2) Después, los más antiguos por updated_at (NULLS first).
-    // Hacemos dos queries para garantizar el orden correcto y combinamos.
-    const [{ data: noProfile, error: e1 }, { data: withProfile, error: e2 }] = await Promise.all([
-      admin
-        .from("people_contacts")
-        .select("id, name, personality_profile, updated_at")
-        .eq("user_id", userId)
-        .or("is_favorite.eq.true,in_strategic_network.eq.true")
-        .or("personality_profile.is.null,personality_profile.eq.{}")
-        .order("updated_at", { ascending: true, nullsFirst: true })
-        .limit(MAX_PER_RUN),
-      admin
-        .from("people_contacts")
-        .select("id, name, personality_profile, updated_at")
-        .eq("user_id", userId)
-        .or("is_favorite.eq.true,in_strategic_network.eq.true")
-        .not("personality_profile", "is", null)
-        .order("updated_at", { ascending: true, nullsFirst: true })
-        .limit(MAX_PER_RUN),
-    ]);
+    // PRIORITIZACIÓN: traemos TODOS los favoritos/estratégicos del usuario y
+    // ordenamos en memoria — primero los que no tienen perfil, después los más
+    // antiguos por updated_at. Evitamos el bug de supabase-js donde dos .or()
+    // consecutivos se sobrescriben.
+    const { data: allActive, error: eAll } = await admin
+      .from("people_contacts")
+      .select("id, name, personality_profile, updated_at")
+      .eq("user_id", userId)
+      .or("is_favorite.eq.true,in_strategic_network.eq.true")
+      .order("updated_at", { ascending: true, nullsFirst: true })
+      .limit(MAX_PER_RUN * 2);
+
+    if (eAll) throw eAll;
+
+    const hasProfile = (c: any) => c.personality_profile && Object.keys(c.personality_profile).length > 0;
+    const sorted = [...(allActive || [])].sort((a, b) => {
+      const ap = hasProfile(a) ? 1 : 0;
+      const bp = hasProfile(b) ? 1 : 0;
+      if (ap !== bp) return ap - bp; // sin perfil primero
+      const at = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+      const bt = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+      return at - bt; // más antiguos primero
+    });
+    const noProfile = sorted.filter((c) => !hasProfile(c));
+    const withProfile = sorted.filter(hasProfile);
+    const e1 = null, e2 = null;
 
     if (e1) throw e1;
     if (e2) throw e2;

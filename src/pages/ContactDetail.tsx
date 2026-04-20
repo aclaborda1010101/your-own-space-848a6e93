@@ -452,7 +452,10 @@ export default function ContactDetail() {
                   </GlassCard>
                 ))}
               </>
-            ) : (
+            ) : (() => {
+              const pendingFreshness = headlines.pending.freshness_status ?? "active";
+              const pendingInactive = pendingFreshness === "expired" || pendingFreshness === "stale";
+              return (
               <>
                 <HeadlineCard
                   label="Relación y salud"
@@ -488,16 +491,10 @@ export default function ContactDetail() {
                           caduca hoy
                         </span>
                       )}
-                      {headlines.pending.freshness_status === "expired" || headlines.pending.freshness_status === "stale"
-                        ? "Sin asunto vivo"
-                        : headlines.pending.title}
+                      {pendingInactive ? "Sin asunto vivo" : headlines.pending.title}
                     </span>
                   }
-                  line2={
-                    headlines.pending.freshness_status === "expired" || headlines.pending.freshness_status === "stale"
-                      ? "Movido a historial"
-                      : `Mover ficha: ${headlines.pending.who_owes}`
-                  }
+                  line2={pendingInactive ? "Movido a historial" : `Mover ficha: ${headlines.pending.who_owes}`}
                   line3={`Última mención: ${headlines.pending.last_mentioned}`}
                 />
                 <HeadlineCard
@@ -517,7 +514,8 @@ export default function ContactDetail() {
                   line3={headlines.topics.tone_evolution}
                 />
               </>
-            )}
+              );
+            })()}
           </div>
         </div>
 

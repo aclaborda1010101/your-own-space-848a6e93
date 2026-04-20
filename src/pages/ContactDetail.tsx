@@ -469,8 +469,22 @@ export default function ContactDetail() {
                 <HeadlineCard
                   label="Asunto pendiente"
                   icon={<AlertCircle className="w-4 h-4" />}
-                  accent="warning"
-                  value={headlines.pending.title}
+                  accent={headlines.pending.freshness_status === "expired" ? "default" : "warning"}
+                  value={
+                    <span>
+                      {headlines.pending.freshness_status === "expired" && (
+                        <span className="inline-block mr-2 px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px] uppercase tracking-wider align-middle">
+                          caducada
+                        </span>
+                      )}
+                      {headlines.pending.freshness_status === "expiring" && (
+                        <span className="inline-block mr-2 px-1.5 py-0.5 rounded bg-warning/20 text-warning text-[10px] uppercase tracking-wider align-middle">
+                          caduca hoy
+                        </span>
+                      )}
+                      {headlines.pending.title}
+                    </span>
+                  }
                   line2={`Mover ficha: ${headlines.pending.who_owes}`}
                   line3={`Última mención: ${headlines.pending.last_mentioned}`}
                 />

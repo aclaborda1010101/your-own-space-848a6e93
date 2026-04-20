@@ -1,68 +1,59 @@
 
-## Plan: pipeline multimedia WhatsApp (audio + imagen + PDF)
+## Plan: Timeline tipo "curva de vida" en cada contacto
 
-### Objetivo
-Que JARVIS procese automáticamente lo que llega por WhatsApp más allá del texto: audios → transcripción, imágenes → OCR + descripción, PDFs → texto extraído. Todo se guarda en `contact_messages` para que cuente en headlines, personalidad y RAG.
+### Lo que pides
+1. **Test multimedia**: ya está desplegado. Te confirmo que cuando tu nena te mande audio/foto al WhatsApp, en el chat del contacto verás `[🎙️ Audio] transcripción…` o `[🖼️ Imagen] descripción + OCR…` en ~5-15s. Si en 30s no aparece, miramos logs de `process-whatsapp-media`. Esto **no requiere cambios de código**, solo que la pruebes.
 
-### Arquitectura
+2. **Timeline mejorado** (esto sí requiere trabajo):
 
-```text
-evolution-webhook (rápido, no bloquea)
-   │
-   ├─ texto → flujo actual (sin cambios)
-   │
-   └─ audio/imagen/document detectado
-        │
-        ├─ inserta placeholder en contact_messages: "[⏳ Procesando audio…]"
-        └─ EdgeRuntime.waitUntil( process-whatsapp-media )
-                │
-                ├─ fetch base64 vía Evolution API /chat/getBase64FromMediaMessage
-                ├─ audio  → Groq Whisper  → "[🎙️ Audio] {transcripción}"
-                ├─ imagen → Gemini Vision → "[🖼️ Imagen] {descripción + OCR}"
-                ├─ pdf    → pdf.js/text   → "[📎 PDF: nombre] {texto}"
-                └─ UPDATE contact_messages SET content = ... WHERE id = placeholderId
-```
+### Estado actual
+Ya existe `RelationshipTimelineChart.tsx` + `build-relationship-timeline` edge function. Funciona pero:
+- Agrupa por mes (poco granular).
+- Hitos vienen solo de `personality_profile.hitos` con sentiment heurístico (no analiza qué pasó realmente).
+- Eventos personales mezclados pero sin destacar.
+- Tooltip básico.
 
-### Cambios
+### Lo que vamos a cambiar
 
-**1. `evolution-webhook/index.ts`** — detección y derivación
-- Detectar `audioMessage`, `imageMessage`, `documentMessage`, `videoMessage` en `messages.upsert`.
-- Insertar placeholder inmediato (`[⏳ Procesando {tipo}…]`) con `external_id` real para mantener idempotencia.
-- Disparar `process-whatsapp-media` con `EdgeRuntime.waitUntil` (no bloquea webhook, no rompe ACK a Evolution).
+**A) Edge function `build-relationship-timeline`** — extracción de hitos reales con IA
+- Pasar a Gemini Flash una muestra representativa de los mensajes del contacto (primeros + últimos + picos de actividad).
+- Pedir extracción JSON estricta:
+  ```json
+  { "hitos": [
+    { "date": "2024-08-15", "title": "Viaje a Tulum",
+      "description": "Vacaciones juntos, lo pasaron genial",
+      "sentiment": 3, "category": "viaje|celebracion|conflicto|logro|perdida|reencuentro|cotidiano" }
+  ]}
+  ```
+- Sentiment ya no heurístico: lo decide el LLM (-3 a +3).
+- Cachear resultado en `people_contacts.personality_profile._timeline_cache` con TTL 7 días para no re-llamar al LLM cada vista.
+- Mantener serie de frecuencia mensual como línea base.
 
-**2. Nueva edge function `process-whatsapp-media/index.ts`**
-- Input: `{ messageId, contactId, userId, instance, evolutionMessageKey, mediaType, caption }`.
-- Llama `${EVOLUTION_API_URL}/chat/getBase64FromMediaMessage/{instance}` con la key del mensaje.
-- Según `mediaType`:
-  - `audio`: POST a `https://api.groq.com/openai/v1/audio/transcriptions` (whisper-large-v3, lang `es`).
-  - `image`: POST a Lovable AI Gateway con `google/gemini-3-flash-preview` y mensaje multimodal `image_url` base64 → pide descripción breve + OCR de cualquier texto visible.
-  - `document` (pdf): si MIME es pdf → extraer texto con pdf.js (deno-compatible) o Gemini Vision como fallback; si es otro tipo → guardar `[📎 Documento: nombre]`.
-  - `video`: por ahora `[🎬 Vídeo recibido]` (transcribir vídeo es caro; lo dejamos fuera del MVP).
-- `UPDATE contact_messages SET content = '<prefijo> <texto>' WHERE id = messageId`.
-- Si todo falla tras retries → `[⚠️ {tipo} no procesable]` (no se queda colgado en "procesando").
+**B) Componente `RelationshipTimelineChart.tsx`** — curva continua + hitos marcados
+- Curva de actividad/sentimiento desde el primer mensaje hasta hoy (línea suave).
+- Puntos sobre la curva por cada hito, color según sentiment:
+  - verde (positivo: viajes, celebraciones, reencuentros)
+  - rojo (negativo: conflictos, pérdidas)
+  - amarillo (neutro/cotidiano)
+- Iconos por categoría (✈️ viaje, 🎉 celebración, 💔 conflicto, 🏆 logro, etc.).
+- Tooltip rico al pasar por encima:
+  - Fecha exacta formateada (`15 ago 2024`)
+  - Título + descripción del hito
+  - Etiqueta de sentimiento ("Bueno", "Malo", "Neutro")
+- Eventos personales del usuario (viaje a Venecia) como marcadores diferenciados encima de la curva (línea vertical punteada con icono).
+- Eje X: línea de tiempo desde primer mensaje hasta hoy (no agrupado por mes rígido).
 
-**3. UI mínima (sin pantalla nueva)**
-- En `ContactTabs.tsx > WhatsAppTab` la lista de mensajes ya muestra `content`. Los prefijos `[🎙️] [🖼️] [📎]` los hacen reconocibles sin componente extra.
-- (Opcional, fuera de MVP) un badge especial cuando el contenido empieza por esos prefijos. Lo dejo para una segunda iteración para no inflar este cambio.
+**C) Integración en `ContactDetail.tsx`**
+- El componente ya está; nos aseguramos que ocupa una sección destacada (ya lo está vía tabs).
+- Botón "Recalcular timeline" que invalida el cache y vuelve a llamar al LLM.
 
-**4. Headlines / personalidad**
-- `get-contact-headlines` y `contact-analysis` ya leen `contact_messages.content`, así que el texto transcrito/descrito entra automáticamente al análisis. Cero cambios ahí.
+### Archivos a tocar
+- `supabase/functions/build-relationship-timeline/index.ts` (refactor extracción + cache)
+- `src/components/contact/RelationshipTimelineChart.tsx` (nueva visualización)
+- `src/hooks/useRelationshipTimeline.ts` (añadir `forceRefresh`)
 
-### Secrets
-- `GROQ_API_KEY` → ya existe (lo usa `jarvis-hybrid-voice`).
-- `LOVABLE_API_KEY` → ya existe (Vision).
-- `EVOLUTION_API_URL` + `EVOLUTION_API_KEY` → ya existen.
+### Resultado
+Abres el contacto de tu primo Carlitos y ves una curva continua desde el primer mensaje. Picos verdes en "Viaje a Tulum (ago 2024)", "Cumpleaños (mar 2025)", quizá un valle rojo si hubo bronca, y marcadores de tus propios viajes (Venecia) superpuestos. Pasas el ratón y te dice exactamente qué pasó y si fue bueno o malo.
 
-Nada nuevo que pedir.
-
-### Resiliencia
-- `fetchWithRetry` (ya en uso para Evolution) en la llamada a `getBase64FromMediaMessage`.
-- Timeout de 60s por media (Whisper/Vision son rápidos; si tarda más, marcamos como no procesable).
-- Idempotencia: el placeholder se inserta con `external_id` antes del `waitUntil`, así si Evolution reenvía el evento detectamos duplicado igual que con texto.
-- Tamaño: si base64 > 8 MB (audios largos, vídeos) → no procesar (`[⚠️ Demasiado grande]`).
-
-### Memoria a actualizar
-Tras desplegar: actualizar `mem://integraciones/whatsapp-personal-limitacion-multimedia-v1` para reflejar que el límite ya no aplica a audio/imagen/pdf (solo a vídeo).
-
-### Resultado esperado
-Cuando alguien te mande por WhatsApp un audio explicando algo, una foto de un cartel, o un PDF de presupuesto: en ~5–15 s el mensaje aparecerá en el chat del contacto con su transcripción/descripción/texto, y JARVIS lo tendrá en cuenta en el siguiente headline y en su personalidad de ese contacto.
+### Sobre el test del audio/foto
+Mándale ahora mismo a tu nena que te envíe un audio corto y una foto. Vuelve aquí en 1 minuto y me dices qué ves en el chat del contacto en `/red-estrategica/<su-id>`. Si funciona, paso al timeline. Si no, miramos logs antes.

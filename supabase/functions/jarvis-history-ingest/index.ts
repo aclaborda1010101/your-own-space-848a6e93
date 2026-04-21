@@ -145,24 +145,36 @@ async function loadSource(
 ): Promise<LoadedSource | null> {
   switch (source_table) {
     case "contact_messages": {
-      const { data: msg } = await sb
+      const { data: msg, error: msgErr } = await sb
         .from("contact_messages")
-        .select("id, contact_id, message_text, message_type, sent_at, direction, media_url")
+        .select("id, contact_id, content, message_date, source, sender, chat_name, external_id, user_id")
         .eq("id", source_id)
-        .single();
-      if (!msg || !msg.message_text) return null;
-      const { data: contact } = await sb
-        .from("people_contacts")
-        .select("id, name, user_id")
-        .eq("id", msg.contact_id)
-        .single();
-      if (!contact) return null;
+        .maybeSingle();
+      if (msgErr) { console.warn("[ingest] contact_messages load error:", msgErr.message, "id=", source_id); return null; }
+      if (!msg) { console.warn("[ingest] contact_messages not found id=", source_id); return null; }
+      if (!msg.content || !String(msg.content).trim()) { console.warn("[ingest] contact_messages empty content id=", source_id); return null; }
+      let contactName = msg.chat_name || msg.sender || "contacto";
+      let contactId: string | null = msg.contact_id ?? null;
+      let resolvedUserId: string | null = msg.user_id ?? null;
+      if (contactId) {
+        const { data: contact } = await sb
+          .from("people_contacts")
+          .select("id, name, user_id")
+          .eq("id", contactId)
+          .maybeSingle();
+        if (contact) {
+          contactName = contact.name || contactName;
+          resolvedUserId = resolvedUserId || contact.user_id;
+        }
+      }
+      if (!resolvedUserId) { console.warn("[ingest] contact_messages no user_id resolvable id=", source_id); return null; }
+      const dirArrow = msg.sender === "me" || msg.sender === "out" ? "→" : "←";
       return {
-        content: `[WhatsApp ${msg.direction === "out" ? "→" : "←"} ${contact.name}] ${msg.message_text}`,
-        occurred_at: msg.sent_at || new Date().toISOString(),
-        people: [contact.id],
-        metadata: { contact_name: contact.name, message_type: msg.message_type, direction: msg.direction },
-        user_id: contact.user_id,
+        content: `[WhatsApp ${dirArrow} ${contactName}] ${msg.content}`,
+        occurred_at: msg.message_date || new Date().toISOString(),
+        people: contactId ? [contactId] : [],
+        metadata: { contact_name: contactName, source: msg.source, sender: msg.sender, external_id: msg.external_id },
+        user_id: resolvedUserId,
       };
     }
     case "jarvis_emails_cache": {

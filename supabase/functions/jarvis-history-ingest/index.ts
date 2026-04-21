@@ -145,24 +145,36 @@ async function loadSource(
 ): Promise<LoadedSource | null> {
   switch (source_table) {
     case "contact_messages": {
-      const { data: msg } = await sb
+      const { data: msg, error: msgErr } = await sb
         .from("contact_messages")
-        .select("id, contact_id, message_text, message_type, sent_at, direction, media_url")
+        .select("id, contact_id, content, message_date, source, sender, chat_name, external_id, user_id")
         .eq("id", source_id)
-        .single();
-      if (!msg || !msg.message_text) return null;
-      const { data: contact } = await sb
-        .from("people_contacts")
-        .select("id, name, user_id")
-        .eq("id", msg.contact_id)
-        .single();
-      if (!contact) return null;
+        .maybeSingle();
+      if (msgErr) { console.warn("[ingest] contact_messages load error:", msgErr.message, "id=", source_id); return null; }
+      if (!msg) { console.warn("[ingest] contact_messages not found id=", source_id); return null; }
+      if (!msg.content || !String(msg.content).trim()) { console.warn("[ingest] contact_messages empty content id=", source_id); return null; }
+      let contactName = msg.chat_name || msg.sender || "contacto";
+      let contactId: string | null = msg.contact_id ?? null;
+      let resolvedUserId: string | null = msg.user_id ?? null;
+      if (contactId) {
+        const { data: contact } = await sb
+          .from("people_contacts")
+          .select("id, name, user_id")
+          .eq("id", contactId)
+          .maybeSingle();
+        if (contact) {
+          contactName = contact.name || contactName;
+          resolvedUserId = resolvedUserId || contact.user_id;
+        }
+      }
+      if (!resolvedUserId) { console.warn("[ingest] contact_messages no user_id resolvable id=", source_id); return null; }
+      const dirArrow = msg.sender === "me" || msg.sender === "out" ? "→" : "←";
       return {
-        content: `[WhatsApp ${msg.direction === "out" ? "→" : "←"} ${contact.name}] ${msg.message_text}`,
-        occurred_at: msg.sent_at || new Date().toISOString(),
-        people: [contact.id],
-        metadata: { contact_name: contact.name, message_type: msg.message_type, direction: msg.direction },
-        user_id: contact.user_id,
+        content: `[WhatsApp ${dirArrow} ${contactName}] ${msg.content}`,
+        occurred_at: msg.message_date || new Date().toISOString(),
+        people: contactId ? [contactId] : [],
+        metadata: { contact_name: contactName, source: msg.source, sender: msg.sender, external_id: msg.external_id },
+        user_id: resolvedUserId,
       };
     }
     case "jarvis_emails_cache": {
@@ -241,15 +253,15 @@ async function ingestOne(params: {
   source_type: string;
   source_id: string;
   source_table: string;
-}): Promise<{ inserted: number; skipped: number }> {
+}): Promise<{ inserted: number; skipped: number; reason?: string; chunks?: number }> {
   const loaded = await loadSource(params.source_table, params.source_id, params.user_id);
-  if (!loaded) return { inserted: 0, skipped: 1 };
+  if (!loaded) return { inserted: 0, skipped: 1, reason: "loadSource_returned_null" };
 
   const userId = loaded.user_id || params.user_id;
-  if (!userId) return { inserted: 0, skipped: 1 };
+  if (!userId) return { inserted: 0, skipped: 1, reason: "no_user_id" };
 
   const chunks = chunkText(loaded.content);
-  if (chunks.length === 0) return { inserted: 0, skipped: 1 };
+  if (chunks.length === 0) return { inserted: 0, skipped: 1, reason: "empty_chunks" };
 
   let inserted = 0;
   let skipped = 0;
@@ -310,7 +322,7 @@ async function ingestOne(params: {
     await new Promise((r) => setTimeout(r, 200));
   }
 
-  return { inserted, skipped };
+  return { inserted, skipped, chunks: total, reason: inserted === 0 ? "all_chunks_existed_or_failed" : undefined };
 }
 
 // ─────────────────────────────────────────────────────────
@@ -323,10 +335,10 @@ async function backfill(source_type: string, user_id: string, batch_size: number
   if (source_type === "whatsapp") {
     const { data } = await sb
       .from("contact_messages")
-      .select("id, contact_id, sent_at, people_contacts!inner(user_id)")
-      .eq("people_contacts.user_id", user_id)
-      .gte("sent_at", fromDate)
-      .order("sent_at", { ascending: false })
+      .select("id, message_date, user_id")
+      .eq("user_id", user_id)
+      .gte("message_date", fromDate)
+      .order("message_date", { ascending: false })
       .limit(batch_size * 3);
     candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "contact_messages" }));
   } else if (source_type === "email") {

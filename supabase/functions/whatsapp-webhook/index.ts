@@ -104,16 +104,16 @@ async function persistToCRM(
   direction: "incoming" | "outgoing",
   messageDate: string
 ) {
-  // Resolve user_id dynamically from instance owner
+  // Resolve user_id STRICTLY from instance owner — no default-user fallback.
   const { data: owner } = await supabase
     .from("whatsapp_instance_owners")
     .select("user_id")
     .eq("instance_name", "jarvis-whatsapp")
     .maybeSingle();
 
-  const crmUserId = owner?.user_id || Deno.env.get("EVOLUTION_DEFAULT_USER_ID");
+  const crmUserId = owner?.user_id;
   if (!crmUserId) {
-    console.log("[WhatsApp CRM] No instance owner and no EVOLUTION_DEFAULT_USER_ID, skipping CRM persistence");
+    console.warn("[WhatsApp CRM] No owner registered for instance jarvis-whatsapp, dropping CRM persistence");
     return;
   }
 

@@ -47,5 +47,17 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>JARVIS necesita acceso a la camara para tomar fotos y escanear documentos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>JARVIS necesita acceso a tu galeria para adjuntar imagenes.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>JARVIS necesita guardar imagenes en tu galeria.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>JARVIS necesita acceso al microfono para el reconocimiento de voz.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>JARVIS usa reconocimiento de voz para comandos por voz.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>JARVIS usa tu ubicacion para tareas geolocalizadas y sugerencias contextuales.</string>
 </dict>
 </plist>

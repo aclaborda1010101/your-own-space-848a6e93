@@ -88,20 +88,29 @@ export const usePushNotifications = () => {
     }
 
     try {
-      // Try to use service worker notification first (works in background)
-      if ("serviceWorker" in navigator) {
-        const registration = await navigator.serviceWorker.ready;
-        await registration.showNotification(options.title, {
-          body: options.body,
-          icon: options.icon || "/pwa-192x192.png",
-          badge: options.badge || "/pwa-192x192.png",
-          tag: options.tag,
-          data: options.data,
-          requireInteraction: options.requireInteraction,
-        });
-        return true;
+      // Try service worker notification (works in background), but only if
+      // there is an active controller — navigator.serviceWorker.ready can hang
+      // forever when no SW is registered (e.g. on Capacitor or after SW cleanup).
+      if (
+        "serviceWorker" in navigator &&
+        navigator.serviceWorker.controller
+      ) {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          await registration.showNotification(options.title, {
+            body: options.body,
+            icon: options.icon || "/pwa-192x192.png",
+            badge: options.badge || "/pwa-192x192.png",
+            tag: options.tag,
+            data: options.data,
+            requireInteraction: options.requireInteraction,
+          });
+          return true;
+        } catch {
+          // SW notification failed — fall through to regular Notification
+        }
       }
-      
+
       // Fallback to regular notification
       const notification = new Notification(options.title, {
         body: options.body,

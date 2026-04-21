@@ -1,16 +1,16 @@
 import { useEffect } from "react";
+import { Capacitor } from "@capacitor/core";
 import { useAuth } from "@/hooks/useAuth";
 import { useNativePushNotifications } from "@/hooks/useNativePushNotifications";
 import { useLocalNotifications } from "@/hooks/useLocalNotifications";
 
+const isNative = Capacitor.isNativePlatform();
+
 /**
  * Mounts inside <ProtectedPage> so it only runs for authenticated users.
- * - On native, attempts a silent push registration (if already granted, refresh
- *   APNs token; if 'prompt', user must opt in manually).
- * - Triggers the local-notifications permission prompt once per session so the
- *   app can schedule offline calendar reminders without network.
+ * On web this component renders nothing and skips heavy native hooks.
  */
-export function NativeBootstrap() {
+function NativeBootstrapInner() {
   const { user } = useAuth();
   const push = useNativePushNotifications();
   const local = useLocalNotifications();
@@ -35,6 +35,11 @@ export function NativeBootstrap() {
   }, [user, local.isNative, local.permission]);
 
   return null;
+}
+
+export function NativeBootstrap() {
+  if (!isNative) return null;
+  return <NativeBootstrapInner />;
 }
 
 export default NativeBootstrap;

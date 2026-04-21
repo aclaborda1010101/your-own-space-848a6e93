@@ -76,7 +76,7 @@ const Dashboard = () => {
     resetLayout, switchProfile, createProfile, duplicateProfile, renameProfile, setProfileIcon, deleteProfile
   } = useDashboardLayout();
 
-  useCheckInReminder();
+  useCheckInReminder(isRegistered);
 
   const activeChallenges = challenges.filter(c => c.status === "active");
 

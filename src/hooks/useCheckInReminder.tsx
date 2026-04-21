@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
-import { useCheckIn } from "@/hooks/useCheckIn";
 
 const REMINDER_KEY = "jarvis_checkin_reminder_scheduled";
 const PREFS_KEY = "jarvis_notification_prefs";
@@ -22,17 +21,21 @@ const getPrefs = (): NotificationPreferences => {
   return { dailyCheckIn: true, checkInTime: "08:00" };
 };
 
-export const useCheckInReminder = () => {
+/**
+ * Schedules a web-based check-in reminder notification.
+ * Accepts `isRegistered` from the parent so it does NOT instantiate
+ * its own useCheckIn (which would duplicate Supabase queries).
+ */
+export const useCheckInReminder = (isRegistered: boolean) => {
   const { permission, notifyCheckIn, isSupported } = usePushNotifications();
-  const { isRegistered, loading } = useCheckIn();
   const scheduledRef = useRef(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (!isSupported || permission !== "granted" || loading) return;
+    if (!isSupported || permission !== "granted") return;
 
     const prefs = getPrefs();
-    
+
     // Don't schedule if check-in notifications are disabled
     if (!prefs.dailyCheckIn) {
       scheduledRef.current = false;
@@ -78,7 +81,6 @@ export const useCheckInReminder = () => {
         }
 
         timeoutRef.current = setTimeout(async () => {
-          // Double-check if still not registered and notifications still enabled
           const currentPrefs = getPrefs();
           if (!isRegistered && currentPrefs.dailyCheckIn) {
             await notifyCheckIn();
@@ -96,17 +98,17 @@ export const useCheckInReminder = () => {
           }
         };
       }
-      
+
       return undefined;
     };
 
     const cleanup = scheduleReminder();
     return cleanup;
-  }, [isSupported, permission, isRegistered, loading, notifyCheckIn]);
+  }, [isSupported, permission, isRegistered, notifyCheckIn]);
 
   // Check immediately on mount if it's past the scheduled time and no check-in
   useEffect(() => {
-    if (!isSupported || permission !== "granted" || loading || isRegistered) return;
+    if (!isSupported || permission !== "granted" || isRegistered) return;
 
     const prefs = getPrefs();
     if (!prefs.dailyCheckIn) return;
@@ -125,13 +127,13 @@ export const useCheckInReminder = () => {
     if (diffMinutes >= 0 && diffMinutes <= 120) {
       const reminderKey = `jarvis_checkin_immediate_${now.toDateString()}_${prefs.checkInTime}`;
       const alreadyReminded = localStorage.getItem(reminderKey);
-      
+
       if (!alreadyReminded) {
         notifyCheckIn();
         localStorage.setItem(reminderKey, "true");
       }
     }
-  }, [isSupported, permission, isRegistered, loading, notifyCheckIn]);
+  }, [isSupported, permission, isRegistered, notifyCheckIn]);
 };
 
 export default useCheckInReminder;

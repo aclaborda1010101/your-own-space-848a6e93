@@ -73,6 +73,7 @@ export function useNativePushNotifications(): NativePushAPI {
 
   // Initial active-device count + on auth changes flush any pending token
   useEffect(() => {
+    if (!isNative) return;
     void refreshActiveCount(setActiveDeviceCount, setDeviceRegistered);
     const { data: sub } = supabase.auth.onAuthStateChange(async (_evt, session) => {
       if (session?.user && pendingTokenRef.current) {
@@ -84,7 +85,7 @@ export function useNativePushNotifications(): NativePushAPI {
       await refreshActiveCount(setActiveDeviceCount, setDeviceRegistered);
     });
     return () => sub.subscription.unsubscribe();
-  }, []);
+  }, [isNative]);
 
   // Listeners + refresh on resume
   useEffect(() => {
@@ -129,9 +130,12 @@ export function useNativePushNotifications(): NativePushAPI {
           const route = typeof data.route === "string" ? data.route : null;
           if (route) {
             try {
-              window.location.assign(route);
+              // Use history.pushState + popstate to navigate within the SPA
+              // without triggering a full page reload.
+              window.history.pushState({}, "", route);
+              window.dispatchEvent(new PopStateEvent("popstate"));
             } catch {
-              /* noop */
+              window.location.assign(route);
             }
           }
         },

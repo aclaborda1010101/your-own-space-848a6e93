@@ -127,6 +127,10 @@ async function sha256(text: string): Promise<string> {
     .join("");
 }
 
+function toPgVector(embedding: number[] | null): string | null {
+  return embedding && embedding.length > 0 ? `[${embedding.join(",")}]` : null;
+}
+
 // ─────────────────────────────────────────────────────────
 // Source loaders — given source_table + source_id, returns content + metadata
 // ─────────────────────────────────────────────────────────
@@ -253,7 +257,7 @@ async function ingestOne(params: {
   source_type: string;
   source_id: string;
   source_table: string;
-}): Promise<{ inserted: number; skipped: number; reason?: string; chunks?: number }> {
+}): Promise<{ inserted: number; skipped: number; reason?: string; chunks?: number; debug?: Record<string, unknown> }> {
   const loaded = await loadSource(params.source_table, params.source_id, params.user_id);
   if (!loaded) return { inserted: 0, skipped: 1, reason: "loadSource_returned_null" };
 
@@ -266,6 +270,7 @@ async function ingestOne(params: {
   let inserted = 0;
   let skipped = 0;
   const total = chunks.length;
+  let lastError: string | null = null;
 
   for (let idx = 0; idx < chunks.length; idx++) {
     const chunkContent = chunks[idx];
@@ -303,7 +308,7 @@ async function ingestOne(params: {
       content_hash: hash,
       chunk_index: idx,
       total_chunks: total,
-      embedding,
+      embedding: toPgVector(embedding),
       occurred_at: loaded.occurred_at,
       people: loaded.people,
       topics: meta.topics,
@@ -313,6 +318,7 @@ async function ingestOne(params: {
 
     if (error) {
       console.warn("[ingest] insert failed:", error.message);
+      lastError = error.message;
       skipped++;
     } else {
       inserted++;
@@ -322,7 +328,13 @@ async function ingestOne(params: {
     await new Promise((r) => setTimeout(r, 200));
   }
 
-  return { inserted, skipped, chunks: total, reason: inserted === 0 ? "all_chunks_existed_or_failed" : undefined };
+  return {
+    inserted,
+    skipped,
+    chunks: total,
+    reason: inserted === 0 ? (lastError ? "insert_failed" : "all_chunks_existed_or_failed") : undefined,
+    debug: lastError ? { last_error: lastError, source_id: params.source_id, source_table: params.source_table } : undefined,
+  };
 }
 
 // ─────────────────────────────────────────────────────────

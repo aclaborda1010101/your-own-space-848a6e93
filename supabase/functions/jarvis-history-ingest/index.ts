@@ -334,7 +334,7 @@ async function ingestOne(params: {
     }
 
     // Rate limit
-    await new Promise((r) => setTimeout(r, 200));
+    if (!params.fast_meta) await new Promise((r) => setTimeout(r, 200));
   }
 
   return {

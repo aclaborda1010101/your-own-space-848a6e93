@@ -45,22 +45,55 @@ export const WhatsAppConnectionCard = () => {
       .select("user_id")
       .eq("instance_name", INSTANCE_NAME)
       .maybeSingle() as any);
-    if (data && data.user_id !== user.id) {
-      setOwnedByOther(true);
-      return false;
+    if (data?.user_id) {
+      setOwnerId(data.user_id);
+      if (data.user_id !== user.id) {
+        setOwnedByOther(true);
+        setOwnerVerified(false);
+        return false;
+      }
+      setOwnedByOther(false);
+      setOwnerVerified(true);
+      return true;
     }
+    setOwnerId(null);
+    setOwnerVerified(false);
     setOwnedByOther(false);
-    return true;
+    return false;
   }, [user]);
 
   const saveOwnership = useCallback(async () => {
-    if (!user) return;
-    await (supabase.from("whatsapp_instance_owners" as any).upsert({
+    if (!user) return false;
+    const { error } = await (supabase.from("whatsapp_instance_owners" as any).upsert({
       instance_name: INSTANCE_NAME,
       user_id: user.id,
       connected_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }, { onConflict: "instance_name" }) as any);
+    if (error) {
+      console.error("saveOwnership error:", error);
+      toast.error("No se pudo registrar la propiedad de la instancia: " + error.message);
+      return false;
+    }
+    // Verify the row is actually there before any message arrives
+    const { data: verify, error: verifyErr } = await (supabase
+      .from("whatsapp_instance_owners" as any)
+      .select("user_id")
+      .eq("instance_name", INSTANCE_NAME)
+      .maybeSingle() as any);
+    if (verifyErr || !verify?.user_id) {
+      toast.error("Ownership no verificado en BD tras el upsert");
+      setOwnerVerified(false);
+      return false;
+    }
+    setOwnerId(verify.user_id);
+    setOwnerVerified(verify.user_id === user.id);
+    if (verify.user_id === user.id) {
+      toast.success(`Owner verificado: ${verify.user_id}`);
+    } else {
+      toast.error(`Owner en BD (${verify.user_id}) no coincide con tu usuario (${user.id})`);
+    }
+    return verify.user_id === user.id;
   }, [user]);
 
   const checkStatus = useCallback(async () => {

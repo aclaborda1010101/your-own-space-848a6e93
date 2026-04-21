@@ -144,7 +144,7 @@ export const useUserProfile = (): {
       try {
         const { data, error } = await supabase
           .from("user_profile")
-          .select("*")
+          .select("id, user_id, name, vital_role, current_context, cognitive_style, primary_language, secondary_language, personal_principles, life_goals, professional_goals, family_context, health_profile, food_preferences, food_dislikes, best_focus_time, fatigue_time, needs_buffers, communication_style, personal_rules, auto_decisions, require_confirmation, learned_patterns, emotional_history, current_mode, mode_activated_at, daily_routine, special_days, rest_rules, bosco_settings, planning_rules, my_identifiers, created_at, updated_at")
           .eq("user_id", user.id)
           .maybeSingle();
 

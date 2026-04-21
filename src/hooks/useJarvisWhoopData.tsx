@@ -51,16 +51,17 @@ export const useJarvisWhoopData = () => {
     try {
       // Query both sources in parallel: jarvis_whoop_data (POTUS mirror) and whoop_data (Health page direct).
       // Pick the row with the most recent data_date that actually has metrics.
+      const baseCols = "data_date, recovery_score, hrv, strain, sleep_hours, resting_hr, sleep_performance";
       const [jarvisRes, whoopRes] = await Promise.all([
         supabase
           .from("jarvis_whoop_data")
-          .select("*")
+          .select(`${baseCols}, synced_at`)
           .eq("user_id", user.id)
           .order("data_date", { ascending: false })
           .limit(5),
         supabase
           .from("whoop_data")
-          .select("*")
+          .select(`${baseCols}, fetched_at`)
           .eq("user_id", user.id)
           .order("data_date", { ascending: false })
           .limit(5),

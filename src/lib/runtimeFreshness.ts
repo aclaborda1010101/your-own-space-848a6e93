@@ -1,7 +1,8 @@
 /**
- * Runtime Freshness Guard v9
+ * Runtime Freshness Guard v10
  * Non-destructive: never nukes auth tokens during background→foreground transitions.
  * Only nukes caches/SW when a *new build* is detected.
+ * v10: Skip entirely on Capacitor native (reload blanks the WebView on iOS).
  */
 
 declare const __APP_BUILD_ID__: string;
@@ -14,6 +15,17 @@ const PREVIEW_RESET_MAX_ATTEMPTS = 2;
 const SLEEP_THRESHOLD_MS = 30 * 60 * 1000;
 
 let sleepDetectorInstalled = false;
+
+// ── Platform detection ──────────────────────────────────────────
+
+function isCapacitorNative(): boolean {
+  try {
+    // Capacitor sets this on the window object
+    return !!(window as any).Capacitor?.isNativePlatform?.();
+  } catch {
+    return false;
+  }
+}
 
 // ── Host detection ──────────────────────────────────────────────
 
@@ -146,6 +158,10 @@ function installSleepDetector(): void {
 
 export function ensureRuntimeFreshness(): boolean {
   if (typeof window === "undefined") return false;
+
+  // Capacitor native: the WebView serves local files, reload() can blank the screen.
+  // Build-change and sleep detection are meaningless here.
+  if (isCapacitorNative()) return false;
 
   try {
     // Published lovable.app — only nuke when build changed

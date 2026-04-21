@@ -66,7 +66,7 @@ export const useCheckIn = () => {
     try {
       const { data, error } = await supabase
         .from("check_ins")
-        .select("*")
+        .select("energy, mood, focus, available_time, interruption_risk, day_mode")
         .eq("user_id", user.id)
         .eq("date", today)
         .maybeSingle();

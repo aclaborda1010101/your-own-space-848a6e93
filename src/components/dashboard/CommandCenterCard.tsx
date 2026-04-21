@@ -9,8 +9,6 @@ import {
   CheckSquare, MessageSquare, CalendarDays,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useUserProfile } from "@/hooks/useUserProfile";
-import { useJarvisWhoopData } from "@/hooks/useJarvisWhoopData";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -18,6 +16,8 @@ import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import type { Task } from "@/hooks/useTasks";
 import type { CalendarEvent } from "@/hooks/useCalendar";
+import type { JarvisWhoopData } from "@/hooks/useJarvisWhoopData";
+import type { UserProfile } from "@/hooks/useUserProfile";
 
 interface PendingContact {
   id: string;
@@ -30,13 +30,14 @@ interface CommandCenterCardProps {
   tasks: Task[];
   events: CalendarEvent[];
   onToggleComplete: (id: string) => void;
+  whoopData?: JarvisWhoopData | null;
+  whoopLoading?: boolean;
+  profile?: UserProfile | null;
 }
 
-export const CommandCenterCard = ({ tasks, events, onToggleComplete }: CommandCenterCardProps) => {
+export const CommandCenterCard = ({ tasks, events, onToggleComplete, whoopData = null, whoopLoading = false, profile = null }: CommandCenterCardProps) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { profile } = useUserProfile();
-  const { data: whoopData, isLoading: whoopLoading } = useJarvisWhoopData();
   const [pendingContacts, setPendingContacts] = useState<PendingContact[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
 

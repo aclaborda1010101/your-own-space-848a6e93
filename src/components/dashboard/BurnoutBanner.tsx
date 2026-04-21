@@ -1,9 +1,15 @@
 import { useMemo } from "react";
 import { AlertTriangle, TrendingDown } from "lucide-react";
-import { useTasks } from "@/hooks/useTasks";
-import { useJarvisWhoopData } from "@/hooks/useJarvisWhoopData";
-import { useWhoopHistory } from "@/hooks/useWhoopHistory";
 import { cn } from "@/lib/utils";
+import type { Task } from "@/hooks/useTasks";
+import type { JarvisWhoopData } from "@/hooks/useJarvisWhoopData";
+import type { WhoopDayData } from "@/hooks/useWhoopHistory";
+
+interface BurnoutBannerProps {
+  tasks: Task[];
+  whoopData: JarvisWhoopData | null;
+  whoopHistory: WhoopDayData[];
+}
 
 /**
  * Banner proactivo que detecta DOS patrones de riesgo:
@@ -12,10 +18,7 @@ import { cn } from "@/lib/utils";
  *
  * Se renderiza inline (devuelve null si no hay alerta).
  */
-export function BurnoutBanner() {
-  const { tasks } = useTasks();
-  const { data: whoop } = useJarvisWhoopData();
-  const { history } = useWhoopHistory(7);
+export function BurnoutBanner({ tasks, whoopData: whoop, whoopHistory: history }: BurnoutBannerProps) {
 
   const criticalTaskCount = useMemo(
     () => tasks.filter(t => !t.completed && (t.priority === "P0" || t.priority === "P1")).length,

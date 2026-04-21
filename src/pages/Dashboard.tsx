@@ -37,6 +37,8 @@ import { useJarvisCore } from "@/hooks/useJarvisCore";
 import { useSmartNotifications } from "@/hooks/useSmartNotifications";
 import { useJarvisChallenge } from "@/hooks/useJarvisChallenge";
 import { useUserProfile } from "@/hooks/useUserProfile";
+import { useJarvisWhoopData } from "@/hooks/useJarvisWhoopData";
+import { useWhoopHistory } from "@/hooks/useWhoopHistory";
 import { useDashboardLayout, DashboardCardId, CardWidth } from "@/hooks/useDashboardLayout";
 import { useUserSettings } from "@/hooks/useUserSettings";
 import { useCheckInReminder } from "@/hooks/useCheckInReminder";
@@ -64,8 +66,10 @@ const Dashboard = () => {
   const { notifications } = useSmartNotifications();
   const { challenges, loading: challengesLoading, toggleGoalCompletion, createChallenge, updateChallenge } = useJarvisChallenge();
   const { profile } = useUserProfile();
-  
-  const { 
+  const { data: whoopData, isLoading: whoopLoading } = useJarvisWhoopData();
+  const { history: whoopHistory } = useWhoopHistory(7);
+
+  const {
     layout, profiles, activeProfileId, isLoaded,
     visibleLeftCards, visibleRightCards,
     moveCard, reorderInColumn, setCardVisibility, setCardSize, setCardWidth, 
@@ -236,11 +240,11 @@ const Dashboard = () => {
     <div className="p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6 space-y-5 sm:space-y-6">
       {/* Day Summary with Greeting */}
       {userSettings.show_day_summary !== false && (
-        <CommandCenterCard tasks={tasks} events={events} onToggleComplete={toggleComplete} />
+        <CommandCenterCard tasks={tasks} events={events} onToggleComplete={toggleComplete} whoopData={whoopData} whoopLoading={whoopLoading} profile={profile} />
       )}
 
       {/* Banner proactivo de burnout / patrón crónico de recuperación baja */}
-      <BurnoutBanner />
+      <BurnoutBanner tasks={tasks} whoopData={whoopData} whoopHistory={whoopHistory} />
 
       {/* Brief de mañana (solo después de las 20h) */}
       <TomorrowBriefCard />

@@ -41,8 +41,9 @@ export const useTasks = () => {
     try {
       const { data, error } = await supabase
         .from("tasks")
-        .select("*, business_projects(name), people_contacts(name)")
-        .order("created_at", { ascending: false });
+        .select("id, title, type, priority, duration, completed, completed_at, created_at, is_personal, project_id, contact_id, business_projects(name), people_contacts(name)")
+        .order("created_at", { ascending: false })
+        .limit(200);
 
       if (error) throw error;
 

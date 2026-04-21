@@ -48,7 +48,7 @@ export const useWhoopHistory = (days: number = 7) => {
 
       const { data, error } = await supabase
         .from("whoop_data")
-        .select("*")
+        .select("data_date, recovery_score, hrv, strain, sleep_hours, resting_hr, sleep_performance, spo2, skin_temp, respiratory_rate, calories, avg_hr, max_hr, sleep_efficiency, sleep_consistency, sleep_latency_min, sleep_need_hours, deep_sleep_hours, rem_sleep_hours, light_sleep_hours, awake_hours, disturbances, time_in_bed_hours, time_asleep_hours, sleep_debt_hours")
         .eq("user_id", user.id)
         .gte("data_date", sinceStr)
         .order("data_date", { ascending: true });

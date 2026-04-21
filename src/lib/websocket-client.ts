@@ -48,15 +48,27 @@ export class JarvisWebSocketClient {
   private latencyListeners: ((latency: number) => void)[] = [];
 
   constructor(url: string = 'ws://192.168.1.10:19000/jarvis-app') {
-    // Auto-upgrade to wss:// when page is loaded over HTTPS to avoid SecurityError
-    if (typeof window !== 'undefined' && window.location.protocol === 'https:' && url.startsWith('ws://')) {
-      // Local network IPs can't use wss://, so disable WebSocket entirely
+    // Disable WebSocket on non-http(s) schemes (Capacitor jarvisapp://, etc.)
+    // and when loaded over HTTPS with local network IPs
+    if (typeof window !== 'undefined') {
+      const proto = window.location.protocol;
+      const isSecure = proto === 'https:';
+      const isNonWeb = proto !== 'http:' && proto !== 'https:';
       const isLocalIp = /^ws:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.|localhost|127\.)/.test(url);
-      if (isLocalIp) {
-        console.log('[JARVIS WebSocket] Disabled: local network ws:// not available over HTTPS');
-        this.url = '';  // Empty URL prevents connection attempts
+
+      if (isNonWeb && isLocalIp) {
+        // Capacitor or other native scheme — local WS won't be reachable
+        console.log('[JARVIS WebSocket] Disabled: local network ws:// not available on native platform');
+        this.url = '';
+      } else if (isSecure && url.startsWith('ws://')) {
+        if (isLocalIp) {
+          console.log('[JARVIS WebSocket] Disabled: local network ws:// not available over HTTPS');
+          this.url = '';
+        } else {
+          this.url = url.replace('ws://', 'wss://');
+        }
       } else {
-        this.url = url.replace('ws://', 'wss://');
+        this.url = url;
       }
     } else {
       this.url = url;

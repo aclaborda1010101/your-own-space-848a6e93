@@ -232,6 +232,24 @@ export const WhatsAppConnectionCard = () => {
         </Button>
       </div>
 
+      {/* Owner verification panel */}
+      <div className="rounded-md border border-border bg-muted/30 p-3 space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-muted-foreground">Owner registrado en BD</span>
+          <Badge variant={ownerVerified ? "default" : ownerId ? "destructive" : "secondary"}>
+            {ownerVerified ? "Verificado (es tuyo)" : ownerId ? "Pertenece a otro usuario" : "Sin owner"}
+          </Badge>
+        </div>
+        <p className="text-[11px] font-mono break-all text-muted-foreground">
+          owner_id: {ownerId ?? "—"}
+        </p>
+        {user && (
+          <p className="text-[11px] font-mono break-all text-muted-foreground">
+            tu user.id: {user.id}
+          </p>
+        )}
+      </div>
+
       {/* QR Code */}
       {qrBase64 && state !== "open" && (
         <div className="space-y-3">

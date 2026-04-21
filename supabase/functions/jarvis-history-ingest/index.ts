@@ -349,7 +349,7 @@ async function ingestOne(params: {
 // ─────────────────────────────────────────────────────────
 // Backfill mode: pull rows of given source_type that have no chunks yet
 // ─────────────────────────────────────────────────────────
-async function backfill(source_type: string, user_id: string, batch_size: number, days: number) {
+async function backfill(source_type: string, user_id: string, batch_size: number, days: number, fast_meta = false) {
   const fromDate = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
   let candidates: Array<{ id: string; source_table: string }> = [];
 
@@ -409,6 +409,7 @@ async function backfill(source_type: string, user_id: string, batch_size: number
       source_type,
       source_id: c.id,
       source_table: c.source_table,
+      fast_meta,
     });
     totalInserted += inserted;
   }
@@ -441,14 +442,14 @@ serve(async (req) => {
     }
 
     if (mode === "backfill") {
-      const { user_id, source_type, batch_size = 50, days = 90 } = body;
+      const { user_id, source_type, batch_size = 50, days = 90, fast_meta = source_type === "whatsapp" } = body;
       if (!user_id || !source_type) {
         return new Response(
           JSON.stringify({ error: "Missing user_id or source_type" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      const r = await backfill(source_type, user_id, batch_size, days);
+      const r = await backfill(source_type, user_id, batch_size, days, Boolean(fast_meta));
       return new Response(JSON.stringify({ success: true, ...r }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

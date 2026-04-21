@@ -17,6 +17,8 @@ export const WhatsAppConnectionCard = () => {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [ownedByOther, setOwnedByOther] = useState(false);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const [ownerVerified, setOwnerVerified] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const callManage = useCallback(async (action: string) => {

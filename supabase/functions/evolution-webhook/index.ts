@@ -110,7 +110,9 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Resolve user_id from instance owner
+    // Resolve user_id STRICTLY from instance owner.
+    // We removed the EVOLUTION_DEFAULT_USER_ID fallback to prevent messages from
+    // unknown / unowned instances being attributed to a default user (data leak).
     const instanceName = body.instance || "jarvis-whatsapp";
     const { data: owner } = await supabase
       .from("whatsapp_instance_owners")
@@ -118,10 +120,10 @@ serve(async (req) => {
       .eq("instance_name", instanceName)
       .maybeSingle();
 
-    const userId = owner?.user_id || Deno.env.get("EVOLUTION_DEFAULT_USER_ID");
+    const userId = owner?.user_id;
     if (!userId) {
-      console.error("No instance owner / EVOLUTION_DEFAULT_USER_ID");
-      return new Response(JSON.stringify({ ok: false, error: "no_user_id" }), {
+      console.warn(`[evolution-webhook] No owner for instance "${instanceName}", dropping message`);
+      return new Response(JSON.stringify({ ok: true, skipped: "no_owner_for_instance", instance: instanceName }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

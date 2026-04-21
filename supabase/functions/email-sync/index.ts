@@ -48,10 +48,11 @@ interface ParsedEmail {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const BODY_TEXT_MAX = 50000;
-const GMAIL_BATCH_SIZE = 5;
-const IMAP_BATCH_SIZE = 15; // Very small to stay within CPU limits
-const MAX_GMAIL_PAGES = 1;
-const IMAP_SINCE_DAYS_DEFAULT = 7; // Only last 7 days on regular sync
+const GMAIL_BATCH_SIZE = 15;
+const IMAP_BATCH_SIZE = 50;
+const MAX_GMAIL_PAGES = 5;
+const IMAP_SINCE_DAYS_DEFAULT = 14; // Last 14 days on regular sync
+const IMAP_BODY_FETCH_LIMIT = 5; // Fetch body for first N personal emails per sync
 const IMAP_SINCE_DAYS_REPROCESS = 30; // Last 30 days on reprocess
 const IMAP_TIMEOUT_MS = 25000; // Hard timeout for IMAP operations (25s)
 
@@ -211,6 +212,39 @@ function extractSignature(bodyText: string): { raw: string | null; parsed: Recor
     raw: sigText.substring(0, 500), 
     parsed: Object.keys(parsed).length > 0 ? parsed : null 
   };
+}
+
+// ─── MIME word decoder (=?charset?Q/B?encoded?=) ─────────────────────────────
+function decodeMimeWord(text: string): string {
+  if (!text || !text.includes("=?")) return text;
+  // Handle multi-line encoded words (remove whitespace between consecutive encoded words)
+  const cleaned = text.replace(/\?=\s+=\?/g, "?==?");
+  return cleaned.replace(/=\?([^?]+)\?(Q|B)\?([^?]*)\?=/gi, (_match, charset, encoding, encoded) => {
+    try {
+      let bytes: Uint8Array;
+      if (encoding.toUpperCase() === "Q") {
+        const raw = encoded.replace(/_/g, " ");
+        const byteArray: number[] = [];
+        for (let i = 0; i < raw.length; i++) {
+          if (raw[i] === "=" && i + 2 < raw.length) {
+            byteArray.push(parseInt(raw.substring(i + 1, i + 3), 16));
+            i += 2;
+          } else {
+            byteArray.push(raw.charCodeAt(i));
+          }
+        }
+        bytes = new Uint8Array(byteArray);
+      } else {
+        // Base64
+        const binary = atob(encoded);
+        bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      }
+      return new TextDecoder(charset.toLowerCase() || "utf-8").decode(bytes);
+    } catch {
+      return encoded;
+    }
+  });
 }
 
 // ─── Gmail body extraction helpers ────────────────────────────────────────────
@@ -454,6 +488,7 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
 
     const emails: ParsedEmail[] = [];
     let count = 0;
+    let bodyFetchCount = 0;
 
     if (fetchResult && Array.isArray(fetchResult)) {
       for (const msg of fetchResult) {
@@ -472,8 +507,8 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
           const ccAddr = envelope.cc?.map((c: { name?: string; mailbox: string; host: string }) =>
             `${c.name || ""} <${c.mailbox}@${c.host}>`).join(", ") || "";
 
-          const bodyText = ""; // Body not fetched to save CPU
-          const subject = envelope.subject || "(sin asunto)";
+          const bodyText = ""; // Body not fetched to save CPU — fetched selectively below
+          const subject = decodeMimeWord(envelope.subject || "(sin asunto)");
           const fwInfo = detectForwarded(subject);
           
           // Build headers map for auto-reply detection
@@ -564,6 +599,45 @@ async function syncIMAP(account: EmailAccount): Promise<ParsedEmail[]> {
           }
 
           email.importance = detectImportance(email);
+
+          // Targeted body fetch for personal/calendar emails (limited to avoid CPU timeout)
+          if (!email.body_text && bodyFetchCount < IMAP_BODY_FETCH_LIMIT &&
+              email.email_type !== "newsletter" && email.email_type !== "notification" &&
+              email.email_type !== "plaud_transcription") {
+            try {
+              const seqNum = msg.seq || msg.uid;
+              if (seqNum) {
+                const detailed = await Promise.race([
+                  client.fetch(String(seqNum), {
+                    bodyParts: ["TEXT", "1", "1.1"],
+                  }),
+                  new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error("BODY_TIMEOUT")), 4000)),
+                ]) as any[];
+
+                const bodyCandidate = (detailed || [])
+                  .map((m: any) => extractImapBodyText(m))
+                  .find((txt: string) => txt.length > 20) || "";
+
+                if (bodyCandidate) {
+                  const trimmedBody = bodyCandidate.substring(0, BODY_TEXT_MAX);
+                  const sigUpdated = extractSignature(trimmedBody);
+                  email.preview = trimmedBody.substring(0, 200);
+                  email.body_text = trimmedBody;
+                  email.email_language = detectLanguage(trimmedBody);
+                  email.signature_raw = sigUpdated.raw || undefined;
+                  email.signature_parsed = sigUpdated.parsed || undefined;
+                  if (email.is_forwarded) {
+                    email.original_sender = extractOriginalSender(trimmedBody) || undefined;
+                  }
+                }
+                bodyFetchCount++;
+              }
+            } catch (bodyErr) {
+              const msg2 = bodyErr instanceof Error ? bodyErr.message : "unknown";
+              console.warn(`[email-sync] Body fetch skipped: ${msg2}`);
+              bodyFetchCount++; // Count failures too to avoid cascade timeouts
+            }
+          }
 
           // Mark as metadata_only only when body is still empty
           if (!email.body_text) {
@@ -1034,7 +1108,7 @@ serve(async (req) => {
                 to_addr: e.to_addr?.substring(0, 1000) || null,
                 cc_addr: e.cc_addr?.substring(0, 1000) || null,
                 bcc_addr: e.bcc_addr?.substring(0, 500) || null,
-                subject: e.subject.substring(0, 500),
+                subject: decodeMimeWord(e.subject).substring(0, 500),
                 preview: e.preview.substring(0, 500),
                 body_text: e.body_text || null,
                 body_html: e.body_html || null,
@@ -1060,9 +1134,9 @@ serve(async (req) => {
 
               const { error: insertError } = await supabase
                 .from("jarvis_emails_cache")
-                .upsert(rows, { 
+                .upsert(rows, {
                   onConflict: "user_id,account,message_id",
-                  ignoreDuplicates: true 
+                  ignoreDuplicates: true
                 });
 
               if (insertError) {
@@ -1266,7 +1340,7 @@ serve(async (req) => {
                 to_addr: e.to_addr?.substring(0, 1000) || null,
                 cc_addr: e.cc_addr?.substring(0, 1000) || null,
                 bcc_addr: e.bcc_addr?.substring(0, 500) || null,
-                subject: e.subject.substring(0, 500),
+                subject: decodeMimeWord(e.subject).substring(0, 500),
                 preview: e.preview.substring(0, 500),
                 body_text: e.body_text || null,
                 body_html: e.body_html || null,
@@ -1330,6 +1404,49 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ success: true, action: "reprocess", results, hasMore: globalHasMore }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ─── Action: backfill (fix stale rows with null fields) ──────────────────
+    if (action === "backfill") {
+      console.log("[email-sync] BACKFILL started — fixing stale rows with null received_at");
+
+      // Fix stale rows: set received_at from synced_at, email_type, importance, decode subjects
+      const { data: staleRows, error: staleErr } = await supabase
+        .from("jarvis_emails_cache")
+        .select("id, subject, synced_at, created_at, email_type, importance, received_at")
+        .is("received_at", null)
+        .limit(500);
+
+      if (staleErr) {
+        return new Response(
+          JSON.stringify({ error: `Backfill query error: ${staleErr.message}` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      let fixed = 0;
+      for (const row of staleRows || []) {
+        const decodedSubject = decodeMimeWord(row.subject || "");
+        const fallbackDate = row.synced_at || row.created_at || new Date().toISOString();
+
+        const { error: updateErr } = await supabase
+          .from("jarvis_emails_cache")
+          .update({
+            received_at: fallbackDate,
+            email_type: row.email_type || "metadata_only",
+            importance: row.importance || "normal",
+            subject: decodedSubject.substring(0, 500),
+          })
+          .eq("id", row.id);
+
+        if (!updateErr) fixed++;
+      }
+
+      console.log(`[email-sync] BACKFILL done: ${fixed}/${(staleRows || []).length} rows fixed`);
+      return new Response(
+        JSON.stringify({ success: true, action: "backfill", total: (staleRows || []).length, fixed }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

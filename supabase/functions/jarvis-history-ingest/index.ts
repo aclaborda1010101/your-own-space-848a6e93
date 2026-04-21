@@ -94,6 +94,14 @@ async function extractMeta(content: string): Promise<{ summary: string; topics: 
   }
 }
 
+function fastMeta(content: string, sourceType: string): { summary: string; topics: string[]; importance: number } {
+  return {
+    summary: content.slice(0, 220),
+    topics: sourceType === "whatsapp" ? ["whatsapp"] : [],
+    importance: 5,
+  };
+}
+
 // ─────────────────────────────────────────────────────────
 // Chunking — token-approx ≈ 4 chars
 // ─────────────────────────────────────────────────────────
@@ -257,6 +265,7 @@ async function ingestOne(params: {
   source_type: string;
   source_id: string;
   source_table: string;
+  fast_meta?: boolean;
 }): Promise<{ inserted: number; skipped: number; reason?: string; chunks?: number; debug?: Record<string, unknown> }> {
   const loaded = await loadSource(params.source_table, params.source_id, params.user_id);
   if (!loaded) return { inserted: 0, skipped: 1, reason: "loadSource_returned_null" };
@@ -288,7 +297,7 @@ async function ingestOne(params: {
     // Embed + extract meta in parallel
     const [embedding, meta] = await Promise.all([
       embed(chunkContent),
-      extractMeta(chunkContent),
+      params.fast_meta ? Promise.resolve(fastMeta(chunkContent, params.source_type)) : extractMeta(chunkContent),
     ]);
 
     // Importance boost by source
@@ -325,7 +334,7 @@ async function ingestOne(params: {
     }
 
     // Rate limit
-    await new Promise((r) => setTimeout(r, 200));
+    if (!params.fast_meta) await new Promise((r) => setTimeout(r, 200));
   }
 
   return {
@@ -340,7 +349,7 @@ async function ingestOne(params: {
 // ─────────────────────────────────────────────────────────
 // Backfill mode: pull rows of given source_type that have no chunks yet
 // ─────────────────────────────────────────────────────────
-async function backfill(source_type: string, user_id: string, batch_size: number, days: number) {
+async function backfill(source_type: string, user_id: string, batch_size: number, days: number, fast_meta = false) {
   const fromDate = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
   let candidates: Array<{ id: string; source_table: string }> = [];
 
@@ -351,7 +360,7 @@ async function backfill(source_type: string, user_id: string, batch_size: number
       .eq("user_id", user_id)
       .gte("message_date", fromDate)
       .order("message_date", { ascending: false })
-      .limit(batch_size * 3);
+      .limit(Math.min(batch_size * 20, 2000));
     candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "contact_messages" }));
   } else if (source_type === "email") {
     const { data } = await sb
@@ -394,17 +403,23 @@ async function backfill(source_type: string, user_id: string, batch_size: number
   const todo = candidates.filter((c) => !done.has(c.id)).slice(0, batch_size);
 
   let totalInserted = 0;
-  for (const c of todo) {
-    const { inserted } = await ingestOne({
+  let totalSkipped = 0;
+  const concurrency = source_type === "whatsapp" ? 8 : 3;
+  for (let i = 0; i < todo.length; i += concurrency) {
+    const results = await Promise.all(todo.slice(i, i + concurrency).map((c) => ingestOne({
       user_id,
       source_type,
       source_id: c.id,
       source_table: c.source_table,
-    });
-    totalInserted += inserted;
+      fast_meta,
+    })));
+    for (const r of results) {
+      totalInserted += r.inserted;
+      totalSkipped += r.skipped;
+    }
   }
 
-  return { processed: todo.length, inserted: totalInserted };
+  return { processed: todo.length, inserted: totalInserted, skipped: totalSkipped, candidates: candidates.length, already_done: done.size };
 }
 
 // ─────────────────────────────────────────────────────────
@@ -432,14 +447,14 @@ serve(async (req) => {
     }
 
     if (mode === "backfill") {
-      const { user_id, source_type, batch_size = 50, days = 90 } = body;
+      const { user_id, source_type, batch_size = 50, days = 90, fast_meta = source_type === "whatsapp" } = body;
       if (!user_id || !source_type) {
         return new Response(
           JSON.stringify({ error: "Missing user_id or source_type" }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      const r = await backfill(source_type, user_id, batch_size, days);
+      const r = await backfill(source_type, user_id, batch_size, days, Boolean(fast_meta));
       return new Response(JSON.stringify({ success: true, ...r }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

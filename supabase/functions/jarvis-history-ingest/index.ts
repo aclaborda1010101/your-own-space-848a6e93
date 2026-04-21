@@ -335,10 +335,10 @@ async function backfill(source_type: string, user_id: string, batch_size: number
   if (source_type === "whatsapp") {
     const { data } = await sb
       .from("contact_messages")
-      .select("id, contact_id, sent_at, people_contacts!inner(user_id)")
-      .eq("people_contacts.user_id", user_id)
-      .gte("sent_at", fromDate)
-      .order("sent_at", { ascending: false })
+      .select("id, message_date, user_id")
+      .eq("user_id", user_id)
+      .gte("message_date", fromDate)
+      .order("message_date", { ascending: false })
       .limit(batch_size * 3);
     candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "contact_messages" }));
   } else if (source_type === "email") {

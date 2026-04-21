@@ -253,15 +253,15 @@ async function ingestOne(params: {
   source_type: string;
   source_id: string;
   source_table: string;
-}): Promise<{ inserted: number; skipped: number }> {
+}): Promise<{ inserted: number; skipped: number; reason?: string; chunks?: number }> {
   const loaded = await loadSource(params.source_table, params.source_id, params.user_id);
-  if (!loaded) return { inserted: 0, skipped: 1 };
+  if (!loaded) return { inserted: 0, skipped: 1, reason: "loadSource_returned_null" };
 
   const userId = loaded.user_id || params.user_id;
-  if (!userId) return { inserted: 0, skipped: 1 };
+  if (!userId) return { inserted: 0, skipped: 1, reason: "no_user_id" };
 
   const chunks = chunkText(loaded.content);
-  if (chunks.length === 0) return { inserted: 0, skipped: 1 };
+  if (chunks.length === 0) return { inserted: 0, skipped: 1, reason: "empty_chunks" };
 
   let inserted = 0;
   let skipped = 0;

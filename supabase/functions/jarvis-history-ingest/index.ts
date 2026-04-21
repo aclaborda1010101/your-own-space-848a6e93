@@ -360,7 +360,7 @@ async function backfill(source_type: string, user_id: string, batch_size: number
       .eq("user_id", user_id)
       .gte("message_date", fromDate)
       .order("message_date", { ascending: false })
-      .limit(batch_size * 3);
+      .limit(Math.min(batch_size * 20, 2000));
     candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "contact_messages" }));
   } else if (source_type === "email") {
     const { data } = await sb
@@ -403,18 +403,23 @@ async function backfill(source_type: string, user_id: string, batch_size: number
   const todo = candidates.filter((c) => !done.has(c.id)).slice(0, batch_size);
 
   let totalInserted = 0;
-  for (const c of todo) {
-    const { inserted } = await ingestOne({
+  let totalSkipped = 0;
+  const concurrency = source_type === "whatsapp" ? 8 : 3;
+  for (let i = 0; i < todo.length; i += concurrency) {
+    const results = await Promise.all(todo.slice(i, i + concurrency).map((c) => ingestOne({
       user_id,
       source_type,
       source_id: c.id,
       source_table: c.source_table,
       fast_meta,
-    });
-    totalInserted += inserted;
+    })));
+    for (const r of results) {
+      totalInserted += r.inserted;
+      totalSkipped += r.skipped;
+    }
   }
 
-  return { processed: todo.length, inserted: totalInserted };
+  return { processed: todo.length, inserted: totalInserted, skipped: totalSkipped, candidates: candidates.length, already_done: done.size };
 }
 
 // ─────────────────────────────────────────────────────────

@@ -94,6 +94,14 @@ async function extractMeta(content: string): Promise<{ summary: string; topics: 
   }
 }
 
+function fastMeta(content: string, sourceType: string): { summary: string; topics: string[]; importance: number } {
+  return {
+    summary: content.slice(0, 220),
+    topics: sourceType === "whatsapp" ? ["whatsapp"] : [],
+    importance: 5,
+  };
+}
+
 // ─────────────────────────────────────────────────────────
 // Chunking — token-approx ≈ 4 chars
 // ─────────────────────────────────────────────────────────
@@ -257,6 +265,7 @@ async function ingestOne(params: {
   source_type: string;
   source_id: string;
   source_table: string;
+  fast_meta?: boolean;
 }): Promise<{ inserted: number; skipped: number; reason?: string; chunks?: number; debug?: Record<string, unknown> }> {
   const loaded = await loadSource(params.source_table, params.source_id, params.user_id);
   if (!loaded) return { inserted: 0, skipped: 1, reason: "loadSource_returned_null" };
@@ -288,7 +297,7 @@ async function ingestOne(params: {
     // Embed + extract meta in parallel
     const [embedding, meta] = await Promise.all([
       embed(chunkContent),
-      extractMeta(chunkContent),
+      params.fast_meta ? Promise.resolve(fastMeta(chunkContent, params.source_type)) : extractMeta(chunkContent),
     ]);
 
     // Importance boost by source

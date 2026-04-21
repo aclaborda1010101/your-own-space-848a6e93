@@ -322,7 +322,7 @@ async function ingestOne(params: {
     await new Promise((r) => setTimeout(r, 200));
   }
 
-  return { inserted, skipped };
+  return { inserted, skipped, chunks: total, reason: inserted === 0 ? "all_chunks_existed_or_failed" : undefined };
 }
 
 // ─────────────────────────────────────────────────────────

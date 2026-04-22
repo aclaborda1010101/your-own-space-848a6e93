@@ -196,7 +196,7 @@ export function AddToNetworkDialog({ open, onOpenChange, excludeIds, onAdded }: 
           name: cleanName,
           phone_numbers: [normalized],
           in_strategic_network: true,
-          category: "manual",
+          category: "pendiente",
         });
         if (insErr) throw insErr;
         toast.success(`${cleanName} creado y añadido a tu red`);

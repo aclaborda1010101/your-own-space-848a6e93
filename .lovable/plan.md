@@ -1,48 +1,47 @@
 
 
-## Fix de errores TypeScript en Edge Functions (parche directo)
+## Añadir contacto manual a la Red Estratégica (nombre + teléfono)
 
-Sin más vueltas. Cambios mínimos y locales para que el build pase. No toco lógica.
+### Qué cambia para ti
 
-### Archivos y cambios
+En `/red-estrategica`, al pulsar el botón **"Añadir"**, el diálogo actual seguirá mostrando la búsqueda de contactos existentes, pero arriba del todo aparecerá una nueva sección **"➕ Crear nuevo contacto"** plegable con dos campos:
 
-**1. `supabase/functions/contact-profiles-refresh-all/index.ts`**
+- **Nombre** (obligatorio)
+- **Teléfono** (obligatorio, con normalización a formato internacional)
 
-Línea 117 — forzar tipo del Set:
-```ts
-const uniqueUsers: string[] = Array.from(
-  new Set((usersWithNet || []).map((r: any) => r.user_id as string))
-);
-```
-Esto resuelve los 3 errores de `uid: unknown` (líneas 125, 128, 132) sin más cambios.
+Al pulsar "Crear y añadir", el contacto se inserta en `people_contacts` con `in_strategic_network: true` y aparece inmediatamente en tu red. Si ya existe un contacto con ese teléfono, en lugar de duplicar lo activa en la red estratégica.
 
-**2. `supabase/functions/detect-task-signals/index.ts`**
+### Cómo funciona por dentro
 
-- Cambiar firmas de `pickContactsToScan`, `scanContact`, `loadPriorDecisions` para aceptar `admin: any` (resuelve los TS2345 de `SupabaseClient<...> not assignable`).
-- En el bucle de `counts` (línea 118):
-  ```ts
-  const cid = m.contact_id as string;
-  if (!cid) continue;
-  counts.set(cid, (counts.get(cid) ?? 0) + 1);
-  ```
-- Línea 166: castear `message_date` y `content`:
-  ```ts
-  new Date(m.message_date as string)
-  ((m.content as string) || "").slice(...)
-  ```
-- Antes de `extractWithLLM(contact, ...)`: castear `contact` a `{ id: string; name: string; company: string | null }`.
+**Archivo único modificado: `src/components/contact/AddToNetworkDialog.tsx`**
 
-**3. Resto de funciones del log truncado**
+1. Añadir estado para el formulario de creación (`newName`, `newPhone`, `creating`, `formOpen`).
+2. Añadir validación con `zod` (regla del proyecto):
+   - `name`: trim, no vacío, máx 100 chars.
+   - `phone`: trim, regex `^\+?[0-9\s\-()]{7,20}$`, normalizado a solo dígitos con prefijo `+`.
+3. Función `createAndAdd()`:
+   - Normaliza el teléfono (quita espacios/guiones, garantiza `+`).
+   - Comprueba si ya existe un `people_contacts` del usuario donde `phone_numbers` contiene ese número (con `.contains('phone_numbers', [normalized])`).
+   - Si **existe** → `update { in_strategic_network: true }` sobre ese registro y mensaje "X ya estaba en tus contactos, lo añadimos a la red".
+   - Si **no existe** → `insert` nuevo con `{ user_id, name, phone_numbers: [normalized], in_strategic_network: true, category: 'manual' }`.
+   - Limpia campos, llama a `onAdded()` para que `RedEstrategica` recargue.
+4. UI: bloque colapsable arriba del buscador con los dos `Input` y un botón `Crear y añadir`. Estado de loading con `Loader2`. Errores con `toast.error`.
 
-Si tras redeploy aparecen más errores con el mismo patrón (`unknown` desde queries Supabase, `SupabaseClient not assignable`), aplico el mismo cast puntual (`as string` / `admin: any`) función por función. Sin refactor global.
+### Qué NO toco
 
-### Reglas
+- El schema de la tabla (`people_contacts` ya tiene `name`, `phone_numbers`, `in_strategic_network`, `user_id` — todo lo necesario).
+- Las RLS existentes (la inserción usa `user_id = auth.uid()`, ya cubierto por la política actual de la tabla).
+- El resto del flujo de búsqueda existente del diálogo.
+- `RedEstrategica.tsx` — ya pasa `onAdded={() => void load()}`, se reutiliza sin cambios.
 
-- Solo casts y anotaciones. Cero cambios de lógica, payloads, RLS, ni runtime.
-- Cambios reversibles línea a línea.
-- No desactivo strict mode global.
+### Edge cases manejados
 
-### Verificación
+- Teléfono duplicado del mismo usuario → activa en red en vez de duplicar.
+- Nombre vacío o solo espacios → bloqueado por zod, toast de error.
+- Teléfono mal formado → toast de error con mensaje claro.
+- Sin sesión → botón deshabilitado (igual que ya hace el dialog).
 
-Build limpio del proyecto. Las funciones críticas (`detect-task-signals`, `contact-profiles-refresh-all`, webhooks WhatsApp) siguen ejecutándose idénticas porque el código JS generado no cambia.
+### Resultado
+
+Un solo punto de entrada para añadir contactos a la red: existentes (búsqueda) o nuevos (formulario nombre+teléfono). Sin pasar por importación de WhatsApp ni de Mac Contacts.
 

@@ -437,6 +437,17 @@ export default function ContactDetail() {
                 variant="outline"
                 size="sm"
                 className="rounded-full"
+                onClick={linkHistory}
+                disabled={linkingHistory}
+                title="Busca mensajes de WhatsApp de este número y los vincula al contacto"
+              >
+                <MessageCircle className={`w-4 h-4 mr-2 ${linkingHistory ? "animate-pulse" : ""}`} />
+                {linkingHistory ? "Buscando…" : "Vincular WA"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full"
                 onClick={refreshProfile}
                 disabled={refreshingProfile}
                 title="Reanaliza el perfil con los últimos WhatsApp y emails"

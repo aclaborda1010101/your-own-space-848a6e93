@@ -209,7 +209,7 @@ serve(async (req) => {
           const slice = matchedIds.slice(i, i + 200);
           const { error: linkErr } = await admin
             .from("contact_messages")
-            .update({ contact_id: contactId })
+            .update({ contact_id: targetId })
             .in("id", slice);
           if (linkErr) throw linkErr;
           linked += slice.length;

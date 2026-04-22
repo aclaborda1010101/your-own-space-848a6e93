@@ -271,7 +271,7 @@ Genera diagnóstico y alternativas:
 
   if (insertError) {
     console.error("Error inserting proposal:", insertError);
-    return { error: "Failed to save proposal", details: insertError.message };
+    return { error: "Failed to save proposal" };
   }
 
   await supabase.from("learning_events").insert({

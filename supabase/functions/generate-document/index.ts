@@ -2291,7 +2291,7 @@ serve(async (req: Request) => {
 
     if (uploadError) {
       console.error("Upload error:", uploadError);
-      return new Response(JSON.stringify({ error: "Upload failed", details: uploadError.message }), {
+      return new Response(JSON.stringify({ error: "Upload failed" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

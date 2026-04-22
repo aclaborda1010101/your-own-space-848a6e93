@@ -163,12 +163,52 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { message, user_id, platform, conversation_history } = await req.json() as GatewayRequest;
+    // ── AUTH: require valid Authorization header ──────────────────────────
+    // Two valid modes:
+    //  (a) Service-role key (internal calls from whatsapp-webhook / telegram-webhook)
+    //      → trust the body-supplied user_id (already pre-resolved server-side).
+    //  (b) End-user JWT (web / mobile clients)
+    //      → ignore body user_id, force claims.sub.
+    const authHeader = req.headers.get("Authorization") || "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const token = authHeader.replace("Bearer ", "").trim();
+    const isServiceRole = token === supabaseKey;
+
+    let resolvedUserId: string | null = null;
+    if (!isServiceRole) {
+      const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+      });
+      const { data: userData, error: userErr } = await userClient.auth.getUser(token);
+      if (userErr || !userData?.user?.id) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized" }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      resolvedUserId = userData.user.id;
+    }
+
+    const body = await req.json() as GatewayRequest;
+    const { message, platform, conversation_history } = body;
+
+    // End-user JWT: force user_id to authenticated principal.
+    // Service-role: trust pre-resolved user_id from caller (webhook).
+    const user_id = isServiceRole ? body.user_id : resolvedUserId!;
 
     if (!message || !user_id) {
-      throw new Error("message and user_id are required");
+      return new Response(
+        JSON.stringify({ error: "message and user_id are required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     console.log(`[Gateway] ${platform} message from ${user_id}: ${message.substring(0, 80)}...`);

@@ -1062,6 +1062,62 @@ export type Database = {
         }
         Relationships: []
       }
+      bosco_activity_log: {
+        Row: {
+          child_age_months: number | null
+          completed: boolean | null
+          created_at: string | null
+          description: string
+          development_areas: string[] | null
+          energy_level: string | null
+          engagement_rating: number | null
+          id: string
+          instructions: string
+          notes: string | null
+          target_vocabulary: string[] | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          child_age_months?: number | null
+          completed?: boolean | null
+          created_at?: string | null
+          description: string
+          development_areas?: string[] | null
+          energy_level?: string | null
+          engagement_rating?: number | null
+          id?: string
+          instructions: string
+          notes?: string | null
+          target_vocabulary?: string[] | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          child_age_months?: number | null
+          completed?: boolean | null
+          created_at?: string | null
+          description?: string
+          development_areas?: string[] | null
+          energy_level?: string | null
+          engagement_rating?: number | null
+          id?: string
+          instructions?: string
+          notes?: string | null
+          target_vocabulary?: string[] | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bosco_activity_log_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bosco_interactions: {
         Row: {
           activity_category: string | null
@@ -1114,6 +1170,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "bosco_interactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bosco_milestones: {
+        Row: {
+          category: string
+          expected_age_months: number | null
+          first_observed_at: string | null
+          id: string
+          milestone_name: string
+          notes: string | null
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          category: string
+          expected_age_months?: number | null
+          first_observed_at?: string | null
+          id?: string
+          milestone_name: string
+          notes?: string | null
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string
+          expected_age_months?: number | null
+          first_observed_at?: string | null
+          id?: string
+          milestone_name?: string
+          notes?: string | null
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bosco_milestones_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "user_directory"
@@ -1220,9 +1317,14 @@ export type Database = {
         Row: {
           category: string | null
           created_at: string
+          ease_factor: number | null
           id: string
+          interval_days: number | null
           is_mastered: boolean | null
           last_practiced_at: string | null
+          mastery_level: string | null
+          next_review_at: string | null
+          times_correct: number | null
           times_practiced: number | null
           user_id: string
           word_en: string
@@ -1231,9 +1333,14 @@ export type Database = {
         Insert: {
           category?: string | null
           created_at?: string
+          ease_factor?: number | null
           id?: string
+          interval_days?: number | null
           is_mastered?: boolean | null
           last_practiced_at?: string | null
+          mastery_level?: string | null
+          next_review_at?: string | null
+          times_correct?: number | null
           times_practiced?: number | null
           user_id: string
           word_en: string
@@ -1242,9 +1349,14 @@ export type Database = {
         Update: {
           category?: string | null
           created_at?: string
+          ease_factor?: number | null
           id?: string
+          interval_days?: number | null
           is_mastered?: boolean | null
           last_practiced_at?: string | null
+          mastery_level?: string | null
+          next_review_at?: string | null
+          times_correct?: number | null
           times_practiced?: number | null
           user_id?: string
           word_en?: string
@@ -3692,6 +3804,50 @@ export type Database = {
         }
         Relationships: []
       }
+      english_kids_progress: {
+        Row: {
+          comprehension_level: string | null
+          created_at: string | null
+          id: string
+          last_activity_at: string | null
+          lessons_completed: number | null
+          unit_name: string
+          user_id: string
+          words_introduced: number | null
+          words_mastered: number | null
+        }
+        Insert: {
+          comprehension_level?: string | null
+          created_at?: string | null
+          id?: string
+          last_activity_at?: string | null
+          lessons_completed?: number | null
+          unit_name: string
+          user_id: string
+          words_introduced?: number | null
+          words_mastered?: number | null
+        }
+        Update: {
+          comprehension_level?: string | null
+          created_at?: string | null
+          id?: string
+          last_activity_at?: string | null
+          lessons_completed?: number | null
+          unit_name?: string
+          user_id?: string
+          words_introduced?: number | null
+          words_mastered?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "english_kids_progress_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       english_stats: {
         Row: {
           bosco_games_played: number | null
@@ -4438,36 +4594,48 @@ export type Database = {
       }
       jarvis_conversations: {
         Row: {
+          active_specialist: string | null
           agent: string | null
           content: string
           created_at: string | null
           id: string
           metadata: Json | null
+          platform: string | null
           role: string
           session_id: string
+          title: string | null
           tokens_used: number | null
+          updated_at: string | null
           user_id: string
         }
         Insert: {
+          active_specialist?: string | null
           agent?: string | null
           content: string
           created_at?: string | null
           id?: string
           metadata?: Json | null
+          platform?: string | null
           role: string
           session_id?: string
+          title?: string | null
           tokens_used?: number | null
+          updated_at?: string | null
           user_id: string
         }
         Update: {
+          active_specialist?: string | null
           agent?: string | null
           content?: string
           created_at?: string | null
           id?: string
           metadata?: Json | null
+          platform?: string | null
           role?: string
           session_id?: string
+          title?: string | null
           tokens_used?: number | null
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: [
@@ -4583,6 +4751,149 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "jarvis_emails_cache_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jarvis_entities: {
+        Row: {
+          aliases: string[] | null
+          canonical_name: string
+          contact_id: string | null
+          created_at: string | null
+          entity_type: string
+          id: string
+          last_mentioned_at: string | null
+          mention_count: number | null
+          metadata: Json | null
+          project_id: string | null
+          user_id: string
+        }
+        Insert: {
+          aliases?: string[] | null
+          canonical_name: string
+          contact_id?: string | null
+          created_at?: string | null
+          entity_type: string
+          id?: string
+          last_mentioned_at?: string | null
+          mention_count?: number | null
+          metadata?: Json | null
+          project_id?: string | null
+          user_id: string
+        }
+        Update: {
+          aliases?: string[] | null
+          canonical_name?: string
+          contact_id?: string | null
+          created_at?: string | null
+          entity_type?: string
+          id?: string
+          last_mentioned_at?: string | null
+          mention_count?: number | null
+          metadata?: Json | null
+          project_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jarvis_entities_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_directory"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jarvis_entity_mentions: {
+        Row: {
+          entity_id: string
+          id: string
+          mention_context: string | null
+          occurred_at: string | null
+          source_id: string | null
+          source_type: string
+        }
+        Insert: {
+          entity_id: string
+          id?: string
+          mention_context?: string | null
+          occurred_at?: string | null
+          source_id?: string | null
+          source_type: string
+        }
+        Update: {
+          entity_id?: string
+          id?: string
+          mention_context?: string | null
+          occurred_at?: string | null
+          source_id?: string | null
+          source_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jarvis_entity_mentions_entity_id_fkey"
+            columns: ["entity_id"]
+            isOneToOne: false
+            referencedRelation: "jarvis_entities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      jarvis_entity_relations: {
+        Row: {
+          created_at: string | null
+          entity_a_id: string
+          entity_b_id: string
+          evidence_count: number | null
+          id: string
+          last_seen_at: string | null
+          relation_type: string
+          strength: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          entity_a_id: string
+          entity_b_id: string
+          evidence_count?: number | null
+          id?: string
+          last_seen_at?: string | null
+          relation_type: string
+          strength?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          entity_a_id?: string
+          entity_b_id?: string
+          evidence_count?: number | null
+          id?: string
+          last_seen_at?: string | null
+          relation_type?: string
+          strength?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "jarvis_entity_relations_entity_a_id_fkey"
+            columns: ["entity_a_id"]
+            isOneToOne: false
+            referencedRelation: "jarvis_entities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jarvis_entity_relations_entity_b_id_fkey"
+            columns: ["entity_b_id"]
+            isOneToOne: false
+            referencedRelation: "jarvis_entities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "jarvis_entity_relations_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "user_directory"
@@ -4893,34 +5204,55 @@ export type Database = {
       }
       jarvis_messages: {
         Row: {
+          content: string | null
+          conversation_id: string | null
           created_at: string | null
           from_jarvis: string
           id: string
           message: string
+          meta: Json | null
           priority: string | null
           read: boolean | null
           read_at: string | null
+          role: string | null
+          specialist: string | null
           to_jarvis: string
+          tools_used: string[] | null
+          user_id: string | null
         }
         Insert: {
+          content?: string | null
+          conversation_id?: string | null
           created_at?: string | null
           from_jarvis: string
           id?: string
           message: string
+          meta?: Json | null
           priority?: string | null
           read?: boolean | null
           read_at?: string | null
+          role?: string | null
+          specialist?: string | null
           to_jarvis: string
+          tools_used?: string[] | null
+          user_id?: string | null
         }
         Update: {
+          content?: string | null
+          conversation_id?: string | null
           created_at?: string | null
           from_jarvis?: string
           id?: string
           message?: string
+          meta?: Json | null
           priority?: string | null
           read?: boolean | null
           read_at?: string | null
+          role?: string | null
+          specialist?: string | null
           to_jarvis?: string
+          tools_used?: string[] | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -10396,36 +10728,51 @@ export type Database = {
           content: string
           context: Json | null
           created_at: string | null
+          embedding: string | null
+          entities: Json | null
           expires_at: string | null
           id: string
           importance: number | null
+          is_shared: boolean | null
           last_used: string | null
           memory_type: string
+          source_specialist: string | null
           specialist: string
+          tags: string[] | null
           user_id: string | null
         }
         Insert: {
           content: string
           context?: Json | null
           created_at?: string | null
+          embedding?: string | null
+          entities?: Json | null
           expires_at?: string | null
           id?: string
           importance?: number | null
+          is_shared?: boolean | null
           last_used?: string | null
           memory_type: string
+          source_specialist?: string | null
           specialist: string
+          tags?: string[] | null
           user_id?: string | null
         }
         Update: {
           content?: string
           context?: Json | null
           created_at?: string | null
+          embedding?: string | null
+          entities?: Json | null
           expires_at?: string | null
           id?: string
           importance?: number | null
+          is_shared?: boolean | null
           last_used?: string | null
           memory_type?: string
+          source_specialist?: string | null
           specialist?: string
+          tags?: string[] | null
           user_id?: string | null
         }
         Relationships: [
@@ -11522,6 +11869,10 @@ export type Database = {
           id: string
         }[]
       }
+      get_entity_profile: {
+        Args: { p_entity_name: string; p_user_id: string }
+        Returns: Json
+      }
       get_history_coverage: {
         Args: { p_user_id: string }
         Returns: {
@@ -11778,6 +12129,26 @@ export type Database = {
           id: string
           rank: number
           source: string
+        }[]
+      }
+      search_memories_semantic: {
+        Args: {
+          p_limit?: number
+          p_query_embedding: string
+          p_specialist?: string
+          p_user_id: string
+        }
+        Returns: {
+          content: string
+          created_at: string
+          entities: Json
+          id: string
+          importance: number
+          memory_type: string
+          similarity: number
+          source_specialist: string
+          specialist: string
+          tags: string[]
         }[]
       }
       search_rag_chunks: {

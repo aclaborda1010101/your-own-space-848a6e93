@@ -121,7 +121,7 @@ export const CoachSessionDialog = ({ open, onOpenChange, checkInData, initialSes
   };
 
   const handleStartSession = async () => {
-    startSession(selectedSessionType, emotionalState);
+    startSession(selectedSessionType as "daily" | "intervention" | "weekly", emotionalState);
     setPhase("chat");
 
     // Send initial greeting with session type context

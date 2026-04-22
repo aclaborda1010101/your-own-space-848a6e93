@@ -114,7 +114,9 @@ serve(async (req) => {
         .or("is_favorite.eq.true,in_strategic_network.eq.true");
       if (uErr) throw uErr;
 
-      const uniqueUsers = Array.from(new Set((usersWithNet || []).map((r: any) => r.user_id)));
+      const uniqueUsers: string[] = Array.from(
+        new Set((usersWithNet || []).map((r: any) => r.user_id as string))
+      );
       console.log(`[refresh-all] SERVICE mode: ${uniqueUsers.length} users with active network`);
 
       let totalQueued = 0;

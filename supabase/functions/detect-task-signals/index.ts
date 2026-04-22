@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
 });
 
 async function pickContactsToScan(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   userId: string,
   opts: { onlyContact?: string; force: boolean; threshold: number },
 ): Promise<string[]> {
@@ -113,9 +113,10 @@ async function pickContactsToScan(
     .limit(5000);
 
   const counts = new Map<string, number>();
-  for (const m of msgs ?? []) {
-    if (!m.contact_id) continue;
-    counts.set(m.contact_id, (counts.get(m.contact_id) ?? 0) + 1);
+  for (const m of (msgs ?? []) as any[]) {
+    const cid = m.contact_id as string;
+    if (!cid) continue;
+    counts.set(cid, (counts.get(cid) ?? 0) + 1);
   }
   if (counts.size === 0) return [];
 
@@ -136,7 +137,7 @@ async function pickContactsToScan(
 }
 
 async function scanContact(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   userId: string,
   contactId: string,
 ): Promise<{ created: number; skipped: number }> {
@@ -159,11 +160,11 @@ async function scanContact(
 
   if (!messages || messages.length === 0) return { created: 0, skipped: 0 };
 
-  const orderedMessages = [...messages].reverse();
+  const orderedMessages = [...messages].reverse() as any[];
 
   const conversation = orderedMessages
-    .map((m) =>
-      `[${new Date(m.message_date).toISOString().slice(0, 16)}] ${m.direction === "outbound" ? "YO" : (m.sender || contact.name)} (${m.source}): ${(m.content || "").slice(0, 280)}`,
+    .map((m: any) =>
+      `[${new Date(m.message_date as string).toISOString().slice(0, 16)}] ${m.direction === "outbound" ? "YO" : (m.sender || (contact as any).name)} (${m.source}): ${((m.content as string) || "").slice(0, 280)}`,
     )
     .join("\n");
 
@@ -175,7 +176,7 @@ async function scanContact(
       .filter((s): s is string => !!s),
   );
 
-  const suggestions = await extractWithLLM(contact, conversation, priorDecisions);
+  const suggestions = await extractWithLLM(contact as { id: string; name: string; company: string | null }, conversation, priorDecisions);
 
   let created = 0;
   let skipped = 0;
@@ -202,7 +203,7 @@ async function scanContact(
     }
 
     const sourceIds = (s.source_message_ids ?? []).filter((id) =>
-      orderedMessages.some((m) => m.id === id),
+      orderedMessages.some((m: any) => m.id === id),
     );
     const { error } = await admin.from("suggestions").insert({
       user_id: userId,
@@ -212,8 +213,8 @@ async function scanContact(
         description: s.description ?? null,
         priority: s.priority ?? "medium",
         date: s.date ?? null,
-        contact_name: contact.name,
-        contact_company: contact.company,
+        contact_name: (contact as any).name,
+        contact_company: (contact as any).company,
       },
       status: "pending",
       source: orderedMessages[0]?.source ?? "whatsapp",
@@ -253,7 +254,7 @@ async function scanContact(
 }
 
 async function loadPriorDecisions(
-  admin: ReturnType<typeof createClient>,
+  admin: any,
   userId: string,
   contactId: string,
 ): Promise<PriorDecision[]> {

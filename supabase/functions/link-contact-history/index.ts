@@ -105,24 +105,64 @@ serve(async (req) => {
       });
     }
 
-    // ── 2) Set wa_id + ensure phone_numbers contains canonical & raw forms ──
-    const existingPhones = new Set<string>(
-      Array.isArray(contact.phone_numbers) ? contact.phone_numbers : [],
-    );
-    existingPhones.add(rawPhone);
-    existingPhones.add(waId);
-    existingPhones.add(`+${waId}`);
+    // ── 2) Resolve canonical contact (handle UNIQUE (user_id, wa_id) collisions) ──
+    // If another contact already owns this wa_id (e.g. webhook auto-created one),
+    // we MERGE: keep the older/auto contact as canonical, drop the manual stub.
+    let targetId = contactId;
+    let mergedFrom: string | null = null;
 
-    const updatePayload: Record<string, unknown> = {
-      phone_numbers: Array.from(existingPhones).filter(Boolean),
-    };
-    if (!contact.wa_id) updatePayload.wa_id = waId;
-
-    const { error: updErr } = await admin
+    const { data: collision } = await admin
       .from("people_contacts")
-      .update(updatePayload)
-      .eq("id", contactId);
-    if (updErr) throw updErr;
+      .select("id, name, created_at")
+      .eq("user_id", userId)
+      .eq("wa_id", waId)
+      .neq("id", contactId)
+      .maybeSingle();
+
+    if (collision) {
+      // The other contact owns wa_id. Make IT the target, and copy useful
+      // fields from the manual stub (name + in_strategic_network).
+      targetId = collision.id;
+      mergedFrom = contactId;
+
+      await admin
+        .from("people_contacts")
+        .update({
+          name: contact.name || collision.name,
+          in_strategic_network: true,
+          phone_numbers: Array.from(
+            new Set<string>([
+              ...(Array.isArray(contact.phone_numbers) ? contact.phone_numbers : []),
+              rawPhone,
+              waId,
+              `+${waId}`,
+            ]),
+          ).filter(Boolean),
+        })
+        .eq("id", collision.id);
+
+      // Delete the manual stub (it was just created seconds ago, no data loss)
+      await admin.from("people_contacts").delete().eq("id", contactId);
+    } else {
+      // No collision — safe to set wa_id on the manual contact
+      const existingPhones = new Set<string>(
+        Array.isArray(contact.phone_numbers) ? contact.phone_numbers : [],
+      );
+      existingPhones.add(rawPhone);
+      existingPhones.add(waId);
+      existingPhones.add(`+${waId}`);
+
+      const updatePayload: Record<string, unknown> = {
+        phone_numbers: Array.from(existingPhones).filter(Boolean),
+      };
+      if (!contact.wa_id) updatePayload.wa_id = waId;
+
+      const { error: updErr } = await admin
+        .from("people_contacts")
+        .update(updatePayload)
+        .eq("id", contactId);
+      if (updErr) throw updErr;
+    }
 
     // ── 3) Re-attach orphan messages (contact_id IS NULL) for this user ──
     // Match on chat_name / sender / external_id using normalised digits.

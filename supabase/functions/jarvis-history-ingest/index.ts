@@ -94,10 +94,23 @@ async function extractMeta(content: string): Promise<{ summary: string; topics: 
   }
 }
 
-function fastMeta(content: string, sourceType: string): { summary: string; topics: string[]; importance: number } {
+function fastMeta(content: string, sourceType: string, metadata?: Record<string, unknown>): { summary: string; topics: string[]; importance: number } {
+  const topics: string[] = [];
+  if (sourceType === "whatsapp") {
+    topics.push("whatsapp");
+    // Tag agustito messages distinctly for filtering
+    const src = String(metadata?.source || "");
+    if (src === "whatsapp_agustito") topics.push("agustito");
+  } else if (sourceType === "email") {
+    topics.push("email");
+  } else if (sourceType === "plaud") {
+    topics.push("plaud", "transcripcion");
+  } else if (sourceType === "transcription") {
+    topics.push("transcripcion");
+  }
   return {
     summary: content.slice(0, 220),
-    topics: sourceType === "whatsapp" ? ["whatsapp"] : [],
+    topics,
     importance: 5,
   };
 }
@@ -181,8 +194,9 @@ async function loadSource(
       }
       if (!resolvedUserId) { console.warn("[ingest] contact_messages no user_id resolvable id=", source_id); return null; }
       const dirArrow = msg.sender === "me" || msg.sender === "out" ? "→" : "←";
+      const sourceLabel = msg.source === "whatsapp_agustito" ? "WhatsApp Agustito" : "WhatsApp";
       return {
-        content: `[WhatsApp ${dirArrow} ${contactName}] ${msg.content}`,
+        content: `[${sourceLabel} ${dirArrow} ${contactName}] ${msg.content}`,
         occurred_at: msg.message_date || new Date().toISOString(),
         people: contactId ? [contactId] : [],
         metadata: { contact_name: contactName, source: msg.source, sender: msg.sender, external_id: msg.external_id },
@@ -297,7 +311,7 @@ async function ingestOne(params: {
     // Embed + extract meta in parallel
     const [embedding, meta] = await Promise.all([
       embed(chunkContent),
-      params.fast_meta ? Promise.resolve(fastMeta(chunkContent, params.source_type)) : extractMeta(chunkContent),
+      params.fast_meta ? Promise.resolve(fastMeta(chunkContent, params.source_type, loaded.metadata)) : extractMeta(chunkContent),
     ]);
 
     // Importance boost by source

@@ -91,6 +91,7 @@ export default function ContactDetail() {
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [refreshingProfile, setRefreshingProfile] = useState(false);
+  const [linkingHistory, setLinkingHistory] = useState(false);
   const [activeScope, setActiveScope] = useState<"profesional" | "personal" | "familiar">("profesional");
   const [linkedTasks, setLinkedTasks] = useState<Array<{
     id: string;
@@ -128,6 +129,42 @@ export default function ContactDetail() {
       await refreshHeadlines();
     } catch (e) {
       toast.error("No se pudo guardar", { id: tId, description: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  async function linkHistory() {
+    if (!contactId || !user || linkingHistory) return;
+    const phone =
+      contact?.wa_id ||
+      (contact?.phone_numbers && contact.phone_numbers[0]) ||
+      "";
+    if (!phone) {
+      toast.error("Este contacto no tiene teléfono para buscar historial");
+      return;
+    }
+    setLinkingHistory(true);
+    const tId = toast.loading("Buscando historial WhatsApp…");
+    try {
+      const { data, error } = await supabase.functions.invoke("link-contact-history", {
+        body: { contact_id: contactId, phone },
+      });
+      if (error) throw error;
+      const linked = (data as any)?.linked_messages ?? 0;
+      if (linked > 0) {
+        toast.success(`${linked} mensajes vinculados`, {
+          id: tId,
+          description: "Generando perfil con el historial…",
+        });
+      } else {
+        toast.info("Sin historial WhatsApp para este número", { id: tId });
+      }
+    } catch (e) {
+      toast.error("No se pudo vincular el historial", {
+        id: tId,
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setLinkingHistory(false);
     }
   }
 
@@ -395,6 +432,17 @@ export default function ContactDetail() {
                 onClick={() => navigate(`/tasks?contact=${contact.id}`)}
               >
                 <Bell className="w-4 h-4 mr-2" /> Recordatorio
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={linkHistory}
+                disabled={linkingHistory}
+                title="Busca mensajes de WhatsApp de este número y los vincula al contacto"
+              >
+                <MessageCircle className={`w-4 h-4 mr-2 ${linkingHistory ? "animate-pulse" : ""}`} />
+                {linkingHistory ? "Buscando…" : "Vincular WA"}
               </Button>
               <Button
                 variant="outline"

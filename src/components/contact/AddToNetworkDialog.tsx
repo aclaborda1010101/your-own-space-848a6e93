@@ -191,16 +191,49 @@ export function AddToNetworkDialog({ open, onOpenChange, excludeIds, onAdded }: 
         }
       } else {
         // 2) Insertar nuevo
-        const { error: insErr } = await supabase.from("people_contacts").insert({
-          user_id: user.id,
-          name: cleanName,
-          phone_numbers: [normalized],
-          in_strategic_network: true,
-          category: "pendiente",
-        });
+        const { data: inserted, error: insErr } = await supabase
+          .from("people_contacts")
+          .insert({
+            user_id: user.id,
+            name: cleanName,
+            phone_numbers: [normalized],
+            in_strategic_network: true,
+            category: "pendiente",
+          })
+          .select("id")
+          .single();
         if (insErr) throw insErr;
-        toast.success(`${cleanName} creado y añadido a tu red`);
-        onAdded();
+
+        toast.success(`${cleanName} creado. Buscando historial WhatsApp…`);
+
+        // 3) Vincular mensajes históricos y disparar análisis (fire-and-forget UI)
+        if (inserted?.id) {
+          supabase.functions
+            .invoke("link-contact-history", {
+              body: { contact_id: inserted.id, phone: normalized },
+            })
+            .then(({ data, error }) => {
+              if (error) {
+                toast.error("No se pudo vincular el historial", {
+                  description: error.message,
+                });
+                return;
+              }
+              const linked = (data as any)?.linked_messages ?? 0;
+              if (linked > 0) {
+                toast.success(`${linked} mensajes vinculados a ${cleanName}`, {
+                  description: "Generando perfil… aparecerá en unos minutos.",
+                });
+              } else {
+                toast.info(`Sin historial WhatsApp para ${cleanName}`, {
+                  description: "El contacto está creado y listo para recibir mensajes.",
+                });
+              }
+              onAdded();
+            });
+        } else {
+          onAdded();
+        }
       }
 
       // Reset y cerrar formulario

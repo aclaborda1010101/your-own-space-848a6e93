@@ -105,24 +105,64 @@ serve(async (req) => {
       });
     }
 
-    // ── 2) Set wa_id + ensure phone_numbers contains canonical & raw forms ──
-    const existingPhones = new Set<string>(
-      Array.isArray(contact.phone_numbers) ? contact.phone_numbers : [],
-    );
-    existingPhones.add(rawPhone);
-    existingPhones.add(waId);
-    existingPhones.add(`+${waId}`);
+    // ── 2) Resolve canonical contact (handle UNIQUE (user_id, wa_id) collisions) ──
+    // If another contact already owns this wa_id (e.g. webhook auto-created one),
+    // we MERGE: keep the older/auto contact as canonical, drop the manual stub.
+    let targetId = contactId;
+    let mergedFrom: string | null = null;
 
-    const updatePayload: Record<string, unknown> = {
-      phone_numbers: Array.from(existingPhones).filter(Boolean),
-    };
-    if (!contact.wa_id) updatePayload.wa_id = waId;
-
-    const { error: updErr } = await admin
+    const { data: collision } = await admin
       .from("people_contacts")
-      .update(updatePayload)
-      .eq("id", contactId);
-    if (updErr) throw updErr;
+      .select("id, name, created_at")
+      .eq("user_id", userId)
+      .eq("wa_id", waId)
+      .neq("id", contactId)
+      .maybeSingle();
+
+    if (collision) {
+      // The other contact owns wa_id. Make IT the target, and copy useful
+      // fields from the manual stub (name + in_strategic_network).
+      targetId = collision.id;
+      mergedFrom = contactId;
+
+      await admin
+        .from("people_contacts")
+        .update({
+          name: contact.name || collision.name,
+          in_strategic_network: true,
+          phone_numbers: Array.from(
+            new Set<string>([
+              ...(Array.isArray(contact.phone_numbers) ? contact.phone_numbers : []),
+              rawPhone,
+              waId,
+              `+${waId}`,
+            ]),
+          ).filter(Boolean),
+        })
+        .eq("id", collision.id);
+
+      // Delete the manual stub (it was just created seconds ago, no data loss)
+      await admin.from("people_contacts").delete().eq("id", contactId);
+    } else {
+      // No collision — safe to set wa_id on the manual contact
+      const existingPhones = new Set<string>(
+        Array.isArray(contact.phone_numbers) ? contact.phone_numbers : [],
+      );
+      existingPhones.add(rawPhone);
+      existingPhones.add(waId);
+      existingPhones.add(`+${waId}`);
+
+      const updatePayload: Record<string, unknown> = {
+        phone_numbers: Array.from(existingPhones).filter(Boolean),
+      };
+      if (!contact.wa_id) updatePayload.wa_id = waId;
+
+      const { error: updErr } = await admin
+        .from("people_contacts")
+        .update(updatePayload)
+        .eq("id", contactId);
+      if (updErr) throw updErr;
+    }
 
     // ── 3) Re-attach orphan messages (contact_id IS NULL) for this user ──
     // Match on chat_name / sender / external_id using normalised digits.
@@ -169,7 +209,7 @@ serve(async (req) => {
           const slice = matchedIds.slice(i, i + 200);
           const { error: linkErr } = await admin
             .from("contact_messages")
-            .update({ contact_id: contactId })
+            .update({ contact_id: targetId })
             .in("id", slice);
           if (linkErr) throw linkErr;
           linked += slice.length;
@@ -187,7 +227,7 @@ serve(async (req) => {
       const { count } = await admin
         .from("contact_messages")
         .select("id", { count: "exact", head: true })
-        .eq("contact_id", contactId)
+        .eq("contact_id", targetId)
         .eq("user_id", userId);
 
       await admin
@@ -196,10 +236,9 @@ serve(async (req) => {
           wa_message_count: count ?? linked,
           last_contact: new Date().toISOString(),
         })
-        .eq("id", contactId);
+        .eq("id", targetId);
     }
 
-    // Trigger contact-analysis async (don't await — let it run in background)
     const analysisPromise = fetch(`${supabaseUrl}/functions/v1/contact-analysis`, {
       method: "POST",
       headers: {
@@ -207,20 +246,18 @@ serve(async (req) => {
         Authorization: `Bearer ${serviceKey}`,
       },
       body: JSON.stringify({
-        contact_id: contactId,
+        contact_id: targetId,
         user_id: userId,
         scopes: ["profesional", "personal", "familiar"],
         include_historical: true,
       }),
     }).catch((e) => console.error("[link-contact-history] analysis dispatch failed:", e));
 
-    // EdgeRuntime.waitUntil keeps the request alive for the background job
-    // without blocking the HTTP response
     try {
       // @ts-ignore — EdgeRuntime is a Deno Deploy global
       EdgeRuntime.waitUntil(analysisPromise);
     } catch {
-      // Local/dev fallback: not awaiting is fine
+      // ignore — dev fallback
     }
 
     return new Response(
@@ -229,14 +266,22 @@ serve(async (req) => {
         scanned,
         linked_messages: linked,
         wa_id: waId,
+        target_contact_id: targetId,
+        merged_from: mergedFrom,
         profile_refresh: "queued",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-  } catch (e) {
-    console.error("[link-contact-history] error:", e);
+  } catch (e: any) {
+    const message =
+      e?.message ||
+      e?.error_description ||
+      e?.hint ||
+      (typeof e === "string" ? e : JSON.stringify(e));
+    const code = e?.code || e?.status || "RUNTIME_ERROR";
+    console.error("[link-contact-history] error:", { code, message, raw: e });
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
+      JSON.stringify({ ok: false, error: message, code }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

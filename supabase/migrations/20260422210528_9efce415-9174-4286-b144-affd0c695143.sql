@@ -1,0 +1,1 @@
+DELETE FROM public.people_contacts WHERE id='c795edfa-6a0d-4ca7-b3bc-231d0cce889b' AND user_id='f103da90-81d4-43a2-ad34-b33db8b9c369' AND wa_id IS NULL AND wa_message_count=0;

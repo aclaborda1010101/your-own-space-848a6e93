@@ -227,7 +227,7 @@ serve(async (req) => {
       const { count } = await admin
         .from("contact_messages")
         .select("id", { count: "exact", head: true })
-        .eq("contact_id", contactId)
+        .eq("contact_id", targetId)
         .eq("user_id", userId);
 
       await admin
@@ -236,10 +236,9 @@ serve(async (req) => {
           wa_message_count: count ?? linked,
           last_contact: new Date().toISOString(),
         })
-        .eq("id", contactId);
+        .eq("id", targetId);
     }
 
-    // Trigger contact-analysis async (don't await — let it run in background)
     const analysisPromise = fetch(`${supabaseUrl}/functions/v1/contact-analysis`, {
       method: "POST",
       headers: {
@@ -247,20 +246,18 @@ serve(async (req) => {
         Authorization: `Bearer ${serviceKey}`,
       },
       body: JSON.stringify({
-        contact_id: contactId,
+        contact_id: targetId,
         user_id: userId,
         scopes: ["profesional", "personal", "familiar"],
         include_historical: true,
       }),
     }).catch((e) => console.error("[link-contact-history] analysis dispatch failed:", e));
 
-    // EdgeRuntime.waitUntil keeps the request alive for the background job
-    // without blocking the HTTP response
     try {
       // @ts-ignore — EdgeRuntime is a Deno Deploy global
       EdgeRuntime.waitUntil(analysisPromise);
     } catch {
-      // Local/dev fallback: not awaiting is fine
+      // ignore — dev fallback
     }
 
     return new Response(
@@ -269,14 +266,22 @@ serve(async (req) => {
         scanned,
         linked_messages: linked,
         wa_id: waId,
+        target_contact_id: targetId,
+        merged_from: mergedFrom,
         profile_refresh: "queued",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-  } catch (e) {
-    console.error("[link-contact-history] error:", e);
+  } catch (e: any) {
+    const message =
+      e?.message ||
+      e?.error_description ||
+      e?.hint ||
+      (typeof e === "string" ? e : JSON.stringify(e));
+    const code = e?.code || e?.status || "RUNTIME_ERROR";
+    console.error("[link-contact-history] error:", { code, message, raw: e });
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : String(e) }),
+      JSON.stringify({ ok: false, error: message, code }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

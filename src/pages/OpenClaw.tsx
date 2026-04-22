@@ -513,18 +513,18 @@ function ApprovalsPanel() {
     try {
       const sb = await getSb();
       const { data, error } = await sb
-        .from('cloudbot_tasks_log')
+        .from('openclaw_tasks')
         .select('*')
         .eq('status', 'pending_approval')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      setApprovals((data || []).map(row => ({
-        id: row.task_id,
+      setApprovals((data || []).map((row: any) => ({
+        id: row.id,
         title: row.title,
-        command: (row.full_logs as any)?.command,
-        agent: (row.full_logs as any)?.agent || row.assigned_to,
+        command: row.description,
+        agent: row.source,
         createdAt: row.created_at,
-        rowId: row.task_id,
+        rowId: row.id,
       })));
     } catch { setApprovals([]); }
     finally { setLoading(false); }
@@ -550,16 +550,16 @@ function ApprovalsPanel() {
 
       if (!done) {
         // Relay vía Supabase: escribir decisión, bridge la ejecuta en 10s
-        await sb.from('cloudbot_tasks_log').update({
-          status: 'queued',
-          full_logs: { approvalId, decision, relayedAt: new Date().toISOString() },
-        }).eq('task_id', taskId);
+        await sb.from('openclaw_tasks').update({
+          status: 'pending',
+          result: JSON.stringify({ approvalId, decision, relayedAt: new Date().toISOString() }),
+        }).eq('id', taskId);
         toast({ title: decision === 'deny' ? 'Rechazado (relay)' : 'Aprobado (relay)', description: 'El bridge ejecutará la decisión en ≤10s' });
       } else {
         toast({ title: decision === 'deny' ? 'Rechazado' : 'Aprobado', description: `Ejecutado directamente` });
       }
       // Quitar de la lista
-      await sb.from('cloudbot_tasks_log').update({ status: done ? 'completed' : 'queued' }).eq('task_id', taskId);
+      await sb.from('openclaw_tasks').update({ status: done ? 'done' : 'pending' }).eq('id', taskId);
       setApprovals(prev => prev.filter(a => a.id !== taskId));
     } catch (e: any) {
       toast({ title: 'Error', description: e.message, variant: 'destructive' });
@@ -808,13 +808,11 @@ const OpenClaw = () => {
     if (selectedTask?.id === id) setSelectedTask(null);
     toast({ title: "Tarea eliminada", description: `Eliminando de Supabase…` });
 
-    // 2. Eliminar de cloudbot_tasks_log en Supabase
+    // 2. Eliminar de openclaw_tasks en Supabase
     try {
       const { createClient } = await import("@supabase/supabase-js");
       const sb = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
-      // Intentar en cloudbot_tasks_log primero
-      const { error: e1 } = await sb.from('cloudbot_tasks_log').delete().eq('task_id', id);
-      // También intentar en tasks de la app
+      const { error: e1 } = await sb.from('openclaw_tasks').delete().eq('id', id);
       if (e1) await sb.from('tasks').update({ completed: true, completed_at: new Date().toISOString() }).eq('id', id);
       toast({ title: "Tarea eliminada", description: `ID ${id.slice(0,8)} eliminada correctamente` });
     } catch (e: any) {

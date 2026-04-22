@@ -202,6 +202,116 @@ IMPORTANTE:
       });
     }
 
+    // ==================== DAILY CHECK ====================
+    if (action === 'daily_check') {
+      const { meal_history } = await req.json().catch(() => ({}));
+      const additionalContext = `Eres un nutricionista proactivo. El usuario no ha registrado comidas hoy (o tiene registros incompletos).
+Tu trabajo es preguntar amablemente qué ha comido hoy y motivar al registro.
+
+Historial de comidas reciente: ${JSON.stringify(meal_history || [])}
+Preferencias: ${JSON.stringify(preferences || {})}
+
+Genera un mensaje corto y amable preguntando por las comidas del día.
+Si tiene registros parciales, pregunta por las que faltan.
+Máximo 2-3 frases. Tono cercano, no condescendiente.`;
+
+      const response = await chat([
+        { role: "system", content: additionalContext },
+        { role: "user", content: "Genera el check-in de comidas del día." }
+      ], { model: "gemini-flash" });
+
+      return new Response(JSON.stringify({ success: true, message: response }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ==================== WEEKLY REVIEW ====================
+    if (action === 'weekly_review') {
+      const { meal_history, whoop_data } = await req.json().catch(() => ({}));
+      const systemPrompt = `Eres un nutricionista que analiza la semana del usuario.
+
+Historial de comidas de 7 días: ${JSON.stringify(meal_history || [])}
+Datos WHOOP de la semana: ${JSON.stringify(whoop_data || [])}
+Preferencias: ${JSON.stringify(preferences || {})}
+
+Genera un análisis semanal en JSON:
+{
+  "summary": "resumen breve de la semana",
+  "days_logged": número de días con registro,
+  "avg_calories": calorías promedio estimadas,
+  "highlights": ["aspecto positivo 1", "aspecto positivo 2"],
+  "improvements": ["sugerencia de mejora 1", "sugerencia de mejora 2"],
+  "recovery_correlation": "correlación con recovery WHOOP si hay datos",
+  "next_week_tip": "consejo para la próxima semana"
+}`;
+
+      const response = await chat([
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "Genera la revisión semanal de nutrición." }
+      ], { model: "gemini-flash", responseFormat: "json" });
+
+      return new Response(JSON.stringify({ success: true, review: JSON.parse(response) }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ==================== RECOVERY MEALS ====================
+    if (action === 'recovery_meals') {
+      const { recovery_score, hrv, strain } = await req.json().catch(() => ({}));
+      const systemPrompt = `Eres un nutricionista deportivo. Sugiere comidas basadas en datos de recovery.
+
+Recovery: ${recovery_score || '?'}%
+HRV: ${hrv || '?'}ms
+Strain: ${strain || '?'}
+Preferencias: ${JSON.stringify(preferences || {})}
+
+Genera sugerencias en JSON:
+{
+  "recovery_status": "bajo|medio|alto",
+  "nutrition_priority": "qué priorizar hoy (hidratación, proteínas, antiinflamatorios, etc.)",
+  "breakfast": {"name": "...", "why": "por qué esta opción"},
+  "lunch": {"name": "...", "why": "..."},
+  "dinner": {"name": "...", "why": "..."},
+  "snacks": ["snack 1", "snack 2"],
+  "hydration_tip": "consejo de hidratación"
+}`;
+
+      const response = await chat([
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "Sugiere comidas basadas en mi recovery." }
+      ], { model: "gemini-flash", responseFormat: "json" });
+
+      return new Response(JSON.stringify({ success: true, meals: JSON.parse(response) }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // ==================== ACCOUNTABILITY ====================
+    if (action === 'accountability') {
+      const { days_without_log } = await req.json().catch(() => ({}));
+      const days = days_without_log || 0;
+      let tone = "amable";
+      if (days >= 3) tone = "firme pero motivador";
+      if (days >= 7) tone = "directo y urgente";
+
+      const systemPrompt = `Genera un mensaje de accountability nutricional. Tono: ${tone}.
+Días sin registro: ${days}.
+${days === 0 ? "El usuario ha registrado hoy. Felicítalo brevemente." :
+  days === 1 ? "Un día sin registro. Recordatorio suave." :
+  days <= 3 ? "Varios días sin registro. Motiva a retomar." :
+  "Muchos días sin registro. Mensaje firme pero empático."}
+Máximo 2 frases. En español.`;
+
+      const response = await chat([
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "Genera el mensaje de accountability." }
+      ], { model: "gemini-flash" });
+
+      return new Response(JSON.stringify({ success: true, message: response }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     return new Response(JSON.stringify({ error: 'Invalid action' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

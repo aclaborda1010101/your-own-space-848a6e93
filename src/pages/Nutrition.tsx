@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNutrition } from "@/hooks/useNutrition";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,9 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { 
-  Utensils, 
-  Send, 
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Utensils,
+  Send,
   Loader2,
   Plus,
   X,
@@ -21,7 +22,12 @@ import {
   Wheat,
   Droplets,
   Trash2,
-  ChefHat
+  ChefHat,
+  Coffee,
+  Sun,
+  Moon,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { RecipeDialog } from "@/components/nutrition/RecipeDialog";
 import { LearnedPreferencesCard } from "@/components/nutrition/LearnedPreferencesCard";
@@ -54,15 +60,68 @@ interface MealOption {
   prep_time: string;
 }
 
+interface MealEntry {
+  type: "breakfast" | "lunch" | "dinner";
+  name: string;
+  calories?: number;
+  time: string;
+}
+
+const MEAL_SLOTS = [
+  { type: "breakfast" as const, label: "Desayuno", icon: Coffee, timeRange: "7:00 - 10:00" },
+  { type: "lunch" as const, label: "Almuerzo", icon: Sun, timeRange: "12:00 - 15:00" },
+  { type: "dinner" as const, label: "Cena", icon: Moon, timeRange: "19:00 - 22:00" },
+];
+
 const Nutrition = () => {
-  
+
   const { preferences, loading, saving, savePreferences, chatMessages, chatLoading, sendChatMessage, clearChat } = useNutrition();
-  
+
   const [chatInput, setChatInput] = useState('');
   const [newRestriction, setNewRestriction] = useState('');
   const [newAllergy, setNewAllergy] = useState('');
   const [selectedMeal, setSelectedMeal] = useState<MealOption | null>(null);
   const [recipeDialogOpen, setRecipeDialogOpen] = useState(false);
+
+  // Daily meal log state
+  const [todayMeals, setTodayMeals] = useState<MealEntry[]>([]);
+  const [quickLogOpen, setQuickLogOpen] = useState(false);
+  const [quickLogType, setQuickLogType] = useState<"breakfast" | "lunch" | "dinner">("breakfast");
+  const [quickLogName, setQuickLogName] = useState("");
+  const [quickLogCalories, setQuickLogCalories] = useState("");
+  const [showNudge, setShowNudge] = useState(false);
+
+  // Check if accountability nudge should show
+  useEffect(() => {
+    const now = new Date();
+    const hour = now.getHours();
+    if (hour >= 14 && todayMeals.length === 0) {
+      setShowNudge(true);
+    } else {
+      setShowNudge(false);
+    }
+  }, [todayMeals]);
+
+  const getMealForType = (type: string) => todayMeals.find(m => m.type === type);
+
+  const handleQuickLog = (type: "breakfast" | "lunch" | "dinner") => {
+    setQuickLogType(type);
+    setQuickLogName("");
+    setQuickLogCalories("");
+    setQuickLogOpen(true);
+  };
+
+  const submitQuickLog = () => {
+    if (!quickLogName.trim()) return;
+    const entry: MealEntry = {
+      type: quickLogType,
+      name: quickLogName.trim(),
+      calories: quickLogCalories ? parseInt(quickLogCalories) : undefined,
+      time: new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }),
+    };
+    setTodayMeals(prev => [...prev.filter(m => m.type !== quickLogType), entry]);
+    setQuickLogOpen(false);
+  };
 
   const handleSendMessage = async () => {
     if (!chatInput.trim() || chatLoading) return;
@@ -126,6 +185,80 @@ const Nutrition = () => {
               </h1>
               <p className="text-muted-foreground">Configura tu dieta y chatea con tu asistente nutricional</p>
             </div>
+
+            {/* Accountability Nudge */}
+            {showNudge && (
+              <Card className="mb-6 border-warning/30 bg-warning/5">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-warning/20 flex items-center justify-center shrink-0">
+                      <AlertTriangle className="w-5 h-5 text-warning" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium">No has registrado comidas hoy</p>
+                      <p className="text-sm text-muted-foreground">
+                        Son las {new Date().getHours()}:00 y aún no hay registros. Registra lo que has comido para mantener el seguimiento.
+                      </p>
+                    </div>
+                    <Button size="sm" onClick={() => handleQuickLog("lunch")}>
+                      Registrar ahora
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Daily Meals Card */}
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Utensils className="w-5 h-5 text-success" />
+                  Comidas de hoy
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-4">
+                  {MEAL_SLOTS.map(slot => {
+                    const meal = getMealForType(slot.type);
+                    const Icon = slot.icon;
+                    return (
+                      <div
+                        key={slot.type}
+                        className={cn(
+                          "p-4 rounded-lg border text-center transition-all cursor-pointer hover:bg-muted/50",
+                          meal ? "border-success/30 bg-success/5" : "border-dashed"
+                        )}
+                        onClick={() => !meal && handleQuickLog(slot.type)}
+                      >
+                        <div className="flex items-center justify-center gap-2 mb-2">
+                          <Icon className={cn("w-5 h-5", meal ? "text-success" : "text-muted-foreground")} />
+                          {meal && <CheckCircle2 className="w-4 h-4 text-success" />}
+                        </div>
+                        <p className="font-medium text-sm">{slot.label}</p>
+                        {meal ? (
+                          <>
+                            <p className="text-xs text-muted-foreground mt-1">{meal.name}</p>
+                            {meal.calories && (
+                              <Badge variant="secondary" className="mt-1 text-xs">{meal.calories} kcal</Badge>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-xs text-muted-foreground mt-1">{slot.timeRange}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    {todayMeals.length}/3 comidas registradas
+                    {todayMeals.length > 0 && todayMeals.some(m => m.calories) && (
+                      <> · ~{todayMeals.reduce((sum, m) => sum + (m.calories || 0), 0)} kcal total</>
+                    )}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Análisis nutricional contextual LLM (cruzado con Whoop + tareas) */}
             <div className="mb-6">
@@ -415,6 +548,41 @@ const Nutrition = () => {
           </div>
         </main>
 
+
+      {/* Quick Log Dialog */}
+      <Dialog open={quickLogOpen} onOpenChange={setQuickLogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5 text-primary" />
+              Registrar {quickLogType === "breakfast" ? "Desayuno" : quickLogType === "lunch" ? "Almuerzo" : "Cena"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">¿Qué comiste?</label>
+              <Input
+                value={quickLogName}
+                onChange={(e) => setQuickLogName(e.target.value)}
+                placeholder="Ej: Ensalada de pollo con arroz"
+                onKeyDown={(e) => e.key === "Enter" && submitQuickLog()}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Calorías estimadas (opcional)</label>
+              <Input
+                type="number"
+                value={quickLogCalories}
+                onChange={(e) => setQuickLogCalories(e.target.value)}
+                placeholder="Ej: 450"
+              />
+            </div>
+            <Button onClick={submitQuickLog} disabled={!quickLogName.trim()} className="w-full">
+              Registrar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Recipe Dialog */}
       <RecipeDialog

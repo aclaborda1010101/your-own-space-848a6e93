@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { MessageSquare, Send, Loader2, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
 interface RoleplayActivityProps {
@@ -24,11 +25,23 @@ interface Message {
   content: string;
 }
 
+interface ScenarioData {
+  title: string;
+  description_es: string;
+  your_role: string;
+  user_role: string;
+  opening_line: string;
+  useful_phrases: { phrase: string; use_es: string }[];
+  vocabulary: { word: string; meaning_es: string }[];
+}
+
 export function RoleplayActivity({ open, onOpenChange, onComplete, situation }: RoleplayActivityProps) {
+  const { session } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [started, setStarted] = useState(false);
+  const [scenario, setScenario] = useState<ScenarioData | null>(null);
 
   const defaultSituation = situation || {
     name: "Reunión de colegio",
@@ -41,6 +54,7 @@ export function RoleplayActivity({ open, onOpenChange, onComplete, situation }: 
       setMessages([]);
       setInput("");
       setStarted(false);
+      setScenario(null);
     }
   }, [open]);
 
@@ -49,6 +63,25 @@ export function RoleplayActivity({ open, onOpenChange, onComplete, situation }: 
     setStarted(true);
 
     try {
+      // Generate AI scenario
+      if (session) {
+        const { data, error } = await supabase.functions.invoke("jarvis-english-pro", {
+          body: { action: "generate_roleplay_scenario", userLevel: "B2", topic: defaultSituation.description },
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+
+        if (!error && data?.scenario) {
+          setScenario(data.scenario);
+          setMessages([{
+            role: "assistant",
+            content: data.scenario.opening_line || `Let's practice! Imagine you're at ${defaultSituation.name}. Start the conversation in English!`
+          }]);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Fallback to jarvis-core
       const { data, error } = await supabase.functions.invoke("jarvis-core", {
         body: {
           type: "roleplay",
@@ -138,14 +171,17 @@ export function RoleplayActivity({ open, onOpenChange, onComplete, situation }: 
               <div>
                 <h3 className="font-medium text-lg">Práctica de conversación</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Practica una conversación real en inglés sobre: {defaultSituation.description}
+                  {scenario?.description_es || `Practica una conversación real en inglés sobre: ${defaultSituation.description}`}
                 </p>
+                {scenario?.user_role && (
+                  <p className="text-xs text-muted-foreground mt-1">Tu rol: {scenario.user_role}</p>
+                )}
               </div>
               <Button onClick={startRoleplay} disabled={loading}>
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Preparando...
+                    Generando escenario...
                   </>
                 ) : (
                   "Empezar conversación"
@@ -181,6 +217,15 @@ export function RoleplayActivity({ open, onOpenChange, onComplete, situation }: 
               </ScrollArea>
 
               <div className="p-4 border-t space-y-3">
+                {scenario?.useful_phrases && scenario.useful_phrases.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {scenario.useful_phrases.slice(0, 3).map((p, i) => (
+                      <Badge key={i} variant="outline" className="text-xs cursor-help" title={p.use_es}>
+                        {p.phrase}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <Textarea
                     value={input}
@@ -199,7 +244,7 @@ export function RoleplayActivity({ open, onOpenChange, onComplete, situation }: 
                     <Send className="h-4 w-4" />
                   </Button>
                 </div>
-                
+
                 {messages.length >= 4 && (
                   <Button variant="outline" onClick={handleComplete} className="w-full gap-2">
                     <CheckCircle2 className="h-4 w-4" />

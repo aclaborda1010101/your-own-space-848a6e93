@@ -91,6 +91,21 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "list_node_tasks",
+      description: "Lista tareas de OpenClaw, opcionalmente filtradas por nodo y/o estado",
+      parameters: {
+        type: "object",
+        properties: {
+          node_id: { type: "string", description: "Nombre del nodo (potus, titan, jarvis, atlas)" },
+          status: { type: "string", enum: ["pending", "running", "done", "failed", "pending_approval"], description: "Filtrar por estado" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 // ─── Tool execution ──────────────────────────────────────────────────────────
@@ -98,17 +113,25 @@ async function executeTool(name: string, args: Record<string, unknown>, sb: any)
   try {
     switch (name) {
       case "cancel_task": {
-        const { error } = await sb.from("cloudbot_tasks_log").delete().eq("task_id", args.task_id);
+        const { error } = await sb.from("openclaw_tasks").delete().eq("id", args.task_id);
         if (error) return `❌ Error cancelando tarea: ${error.message}`;
         return `✅ Tarea ${(args.task_id as string).slice(0, 8)} cancelada${args.reason ? `. Motivo: ${args.reason}` : ""}`;
       }
 
       case "create_task": {
-        const { error } = await sb.from("cloudbot_tasks_log").insert({
+        // Resolve node_id from openclaw_nodes if assigned_to is provided
+        let nodeId: string | null = null;
+        if (args.assigned_to) {
+          const { data: node } = await sb.from("openclaw_nodes").select("id").ilike("name", args.assigned_to as string).maybeSingle();
+          nodeId = node?.id || null;
+        }
+        const { error } = await sb.from("openclaw_tasks").insert({
           title: args.title,
           priority: args.priority || "normal",
-          assigned_to: args.assigned_to || null,
-          status: "queued",
+          node_id: nodeId,
+          status: "pending",
+          source: "openclaw-chat",
+          description: (args as any).description || null,
         });
         if (error) return `❌ Error creando tarea: ${error.message}`;
         return `✅ Tarea "${args.title}" creada (prioridad: ${args.priority || "normal"}, agente: ${args.assigned_to || "sin asignar"})`;
@@ -116,15 +139,16 @@ async function executeTool(name: string, args: Record<string, unknown>, sb: any)
 
       case "change_model": {
         const { data: nodeData } = await sb
-          .from("cloudbot_nodes")
-          .select("metadata")
-          .eq("node_id", args.node_id)
-          .single();
+          .from("openclaw_nodes")
+          .select("id, metadata")
+          .ilike("name", args.node_id as string)
+          .maybeSingle();
+        if (!nodeData) return `❌ Nodo "${args.node_id}" no encontrado`;
         const meta = (nodeData?.metadata as Record<string, unknown>) || {};
         meta.model = args.model;
         meta.pendingModelChange = true;
         meta.modelChangedAt = new Date().toISOString();
-        const { error } = await sb.from("cloudbot_nodes").update({ metadata: meta }).eq("node_id", args.node_id);
+        const { error } = await sb.from("openclaw_nodes").update({ model: args.model, metadata: meta }).eq("id", nodeData.id);
         if (error) return `❌ Error cambiando modelo: ${error.message}`;
         return `✅ Modelo de ${(args.node_id as string).toUpperCase()} cambiado a ${args.model}. El bridge lo aplicará en ≤30s.`;
       }
@@ -140,9 +164,8 @@ async function executeTool(name: string, args: Record<string, unknown>, sb: any)
         const type = args.metric_type as string;
 
         if (type === "costs" || type === "all") {
-          // Recent tasks as cost proxy
           const { data: recentTasks } = await sb
-            .from("cloudbot_tasks_log")
+            .from("openclaw_tasks")
             .select("title, status, priority, created_at")
             .order("created_at", { ascending: false })
             .limit(20);
@@ -151,8 +174,8 @@ async function executeTool(name: string, args: Record<string, unknown>, sb: any)
 
         if (type === "errors" || type === "all") {
           const { data: failedTasks } = await sb
-            .from("cloudbot_tasks_log")
-            .select("task_id, title, result_summary, created_at")
+            .from("openclaw_tasks")
+            .select("id, title, result, created_at")
             .eq("status", "failed")
             .order("created_at", { ascending: false })
             .limit(10);
@@ -160,11 +183,25 @@ async function executeTool(name: string, args: Record<string, unknown>, sb: any)
         }
 
         if (type === "performance" || type === "all") {
-          const { data: nodes } = await sb.from("cloudbot_nodes").select("node_id, status, active_workers, last_heartbeat, current_load");
+          const { data: nodes } = await sb.from("openclaw_nodes").select("id, name, status, model, last_seen_at, tokens_today, metadata");
           results.push(`⚡ Nodos: ${JSON.stringify(nodes)}`);
         }
 
         return results.join("\n\n");
+      }
+
+      case "list_node_tasks": {
+        const nodeFilter = args.node_id as string | undefined;
+        const statusFilter = args.status as string | undefined;
+        let q = sb.from("openclaw_tasks").select("id, title, status, priority, node_id, created_at, result").order("created_at", { ascending: false }).limit(20);
+        if (nodeFilter) {
+          const { data: node } = await sb.from("openclaw_nodes").select("id").ilike("name", nodeFilter).maybeSingle();
+          if (node) q = q.eq("node_id", node.id);
+        }
+        if (statusFilter) q = q.eq("status", statusFilter);
+        const { data: tasks } = await q;
+        if (!tasks?.length) return "No se encontraron tareas con esos filtros.";
+        return tasks.map((t: any) => `- [${t.status}] ${t.title} (pri: ${t.priority || "normal"}, id: ${t.id.slice(0,8)})`).join("\n");
       }
 
       default:
@@ -180,8 +217,8 @@ async function buildDeepContext(sb: any): Promise<string> {
   const parts: string[] = [];
 
   const [nodesRes, tasksRes, projectsRes, alertsRes, ragRes] = await Promise.all([
-    sb.from("cloudbot_nodes").select("node_id, status, active_workers, last_heartbeat, metadata, current_load"),
-    sb.from("cloudbot_tasks_log").select("task_id, title, status, priority, assigned_to, created_at, result_summary, full_logs").order("created_at", { ascending: false }).limit(30),
+    sb.from("openclaw_nodes").select("id, name, status, model, last_seen_at, tokens_today, metadata, active_task, progress"),
+    sb.from("openclaw_tasks").select("id, title, status, priority, node_id, created_at, result, description, source").order("created_at", { ascending: false }).limit(30),
     sb.from("business_projects").select("id, name, status, company, updated_at, estimated_value, close_probability, need_summary").order("updated_at", { ascending: false }).limit(15),
     sb.from("openclaw_alerts").select("*").eq("acknowledged", false).order("created_at", { ascending: false }).limit(10),
     sb.from("rag_projects").select("id, name, status, domain, updated_at").order("updated_at", { ascending: false }).limit(5),
@@ -192,9 +229,8 @@ async function buildDeepContext(sb: any): Promise<string> {
     parts.push("## 🤖 Agentes del sistema\n" +
       nodesRes.data.map((n: any) => {
         const meta = n.metadata || {};
-        const ago = n.last_heartbeat ? Math.round((Date.now() - new Date(n.last_heartbeat).getTime()) / 60000) : null;
-        const load = n.current_load || {};
-        return `- **${(n.node_id as string).toUpperCase()}**: status=${n.status}, model=${meta.model || "?"}, workers=${n.active_workers || 0}, last_seen=${ago !== null ? ago + "m" : "?"}${meta.currentWork ? ", work=" + meta.currentWork : ""}${load.cpu ? ", cpu=" + load.cpu + "%" : ""}${meta.pendingModelChange ? " ⚠️ CAMBIO MODELO PENDIENTE" : ""}`;
+        const ago = n.last_seen_at ? Math.round((Date.now() - new Date(n.last_seen_at).getTime()) / 60000) : null;
+        return `- **${(n.name as string).toUpperCase()}**: status=${n.status}, model=${n.model || "?"}, last_seen=${ago !== null ? ago + "m" : "?"}${n.active_task ? ", task=" + n.active_task : ""}${n.progress ? ", progress=" + n.progress + "%" : ""}${meta.bridge_live ? " 🟢 LIVE" : ""}${meta.pendingModelChange ? " ⚠️ CAMBIO MODELO PENDIENTE" : ""}`;
       }).join("\n"));
   }
 
@@ -205,13 +241,13 @@ async function buildDeepContext(sb: any): Promise<string> {
     parts.push(`## 📋 Tareas (${tasksRes.data.length} recientes)\nResumen: ${Object.entries(byStatus).map(([k, v]) => `${k}=${v}`).join(", ")}\n` +
       tasksRes.data.slice(0, 15).map((t: any) => {
         const age = Math.round((Date.now() - new Date(t.created_at).getTime()) / 3600000);
-        return `- [${t.status}] **${t.title}** (pri: ${t.priority || "normal"}, agent: ${t.assigned_to || "?"}, age: ${age}h)${t.result_summary ? " → " + t.result_summary.slice(0, 60) : ""}`;
+        return `- [${t.status}] **${t.title}** (pri: ${t.priority || "normal"}, id: ${t.id?.slice(0,8) || "?"}, source: ${t.source || "?"}, age: ${age}h)${t.result ? " → " + String(t.result).slice(0, 60) : ""}`;
       }).join("\n"));
 
     // Detect stale/blocked tasks
     const stale = tasksRes.data.filter((t: any) => {
       const age = (Date.now() - new Date(t.created_at).getTime()) / 3600000;
-      return (t.status === "pending_approval" || t.status === "queued") && age > 24;
+      return (t.status === "pending_approval" || t.status === "pending") && age > 24;
     });
     if (stale.length) {
       parts.push(`## ⚠️ ATENCIÓN: ${stale.length} tareas estancadas >24h\n` +

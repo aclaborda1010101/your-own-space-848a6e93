@@ -141,6 +141,29 @@ Deno.serve(async (req) => {
         error: log.level === "error" ? log.message : null,
         finished_at: new Date().toISOString(),
       });
+
+      // 5) Update openclaw_tasks lifecycle based on log level
+      if (log.task_id) {
+        const now = new Date().toISOString();
+        if (log.level === "done") {
+          await sb.from("openclaw_tasks").update({
+            status: "done",
+            finished_at: now,
+            result: log.output ?? log.message,
+          }).eq("id", log.task_id);
+        } else if (log.level === "error") {
+          await sb.from("openclaw_tasks").update({
+            status: "failed",
+            finished_at: now,
+            result: log.message,
+          }).eq("id", log.task_id);
+        } else if (log.level === "running") {
+          await sb.from("openclaw_tasks").update({
+            status: "running",
+            started_at: now,
+          }).eq("id", log.task_id);
+        }
+      }
     }
 
     return json({ ok: true, node_id: node.id, name: node.name, bridge_live: true });

@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Bot, X, Minus, Send, Loader2, RefreshCw, BellOff, Bell } from "lucide-react";
+import { Bot, X, Minus, Send, Loader2, RefreshCw, BellOff, Bell, StopCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
+
+type StreamStatus = "idle" | "connecting" | "responding" | "retrying";
 
 interface AgentMessage {
   id?: string;
@@ -13,7 +15,7 @@ interface AgentMessage {
   created_at?: string;
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-agent`;
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-unified`;
 
 const PROACTIVE_KEY = "jarvis-proactive-enabled";
 
@@ -24,6 +26,8 @@ export function AgentChatFloat() {
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
+  const abortRef = useRef<AbortController | null>(null);
   const [badgeCount, setBadgeCount] = useState(0);
   const [hasProactived, setHasProactived] = useState(false);
   const [autoOpened, setAutoOpened] = useState(false);
@@ -108,112 +112,148 @@ export function AgentChatFloat() {
     }
   }, [open, minimized, hasProactived, user, session, proactiveEnabled]);
 
-  const triggerProactive = async () => {
-    if (streaming || !session || !proactiveEnabled) return;
-    setStreaming(true);
+  const cancelStream = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setStreaming(false);
+    setStreamStatus("idle");
+  }, []);
 
-    try {
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          mode: "proactive",
-          history: messages.slice(-10).map(m => ({ role: m.role, content: m.content })),
-        }),
-      });
-
-      if (!resp.ok) throw new Error(`Error ${resp.status}`);
-      await streamResponse(resp, "proactive");
-    } catch (e) {
-      console.error("[AgentChat] Proactive error:", e);
-      setMessages(prev => [...prev, {
-        role: "proactive",
-        content: "⚠️ No pude generar el briefing. Intenta de nuevo.",
-      }]);
-    } finally {
-      setStreaming(false);
-    }
+  const classifyError = (err: unknown): string => {
+    if (err instanceof DOMException && err.name === "AbortError") return "La solicitud tardó demasiado. Intenta de nuevo.";
+    if (err instanceof TypeError && err.message.includes("fetch")) return "Sin conexión a internet. Verifica tu red.";
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("429")) return "Demasiadas solicitudes. Espera unos segundos.";
+    if (msg.includes("5")) return "Error del servidor. Reintentando...";
+    return "Error al procesar tu mensaje. Intenta de nuevo.";
   };
 
-  const sendMessage = async () => {
-    const text = input.trim();
-    if (!text || streaming || !session) return;
-
-    const userMsg: AgentMessage = { role: "user", content: text };
-    setMessages(prev => [...prev, userMsg]);
-    setInput("");
-    setStreaming(true);
-
+  const fetchWithRetry = async (body: Record<string, unknown>, signal: AbortSignal, timeoutMs: number): Promise<Response> => {
+    const doFetch = async () => {
+      const timeoutId = setTimeout(() => abortRef.current?.abort(), timeoutMs);
+      try {
+        const resp = await fetch(CHAT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session!.access_token}` },
+          body: JSON.stringify(body),
+          signal,
+        });
+        clearTimeout(timeoutId);
+        return resp;
+      } catch (e) { clearTimeout(timeoutId); throw e; }
+    };
     try {
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          mode: "chat",
-          message: text,
-          history: [...messages, userMsg].slice(-10).map(m => ({ role: m.role, content: m.content })),
-        }),
-      });
-
-      if (!resp.ok) throw new Error(`Error ${resp.status}`);
-      await streamResponse(resp, "assistant");
-    } catch (e) {
-      console.error("[AgentChat] Error:", e);
-      setMessages(prev => [...prev, {
-        role: "assistant",
-        content: "⚠️ Error al procesar tu mensaje. Intenta de nuevo.",
-      }]);
-    } finally {
-      setStreaming(false);
+      const resp = await doFetch();
+      if (resp.status === 429 || (resp.status >= 500 && resp.status < 600)) throw new Error(`Server error ${resp.status}`);
+      return resp;
+    } catch (firstErr) {
+      if (signal.aborted) throw firstErr;
+      setStreamStatus("retrying");
+      await new Promise(r => setTimeout(r, 2000));
+      if (signal.aborted) throw firstErr;
+      return doFetch();
     }
   };
 
   const streamResponse = async (resp: Response, role: "assistant" | "proactive") => {
     if (!resp.body) return;
-
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
     let assistantContent = "";
 
     setMessages(prev => [...prev, { role, content: "" }]);
+    setStreamStatus("responding");
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+    const resetHeartbeat = () => {
+      if (heartbeatTimer) clearTimeout(heartbeatTimer);
+      heartbeatTimer = setTimeout(() => abortRef.current?.abort(), 15000);
+    };
+    resetHeartbeat();
 
-      buffer += decoder.decode(value, { stream: true });
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        resetHeartbeat();
+        buffer += decoder.decode(value, { stream: true });
 
-      let newlineIdx: number;
-      while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
-        let line = buffer.slice(0, newlineIdx);
-        buffer = buffer.slice(newlineIdx + 1);
-        if (line.endsWith("\r")) line = line.slice(0, -1);
-        if (!line.startsWith("data: ")) continue;
-
-        const jsonStr = line.slice(6).trim();
-        if (jsonStr === "[DONE]") break;
-
-        try {
-          const parsed = JSON.parse(jsonStr);
-          const delta = parsed.choices?.[0]?.delta?.content;
-          if (delta) {
-            assistantContent += delta;
-            const content = assistantContent;
-            setMessages(prev => {
-              const updated = [...prev];
-              updated[updated.length - 1] = { ...updated[updated.length - 1], content };
-              return updated;
-            });
-          }
-        } catch { /* partial JSON */ }
+        let newlineIdx: number;
+        while ((newlineIdx = buffer.indexOf("\n")) !== -1) {
+          let line = buffer.slice(0, newlineIdx);
+          buffer = buffer.slice(newlineIdx + 1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (!line.startsWith("data: ")) continue;
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") break;
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) {
+              assistantContent += delta;
+              const content = assistantContent;
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { ...updated[updated.length - 1], content };
+                return updated;
+              });
+            }
+          } catch { /* partial JSON */ }
+        }
       }
+    } finally {
+      if (heartbeatTimer) clearTimeout(heartbeatTimer);
+    }
+  };
+
+  const triggerProactive = async () => {
+    if (streaming || !session || !proactiveEnabled) return;
+    setStreaming(true);
+    setStreamStatus("connecting");
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const resp = await fetchWithRetry(
+        { mode: "proactive", history: messages.slice(-10).map(m => ({ role: m.role, content: m.content })) },
+        controller.signal, 120000,
+      );
+      if (!resp.ok) throw new Error(`Error ${resp.status}`);
+      await streamResponse(resp, "proactive");
+    } catch (e) {
+      console.error("[AgentChat] Proactive error:", e);
+      setMessages(prev => [...prev, { role: "proactive", content: `⚠️ ${classifyError(e)}` }]);
+    } finally {
+      abortRef.current = null;
+      setStreaming(false);
+      setStreamStatus("idle");
+    }
+  };
+
+  const sendMessage = async () => {
+    const text = input.trim();
+    if (!text || streaming || !session) return;
+    const userMsg: AgentMessage = { role: "user", content: text };
+    setMessages(prev => [...prev, userMsg]);
+    setInput("");
+    setStreaming(true);
+    setStreamStatus("connecting");
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const resp = await fetchWithRetry(
+        { mode: "chat", message: text, history: [...messages, userMsg].slice(-10).map(m => ({ role: m.role, content: m.content })) },
+        controller.signal, 60000,
+      );
+      if (!resp.ok) throw new Error(`Error ${resp.status}`);
+      await streamResponse(resp, "assistant");
+    } catch (e) {
+      console.error("[AgentChat] Error:", e);
+      setMessages(prev => [...prev, { role: "assistant", content: `⚠️ ${classifyError(e)}` }]);
+    } finally {
+      abortRef.current = null;
+      setStreaming(false);
+      setStreamStatus("idle");
     }
   };
 
@@ -263,6 +303,11 @@ export function AgentChatFloat() {
             >
               {proactiveEnabled ? <Bell className="h-3.5 w-3.5 text-primary" /> : <BellOff className="h-3.5 w-3.5" />}
             </Button>
+            {streaming && (
+              <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={cancelStream} title="Cancelar">
+                <StopCircle className="h-3.5 w-3.5" />
+              </Button>
+            )}
             <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-white" onClick={handleRefresh} disabled={streaming} title="Nuevo briefing">
               <RefreshCw className={cn("h-3.5 w-3.5", streaming && "animate-spin")} />
             </Button>

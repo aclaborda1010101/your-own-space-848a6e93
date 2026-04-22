@@ -93,6 +93,80 @@ interface EmotionalState {
   motivation: number;
 }
 
+// Session type definitions with phases
+const SESSION_TYPES: Record<string, { label: string; duration: string; phases: string[] }> = {
+  "check-in": {
+    label: "Check-in rápido",
+    duration: "15 min",
+    phases: ["warm-up", "assessment", "action-plan", "commitment"],
+  },
+  "deep-dive": {
+    label: "Sesión profunda",
+    duration: "30 min",
+    phases: ["warm-up", "exploration", "patterns", "reframing", "action"],
+  },
+  "accountability": {
+    label: "Accountability",
+    duration: "10 min",
+    phases: ["review-commitments", "celebrate-troubleshoot", "new-commitments"],
+  },
+  "weekly-review": {
+    label: "Revisión semanal",
+    duration: "20 min",
+    phases: ["week-review", "patterns", "priorities", "week-plan"],
+  },
+  "crisis": {
+    label: "Apoyo inmediato",
+    duration: "10 min",
+    phases: ["immediate-support", "stabilize", "one-step-action"],
+  },
+  "daily": {
+    label: "Sesión diaria",
+    duration: "15 min",
+    phases: ["check-in", "main-topic", "action-plan", "closure"],
+  },
+};
+
+function getSessionTypePrompt(sessionType: string): string {
+  const config = SESSION_TYPES[sessionType];
+  if (!config) return "";
+
+  const phaseGuides: Record<string, string> = {
+    "warm-up": "WARM-UP: Pregunta cómo está, valida estado emocional. Máx 2 turnos.",
+    "assessment": "ASSESSMENT: Evalúa situación actual vs objetivos. Identifica blockers. Máx 3 turnos.",
+    "action-plan": "ACTION PLAN: Define 1-3 acciones concretas y medibles. Máx 2 turnos.",
+    "commitment": "COMMITMENT: Pide compromiso específico con fecha. 1 turno.",
+    "exploration": "EXPLORACIÓN: Profundiza en el tema principal con preguntas abiertas. Máx 4 turnos.",
+    "patterns": "PATRONES: Identifica patrones recurrentes en comportamiento/pensamiento. Máx 3 turnos.",
+    "reframing": "REFRAMING: Propón perspectivas alternativas. Máx 2 turnos.",
+    "action": "ACCIÓN: Define próximos pasos claros. 1-2 turnos.",
+    "review-commitments": "REVIEW: Revisa compromisos anteriores uno por uno. ¿Cumplidos? ¿Obstáculos? Máx 3 turnos.",
+    "celebrate-troubleshoot": "CELEBRAR/RESOLVER: Celebra logros, troubleshoot fallos sin juzgar. Máx 2 turnos.",
+    "new-commitments": "NUEVOS COMPROMISOS: Define 1-3 compromisos para la próxima semana. 1-2 turnos.",
+    "week-review": "REVISIÓN SEMANAL: ¿Qué fue bien? ¿Qué no? ¿Qué aprendiste? Máx 3 turnos.",
+    "priorities": "PRIORIDADES: Identifica las 3 prioridades de la semana que viene. 2 turnos.",
+    "week-plan": "PLAN SEMANAL: Organiza las prioridades en acciones diarias. 2 turnos.",
+    "immediate-support": "APOYO INMEDIATO: Escucha activa, valida emociones, grounding. Máx 3 turnos.",
+    "stabilize": "ESTABILIZAR: Ayuda a recuperar perspectiva y calma. 2-3 turnos.",
+    "one-step-action": "UN PASO: Define UNA sola acción pequeña y alcanzable. 1 turno.",
+    "check-in": "CHECK-IN: ¿Cómo estás? ¿Qué te trae hoy? 1-2 turnos.",
+    "main-topic": "TEMA PRINCIPAL: Profundiza en lo que más necesita el usuario hoy. Máx 4 turnos.",
+    "closure": "CIERRE: Resume, define próximo paso, mensaje de cierre motivador. 1 turno.",
+  };
+
+  const phasesDesc = config.phases
+    .map((p, i) => `  Fase ${i + 1} - ${phaseGuides[p] || p}`)
+    .join("\n");
+
+  return `
+🗂️ TIPO DE SESIÓN: ${config.label} (${config.duration})
+FASES DE LA SESIÓN:
+${phasesDesc}
+
+IMPORTANTE: Guía la conversación a través de estas fases de forma natural, sin anunciarlas explícitamente.
+Transiciona suavemente de una fase a otra basándote en las respuestas del usuario.`;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
@@ -256,6 +330,63 @@ serve(async (req) => {
     };
     const context: SessionContext = body.context || {};
     const sessionType: string = body.sessionType || "daily";
+    const mode: string = body.mode || "chat";
+
+    // Handle end_session mode - generate structured summary
+    if (mode === "end_session") {
+      const summaryPrompt = `Eres un coach profesional. Analiza esta conversación y genera un resumen estructurado.
+
+CONVERSACIÓN:
+${messages.map(m => `${m.role === "user" ? "USUARIO" : "COACH"}: ${m.content}`).join("\n")}
+
+Genera un JSON con este formato exacto:
+{
+  "summary": "resumen breve de la sesión (2-3 frases)",
+  "insights": ["insight 1", "insight 2"],
+  "commitments": ["compromiso concreto 1", "compromiso concreto 2"],
+  "mood_shift": "mejora/estable/descenso",
+  "next_session_suggestion": "sugerencia para la próxima sesión"
+}`;
+
+      try {
+        const summaryResponse = await chat([
+          { role: "system", content: summaryPrompt },
+          { role: "user", content: "Genera el resumen de la sesión." }
+        ], { model: "gemini-flash", responseFormat: "json" });
+
+        const summaryData = JSON.parse(summaryResponse);
+
+        // Save session to coach_sessions
+        if (userId) {
+          await supabase.from("coach_sessions").insert({
+            user_id: userId,
+            session_type: sessionType,
+            summary: summaryData.summary,
+            action_items: summaryData.commitments,
+            insights: summaryData.insights,
+            session_date: new Date().toISOString().split("T")[0],
+          }).then(() => {}).catch(e => console.warn("Error saving coach session:", e));
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, ...summaryData }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      } catch (e) {
+        console.error("Error generating session summary:", e);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            summary: "Sesión completada",
+            insights: [],
+            commitments: [],
+            mood_shift: "estable",
+            next_session_suggestion: "Continúa con tu próxima sesión regular"
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     // Determine protocol based on emotional state
     const { protocol, reason: protocolReason } = determineProtocol(emotionalState);
@@ -319,6 +450,8 @@ NO motivas de forma vacía. Sostienes, ordenas y ayudas a decidir mejor.
 Razón: ${protocolReason}
 
 ${protocolPrompt}
+
+${getSessionTypePrompt(sessionType)}
 
  CONTEXTO DE SESIÓN:
 - Tipo: ${sessionType}

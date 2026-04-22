@@ -37,6 +37,7 @@ const Coach = () => {
   
   const [activeTab, setActiveTab] = useState("reset");
   const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
+  const [sessionType, setSessionType] = useState<string | undefined>(undefined);
   
   const {
     stats,
@@ -120,7 +121,8 @@ const Coach = () => {
     }
   };
 
-  const handleStartSession = () => {
+  const handleStartSession = (type?: string) => {
+    setSessionType(type);
     setSessionDialogOpen(true);
     loadRecentSessions();
   };
@@ -145,7 +147,7 @@ const Coach = () => {
                 Reset mental, hoja de ruta y seguimiento de crecimiento
               </p>
             </div>
-            <Button className="gap-2" onClick={handleStartSession}>
+            <Button className="gap-2" onClick={() => handleStartSession()}>
               <MessageSquare className="h-4 w-4" />
               Sesión guiada
             </Button>
@@ -420,37 +422,37 @@ const Coach = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid md:grid-cols-2 gap-4">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       className="h-auto py-4 flex flex-col items-start gap-2"
-                      onClick={handleStartSession}
+                      onClick={() => handleStartSession("check-in")}
                     >
-                      <span className="font-medium">Reset rápido</span>
-                      <span className="text-xs text-muted-foreground">5 minutos para recentrarte</span>
+                      <span className="font-medium">Check-in rápido</span>
+                      <span className="text-xs text-muted-foreground">15 min · Evalúa y planifica</span>
                     </Button>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       className="h-auto py-4 flex flex-col items-start gap-2"
-                      onClick={handleStartSession}
+                      onClick={() => handleStartSession("accountability")}
                     >
-                      <span className="font-medium">Desbloqueo</span>
-                      <span className="text-xs text-muted-foreground">Superar un obstáculo mental</span>
+                      <span className="font-medium">Accountability</span>
+                      <span className="text-xs text-muted-foreground">10 min · Revisa compromisos</span>
                     </Button>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       className="h-auto py-4 flex flex-col items-start gap-2"
-                      onClick={handleStartSession}
+                      onClick={() => handleStartSession("weekly-review")}
                     >
                       <span className="font-medium">Revisión semanal</span>
-                      <span className="text-xs text-muted-foreground">Análisis y ajustes</span>
+                      <span className="text-xs text-muted-foreground">20 min · Análisis y ajustes</span>
                     </Button>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       className="h-auto py-4 flex flex-col items-start gap-2"
-                      onClick={handleStartSession}
+                      onClick={() => handleStartSession("deep-dive")}
                     >
                       <span className="font-medium">Sesión profunda</span>
-                      <span className="text-xs text-muted-foreground">Trabajo de creencias y valores</span>
+                      <span className="text-xs text-muted-foreground">30 min · Patrones y creencias</span>
                     </Button>
                   </div>
 
@@ -613,9 +615,10 @@ const Coach = () => {
           </Tabs>
         </main>
 
-      <CoachSessionDialog 
-        open={sessionDialogOpen} 
+      <CoachSessionDialog
+        open={sessionDialogOpen}
         onOpenChange={setSessionDialogOpen}
+        initialSessionType={sessionType}
       />
     </>
   );

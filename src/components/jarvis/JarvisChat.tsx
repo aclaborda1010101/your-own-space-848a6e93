@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Bot, Send, Loader2, RefreshCw, Mic, MicOff, Radio, Square, Paperclip, X } from "lucide-react";
+import { Bot, Send, Loader2, RefreshCw, Mic, MicOff, Radio, Square, Paperclip, X, StopCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,6 +8,8 @@ import { useVoiceRecognition } from "@/hooks/useVoiceRecognition";
 import { useJarvisRealtime } from "@/hooks/useJarvisRealtime";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
+
+type StreamStatus = "idle" | "connecting" | "responding" | "retrying";
 
 interface AgentMessage {
   id?: string;
@@ -26,18 +28,20 @@ interface JarvisChatProps {
   autoProactive?: boolean;
 }
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-agent`;
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/jarvis-unified`;
 
 export function JarvisChat({ variant = "page", autoProactive }: JarvisChatProps) {
   const { user, session } = useAuth();
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
   const [hasInit, setHasInit] = useState(false);
   const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const shouldAutoProactive = autoProactive ?? variant === "floating";
 
@@ -95,6 +99,13 @@ export function JarvisChat({ variant = "page", autoProactive }: JarvisChatProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, session, hasInit]);
 
+  const cancelStream = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setStreaming(false);
+    setStreamStatus("idle");
+  }, []);
+
   const streamResponse = async (resp: Response, role: "assistant" | "proactive") => {
     if (!resp.body) return;
     const reader = resp.body.getReader();
@@ -103,66 +114,138 @@ export function JarvisChat({ variant = "page", autoProactive }: JarvisChatProps)
     let assistantContent = "";
 
     setMessages((prev) => [...prev, { role, content: "" }]);
+    setStreamStatus("responding");
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+    // Heartbeat: abort if no data in 15s
+    let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+    const resetHeartbeat = () => {
+      if (heartbeatTimer) clearTimeout(heartbeatTimer);
+      heartbeatTimer = setTimeout(() => {
+        abortRef.current?.abort();
+      }, 15000);
+    };
+    resetHeartbeat();
 
-      let idx: number;
-      while ((idx = buffer.indexOf("\n")) !== -1) {
-        let line = buffer.slice(0, idx);
-        buffer = buffer.slice(idx + 1);
-        if (line.endsWith("\r")) line = line.slice(0, -1);
-        if (!line.startsWith("data: ")) continue;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        resetHeartbeat();
+        buffer += decoder.decode(value, { stream: true });
 
-        const jsonStr = line.slice(6).trim();
-        if (jsonStr === "[DONE]") break;
+        let idx: number;
+        while ((idx = buffer.indexOf("\n")) !== -1) {
+          let line = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 1);
+          if (line.endsWith("\r")) line = line.slice(0, -1);
+          if (!line.startsWith("data: ")) continue;
 
-        try {
-          const parsed = JSON.parse(jsonStr);
-          const delta = parsed.choices?.[0]?.delta?.content;
-          if (delta) {
-            assistantContent += delta;
-            const content = assistantContent;
-            setMessages((prev) => {
-              const updated = [...prev];
-              updated[updated.length - 1] = { ...updated[updated.length - 1], content };
-              return updated;
-            });
+          const jsonStr = line.slice(6).trim();
+          if (jsonStr === "[DONE]") break;
+
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) {
+              assistantContent += delta;
+              const content = assistantContent;
+              setMessages((prev) => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { ...updated[updated.length - 1], content };
+                return updated;
+              });
+            }
+          } catch {
+            /* partial JSON */
           }
-        } catch {
-          /* partial JSON */
         }
       }
+    } finally {
+      if (heartbeatTimer) clearTimeout(heartbeatTimer);
     }
+  };
+
+  const fetchWithRetry = async (
+    body: Record<string, unknown>,
+    signal: AbortSignal,
+    timeoutMs: number,
+  ): Promise<Response> => {
+    const doFetch = async () => {
+      const timeoutId = setTimeout(() => abortRef.current?.abort(), timeoutMs);
+      try {
+        const resp = await fetch(CHAT_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session!.access_token}`,
+          },
+          body: JSON.stringify(body),
+          signal,
+        });
+        clearTimeout(timeoutId);
+        return resp;
+      } catch (e) {
+        clearTimeout(timeoutId);
+        throw e;
+      }
+    };
+
+    try {
+      const resp = await doFetch();
+      if (resp.status === 429 || (resp.status >= 500 && resp.status < 600)) {
+        throw new Error(`Server error ${resp.status}`);
+      }
+      return resp;
+    } catch (firstErr) {
+      if (signal.aborted) throw firstErr;
+      // 1 retry with 2s backoff
+      setStreamStatus("retrying");
+      await new Promise((r) => setTimeout(r, 2000));
+      if (signal.aborted) throw firstErr;
+      return doFetch();
+    }
+  };
+
+  const classifyError = (err: unknown): string => {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return "La solicitud tardó demasiado. Intenta de nuevo.";
+    }
+    if (err instanceof TypeError && err.message.includes("fetch")) {
+      return "Sin conexión a internet. Verifica tu red.";
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("429")) return "Demasiadas solicitudes. Espera unos segundos.";
+    if (msg.includes("5")) return "Error del servidor. Reintentando...";
+    return "Error al procesar tu mensaje. Intenta de nuevo.";
   };
 
   const triggerProactive = async () => {
     if (streaming || !session) return;
     setStreaming(true);
+    setStreamStatus("connecting");
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
+      const resp = await fetchWithRetry(
+        {
           mode: "proactive",
           history: messages.slice(-10).map((m) => ({ role: m.role, content: m.content })),
-        }),
-      });
+        },
+        controller.signal,
+        120000,
+      );
       if (!resp.ok) throw new Error(`Error ${resp.status}`);
       await streamResponse(resp, "proactive");
     } catch (e) {
       console.error("[JarvisChat] Proactive error:", e);
       setMessages((prev) => [
         ...prev,
-        { role: "proactive", content: "⚠️ No pude generar el briefing. Intenta de nuevo." },
+        { role: "proactive", content: `⚠️ ${classifyError(e)}` },
       ]);
     } finally {
+      abortRef.current = null;
       setStreaming(false);
+      setStreamStatus("idle");
     }
   };
 
@@ -174,32 +257,34 @@ export function JarvisChat({ variant = "page", autoProactive }: JarvisChatProps)
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setStreaming(true);
+    setStreamStatus("connecting");
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
-      const resp = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
+      const resp = await fetchWithRetry(
+        {
           mode: "chat",
           message: text,
           history: [...messages, userMsg]
             .slice(-10)
             .map((m) => ({ role: m.role, content: m.content })),
-        }),
-      });
+        },
+        controller.signal,
+        60000,
+      );
       if (!resp.ok) throw new Error(`Error ${resp.status}`);
       await streamResponse(resp, "assistant");
     } catch (e) {
       console.error("[JarvisChat] Error:", e);
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "⚠️ Error al procesar tu mensaje. Intenta de nuevo." },
+        { role: "assistant", content: `⚠️ ${classifyError(e)}` },
       ]);
     } finally {
+      abortRef.current = null;
       setStreaming(false);
+      setStreamStatus("idle");
     }
   };
 
@@ -299,13 +384,28 @@ export function JarvisChat({ variant = "page", autoProactive }: JarvisChatProps)
             <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
               {realtime.isActive
                 ? `voz · ${realtime.state}`
-                : streaming
+                : streamStatus === "connecting"
+                ? "conectando…"
+                : streamStatus === "responding"
                 ? "respondiendo…"
+                : streamStatus === "retrying"
+                ? "reintentando…"
                 : "listo"}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {streaming && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-destructive hover:text-destructive"
+              onClick={cancelStream}
+              title="Cancelar"
+            >
+              <StopCircle className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

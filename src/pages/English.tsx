@@ -45,49 +45,6 @@ const DAILY_PRACTICE = [
   { id: "bosco", name: "Inglés con Bosco", duration: "5 min", icon: Baby, completed: false },
 ];
 
-const CHUNKS = [
-  // Expresiones de tiempo y frecuencia
-  { en: "I'm looking forward to", es: "Tengo ganas de / Estoy deseando", example: "I'm looking forward to the weekend." },
-  { en: "It's worth it", es: "Vale la pena", example: "The long drive is worth it." },
-  { en: "I'm about to", es: "Estoy a punto de", example: "I'm about to leave the office." },
-  { en: "It depends on", es: "Depende de", example: "It depends on the weather." },
-  { en: "Every now and then", es: "De vez en cuando", example: "Every now and then I go for a run." },
-  { en: "Sooner or later", es: "Tarde o temprano", example: "Sooner or later, you'll have to decide." },
-  { en: "In the meantime", es: "Mientras tanto", example: "In the meantime, let's have coffee." },
-  { en: "At the last minute", es: "En el último momento", example: "He cancelled at the last minute." },
-  // Opiniones y preferencias
-  { en: "As far as I know", es: "Que yo sepa", example: "As far as I know, the meeting is at 3." },
-  { en: "To be honest", es: "Siendo sincero", example: "To be honest, I prefer the blue one." },
-  { en: "I'd rather", es: "Preferiría", example: "I'd rather stay home tonight." },
-  { en: "I'm not sure if", es: "No estoy seguro de si", example: "I'm not sure if I can make it." },
-  { en: "The thing is", es: "El tema es que", example: "The thing is, I forgot my wallet." },
-  // Conversación natural
-  { en: "By the way", es: "Por cierto", example: "By the way, did you call her?" },
-  { en: "Speaking of which", es: "Hablando de eso", example: "Speaking of which, have you seen the news?" },
-  { en: "What I mean is", es: "Lo que quiero decir es", example: "What I mean is, we need more time." },
-  { en: "Let me put it this way", es: "Déjame decirlo así", example: "Let me put it this way: it's complicated." },
-  { en: "That reminds me", es: "Eso me recuerda", example: "That reminds me, I need to call my mom." },
-  // Situaciones cotidianas
-  { en: "I can't help but", es: "No puedo evitar", example: "I can't help but laugh at his jokes." },
-  { en: "It turns out that", es: "Resulta que", example: "It turns out that he was right." },
-  { en: "There's no point in", es: "No tiene sentido", example: "There's no point in waiting any longer." },
-  { en: "I'm running late", es: "Voy con retraso", example: "Sorry, I'm running late for the meeting." },
-  { en: "Make yourself at home", es: "Estás en tu casa", example: "Come in, make yourself at home." },
-  // Trabajo y negocios
-  { en: "As soon as possible", es: "Lo antes posible", example: "I need this done as soon as possible." },
-  { en: "On the other hand", es: "Por otro lado", example: "On the other hand, it could be a good opportunity." },
-  { en: "Keep in mind that", es: "Ten en cuenta que", example: "Keep in mind that deadlines are tight." },
-  { en: "From my point of view", es: "Desde mi punto de vista", example: "From my point of view, we should wait." },
-  { en: "Let's get started", es: "Empecemos", example: "Alright everyone, let's get started." },
-  { en: "I'm used to", es: "Estoy acostumbrado a", example: "I'm used to waking up early." },
-];
-
-const SITUATIONS = [
-  { name: "Reunión de colegio", description: "Hablar con el profesor de Bosco sobre su progreso", level: "Intermedio" },
-  { name: "Llamada cliente", description: "Presentar propuesta de consultoría en inglés", level: "Avanzado" },
-  { name: "Email formal", description: "Responder a un potencial colaborador", level: "Intermedio" },
-  { name: "Conversación casual", description: "Charla con vecino expatriado", level: "Básico" },
-];
 
 const English = () => {
   
@@ -103,7 +60,7 @@ const English = () => {
   const [roleplayOpen, setRoleplayOpen] = useState(false);
   const [testOpen, setTestOpen] = useState(false);
   const [boscoOpen, setBoscoOpen] = useState(false);
-  const [selectedSituation, setSelectedSituation] = useState(SITUATIONS[0]);
+  const [selectedSituation, setSelectedSituation] = useState({ name: "Reunión de colegio", description: "Hablar con el profesor de Bosco sobre su progreso", level: "Intermedio" });
 
   const markComplete = (id: string) => {
     setPracticeItems(prev => prev.map(item => 
@@ -363,7 +320,7 @@ const English = () => {
                         Hablar con el profesor de Bosco sobre su progreso
                       </p>
                     </div>
-                    <Button className="gap-2" onClick={() => { setSelectedSituation(SITUATIONS[0]); setRoleplayOpen(true); }}>
+                    <Button className="gap-2" onClick={() => { setRoleplayOpen(true); }}>
                       <Mic className="h-4 w-4" />
                       Practicar
                     </Button>
@@ -436,20 +393,26 @@ const English = () => {
                 <CardContent>
                   <ScrollArea className="h-[400px]">
                     <div className="space-y-4">
-                      {CHUNKS.map((chunk, i) => (
-                        <div key={i} className="p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+                      {chunks.length > 0 ? chunks.map((chunk, i) => (
+                        <div key={chunk.id || i} className="p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
-                              <p className="font-medium text-lg">{chunk.en}</p>
-                              <p className="text-muted-foreground">{chunk.es}</p>
-                              <p className="text-sm text-primary mt-2 italic">"{chunk.example}"</p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-lg">{chunk.phrase_en}</p>
+                                {chunk.mastered && <CheckCircle2 className="h-4 w-4 text-success shrink-0" />}
+                              </div>
+                              <p className="text-muted-foreground">{chunk.phrase_es}</p>
                             </div>
                             <Button size="icon" variant="ghost">
                               <Volume2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
-                      ))}
+                      )) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <p>No hay chunks aún. Genera nuevos con el botón de arriba.</p>
+                        </div>
+                      )}
                     </div>
                   </ScrollArea>
                 </CardContent>

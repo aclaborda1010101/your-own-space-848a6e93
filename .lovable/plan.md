@@ -1,40 +1,71 @@
 
 
-## Fix: "no se pudo crear el contacto"
+## Problema real
 
-### Causa real (vista en logs de Postgres)
+Cuando creas un contacto manual con un teléfono, la fila en `people_contacts` se crea aislada: **nada vincula los mensajes de WhatsApp existentes a ese nuevo `contact_id`**.
 
-```
-ERROR: new row for relation "people_contacts" violates check constraint
-"people_contacts_category_check"
-```
+Lo confirmé con queries reales:
+- `contact-analysis` filtra mensajes por `contact_id` exacto (líneas 316 y 926).
+- Hay **34.977 mensajes huérfanos** en `contact_messages` (`contact_id IS NULL`).
+- `Hiva` no tiene `wa_id` → ni los webhooks futuros (`evolution-webhook`, `whatsapp-webhook`) lo encuentran al matchear → seguirá creando otro "pendiente" o atribuyendo al equivocado.
+- Sus mensajes históricos están sin `contact_id` → `contact-analysis` recibe `messages = []` → no genera perfil → ves "pendiente, sin nada".
 
-La tabla `people_contacts` tiene un CHECK constraint que solo permite estas categorías:
+## Solución (3 piezas atómicas)
 
-```
-'profesional' | 'personal' | 'familiar' | 'pendiente'
-```
+### 1. Edge function nueva: `link-contact-history`
 
-En el insert nuevo estaba mandando `category: "manual"` → la base de datos rechaza la fila → toast de error.
+Recibe `{ contact_id, phone }`. Con `service_role`:
 
-### Cambio (1 línea)
+1. **Normaliza** el teléfono: dígitos puros + variantes con/sin prefijo + últimos 9 dígitos (mismo algoritmo que `evolution-webhook`).
+2. **Setea `wa_id`** en `people_contacts` (versión canónica solo dígitos) si está vacío. Asegura que `phone_numbers` contenga las variantes.
+3. **Re-ata mensajes huérfanos**:
+   ```
+   UPDATE contact_messages
+   SET contact_id = $newId
+   WHERE user_id = $uid
+     AND contact_id IS NULL
+     AND (chat_name = $waId
+          OR chat_name LIKE '%' || $last9
+          OR sender LIKE '%' || $last9
+          OR external_id LIKE $waId || '%')
+   ```
+4. **Dispara `contact-analysis`** con `include_historical: true` (fire-and-forget).
 
-**`src/components/contact/AddToNetworkDialog.tsx`** línea 195:
+Devuelve `{ linked_messages: N, profile_refresh: 'queued' }`.
 
-```diff
--  category: "manual",
-+  category: "pendiente",
-```
+### 2. Modificar `AddToNetworkDialog.tsx`
 
-`pendiente` es la categoría correcta para contactos creados manualmente sin clasificar todavía. Más tarde puedes editarla desde la ficha del contacto.
+- Cambiar el `insert` para devolver el `id` (`.select('id').single()`).
+- Tras crear, invocar `link-contact-history` con `contact_id` y teléfono normalizado.
+- Toast con resultado:
+  - `0` → "Contacto creado. Sin historial WhatsApp con ese número."
+  - `N>0` → "Contacto creado. Vinculados N mensajes. Generando perfil…"
 
-### Por qué no fallaba con contactos importados
+### 3. Botón "Buscar historial WhatsApp" en `ContactDetail`
 
-Los flujos de WhatsApp/Mac importan con `category` calculada (profesional/personal/familiar) o sin pasar el campo (entonces aplica el default `'profesional'`). Solo el flujo nuevo de "crear manual" mandaba un valor inválido.
+Llama a la misma función. Sirve para:
+- Arreglar `Hiva` y cualquier otro contacto manual ya creado.
+- Re-intentar si añades el teléfono más tarde.
 
-### Verificación tras aplicar
+## Por qué este enfoque
 
-1. Abrir `/red-estrategica` → botón **Añadir** → "Crear contacto nuevo".
-2. Nombre: `Test Manual`, Teléfono: `+34600111222`.
-3. Debe aparecer el toast verde "Test Manual creado y añadido a tu red" y el contacto en la lista.
+- **No reproceso el dump de WhatsApp completo** (caro). Solo re-ato lo ya indexado en `contact_messages`.
+- **No toco webhooks**: ya hacen matching correcto por `wa_id` y teléfono. Cuando `Hiva` tenga `wa_id` poblado, los mensajes futuros caerán automáticamente.
+- **No toco `contact-analysis`**: ya funciona si `contact_id` está bien atado.
+- UPDATE idempotente filtrado por `user_id` → no contamina datos de otros usuarios. Solo opera sobre `contact_id IS NULL` → nunca roba mensajes ya atribuidos.
+
+## Riesgos
+
+- **Falsos positivos por `LIKE %last9`**: dos teléfonos distintos podrían coincidir en últimos 9 dígitos en países distintos. Aceptable porque solo afecta a huérfanos sin dueño.
+- **Volumen**: un teléfono con 10k mensajes = un solo UPDATE indexado. Sin problema.
+
+## Para Hiva en concreto
+
+Tras desplegar, abres su ficha → "Buscar historial WhatsApp" → ves el contador de mensajes vinculados → en minutos `contact-analysis` regenera el perfil completo con su historial.
+
+## Archivos
+
+- **Crear**: `supabase/functions/link-contact-history/index.ts`
+- **Editar**: `src/components/contact/AddToNetworkDialog.tsx`
+- **Editar**: `src/pages/ContactDetail.tsx` (botón de re-vinculación)
 

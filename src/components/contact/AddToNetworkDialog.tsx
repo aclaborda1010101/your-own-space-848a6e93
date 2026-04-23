@@ -231,7 +231,7 @@ export function AddToNetworkDialog({ open, onOpenChange, excludeIds, onAdded }: 
                   description: "Generando perfil… abriendo ficha.",
                 });
                 onOpenChange(false);
-                navigate(`/contacts/${resolvedId}?refresh=1`);
+                navigate(`/red-estrategica/${resolvedId}?refresh=1`);
               } else {
                 toast.info(`Sin historial WhatsApp para ${cleanName}`, {
                   description: "El contacto está creado y listo para recibir mensajes.",

@@ -283,6 +283,7 @@ async function loadSource(
         if (proj?.name) projectName = proj.name;
       } catch (_e) { /* ignore */ }
       // Stringify output_data — already structured (PRD/scope/audit/etc)
+      // Truncate aggressively: wizard step payloads can be 100KB+ and OOM the worker
       let body = "";
       try {
         body = typeof step.output_data === "string"
@@ -292,6 +293,10 @@ async function loadSource(
         body = String(step.output_data);
       }
       if (!body.trim()) return null;
+      // Hard cap at 60KB to prevent worker resource exhaustion during chunking
+      if (body.length > 60000) {
+        body = body.slice(0, 60000) + "\n\n[...truncado para indexación]";
+      }
       return {
         content: `[Proyecto ${projectName} · Paso ${step.step_number} ${step.step_name || ""}]\n\n${body}`,
         occurred_at: step.updated_at || step.created_at || new Date().toISOString(),

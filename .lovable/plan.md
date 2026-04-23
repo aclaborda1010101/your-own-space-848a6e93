@@ -1,71 +1,72 @@
 
 
-## Problema real
+## Por qué Hiba se ve "vieja" / "nada pendiente"
 
-Cuando creas un contacto manual con un teléfono, la fila en `people_contacts` se crea aislada: **nada vincula los mensajes de WhatsApp existentes a ese nuevo `contact_id`**.
+### Estado real de los datos (verificado en BD)
 
-Lo confirmé con queries reales:
-- `contact-analysis` filtra mensajes por `contact_id` exacto (líneas 316 y 926).
-- Hay **34.977 mensajes huérfanos** en `contact_messages` (`contact_id IS NULL`).
-- `Hiva` no tiene `wa_id` → ni los webhooks futuros (`evolution-webhook`, `whatsapp-webhook`) lo encuentran al matchear → seguirá creando otro "pendiente" o atribuyendo al equivocado.
-- Sus mensajes históricos están sin `contact_id` → `contact-analysis` recibe `messages = []` → no genera perfil → ves "pendiente, sin nada".
+Hay **una sola** Hiba (`4902796c…`) y SÍ tiene todo generado:
 
-## Solución (3 piezas atómicas)
+- `wa_message_count`: **197** mensajes vinculados.
+- `personality_profile`: **17 KB** (perfil completo).
+- `historical_analysis`: 2.4 KB.
+- `contact_headlines.payload` (lo que pinta la pantalla):
+  - **Salud**: 8/10 "Fuerte" 🤝
+  - **Pendiente**: "Reunión de informática y cañas" — 24 abr 2026 — `freshness_status: active`
+  - **Tono**: Colaborativo. Topics: Clases IA 60% / Agenda 25% / Personal 15%.
 
-### 1. Edge function nueva: `link-contact-history`
+Generado el **22 abr 2026 21:08** sobre 197 mensajes. Es decir: el backend ya hizo el trabajo.
 
-Recibe `{ contact_id, phone }`. Con `service_role`:
+### Por qué la UI no lo refleja
 
-1. **Normaliza** el teléfono: dígitos puros + variantes con/sin prefijo + últimos 9 dígitos (mismo algoritmo que `evolution-webhook`).
-2. **Setea `wa_id`** en `people_contacts` (versión canónica solo dígitos) si está vacío. Asegura que `phone_numbers` contenga las variantes.
-3. **Re-ata mensajes huérfanos**:
-   ```
-   UPDATE contact_messages
-   SET contact_id = $newId
-   WHERE user_id = $uid
-     AND contact_id IS NULL
-     AND (chat_name = $waId
-          OR chat_name LIKE '%' || $last9
-          OR sender LIKE '%' || $last9
-          OR external_id LIKE $waId || '%')
-   ```
-4. **Dispara `contact-analysis`** con `include_historical: true` (fire-and-forget).
+El frontend lee desde `useContactHeadlines → get-contact-headlines` y en local pinta lo que devolvió la primera vez. Una vez ejecutado correctamente el `link-contact-history` + `contact-analysis`, el cliente NO se entera porque:
 
-Devuelve `{ linked_messages: N, profile_refresh: 'queued' }`.
+1. `AddToNetworkDialog` invocó `link-contact-history`, pero no refresca la ficha del contacto al volver.
+2. `ContactDetail` solo recarga headlines en el primer `mount`. Si abriste la ficha **antes** de que terminara el análisis, sigues viendo el `payload` viejo (vacío) en memoria + el render cacheado por React.
+3. El service worker (`/sw.js`) cachea `/red-estrategica` y la ficha → tras un análisis backend, recarga normal sigue mostrando lo anterior hasta hard-refresh.
 
-### 2. Modificar `AddToNetworkDialog.tsx`
+### Solución (sin tocar backend, todo está bien en BD)
 
-- Cambiar el `insert` para devolver el `id` (`.select('id').single()`).
-- Tras crear, invocar `link-contact-history` con `contact_id` y teléfono normalizado.
-- Toast con resultado:
-  - `0` → "Contacto creado. Sin historial WhatsApp con ese número."
-  - `N>0` → "Contacto creado. Vinculados N mensajes. Generando perfil…"
+**1. `src/pages/ContactDetail.tsx` — Auto-refresh tras montar la ficha**
 
-### 3. Botón "Buscar historial WhatsApp" en `ContactDetail`
+En el efecto de carga inicial, además de `load()`, **forzar** `refreshHeadlines()` cuando:
+- `wa_message_count > 0` y
+- el `payload.pending.title` está vacío o `freshness_status === 'stale'`
 
-Llama a la misma función. Sirve para:
-- Arreglar `Hiva` y cualquier otro contacto manual ya creado.
-- Re-intentar si añades el teléfono más tarde.
+Pasar `force: true` a `useContactHeadlines` la primera vez por contacto que cumpla esa condición. Garantiza que Hiba (y cualquier contacto recién vinculado) regenere headlines al abrir la ficha.
 
-## Por qué este enfoque
+**2. `src/pages/ContactDetail.tsx` — Realtime sobre `people_contacts`**
 
-- **No reproceso el dump de WhatsApp completo** (caro). Solo re-ato lo ya indexado en `contact_messages`.
-- **No toco webhooks**: ya hacen matching correcto por `wa_id` y teléfono. Cuando `Hiva` tenga `wa_id` poblado, los mensajes futuros caerán automáticamente.
-- **No toco `contact-analysis`**: ya funciona si `contact_id` está bien atado.
-- UPDATE idempotente filtrado por `user_id` → no contamina datos de otros usuarios. Solo opera sobre `contact_id IS NULL` → nunca roba mensajes ya atribuidos.
+Suscribirse a cambios de la fila del contacto (`postgres_changes` en `people_contacts` filtrando por `id`). Cuando cambie `wa_message_count` o `personality_profile`:
+- Llamar `load()` (recarga `personality_profile`, scores, ai_tags).
+- Llamar `refreshHeadlines(true)` para invalidar la cache de headlines.
 
-## Riesgos
+Así, mientras `contact-analysis` esté corriendo en background, la ficha se actualiza sola sin que el usuario tenga que recargar.
 
-- **Falsos positivos por `LIKE %last9`**: dos teléfonos distintos podrían coincidir en últimos 9 dígitos en países distintos. Aceptable porque solo afecta a huérfanos sin dueño.
-- **Volumen**: un teléfono con 10k mensajes = un solo UPDATE indexado. Sin problema.
+**3. `src/components/contact/AddToNetworkDialog.tsx` — Polling tras link**
 
-## Para Hiva en concreto
+Tras `link-contact-history` exitoso con `linked_messages > 0`, navegar a la ficha del contacto resuelto (`target_contact_id` que devuelve la edge function) **con un flag** `?refresh=1`. La ficha lo detecta y dispara `refresh: true` en headlines + `load()`.
 
-Tras desplegar, abres su ficha → "Buscar historial WhatsApp" → ves el contador de mensajes vinculados → en minutos `contact-analysis` regenera el perfil completo con su historial.
+**4. Forzar refresh para Hiba ahora mismo (one-shot, sin código)**
 
-## Archivos
+En la ficha de Hiba pulsa **"Reanalizar perfil"** (botón ya existente, llama a `contact-analysis` con `include_historical:false`). Tras 30-60 s y con el cambio del paso 2 desplegado, verás:
+- Pendiente: "Reunión de informática y cañas — 24 abr"
+- Salud 8/10 Fuerte
+- Topics: Clases IA / Agenda / Personal
 
-- **Crear**: `supabase/functions/link-contact-history/index.ts`
-- **Editar**: `src/components/contact/AddToNetworkDialog.tsx`
-- **Editar**: `src/pages/ContactDetail.tsx` (botón de re-vinculación)
+### Diagnóstico técnico (resumen)
+
+```text
+BD       → Hiba ✅ (197 msgs, profile 17KB, headlines actualizados 22-abr)
+Edge fn  → get-contact-headlines devuelve el payload bueno
+Cliente  → muestra payload obsoleto en memoria, no re-fetch al cambiar
+           wa_message_count en BD → "pantalla vieja"
+```
+
+### Archivos a editar
+
+- `src/pages/ContactDetail.tsx` — auto-refresh inicial condicional + suscripción realtime a `people_contacts`.
+- `src/components/contact/AddToNetworkDialog.tsx` — pasar `?refresh=1` al navegar tras link.
+- `src/hooks/useContactHeadlines.ts` — aceptar trigger externo `forceOnMount` (opcional, parametrizable).
+
+Sin cambios de backend ni migraciones. Todo el problema es de sincronización cliente↔BD.
 

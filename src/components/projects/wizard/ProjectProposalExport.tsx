@@ -163,6 +163,7 @@ export const ProjectProposalExport = ({
 }: ProjectProposalExportProps) => {
   const [generating, setGenerating] = useState(false);
   const [generatingSimple, setGeneratingSimple] = useState(false);
+  const [generatingScope, setGeneratingScope] = useState(false);
   const [selectedModels, setSelectedModels] = useState<number[]>(
     budgetData?.monetization_models?.map((_: any, i: number) => i) || []
   );

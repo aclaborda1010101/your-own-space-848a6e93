@@ -409,6 +409,7 @@ export const ProjectProposalExport = ({
             )}
           </Button>
         </div>
+        </div>
       </div>
     </CollapsibleCard>
   );

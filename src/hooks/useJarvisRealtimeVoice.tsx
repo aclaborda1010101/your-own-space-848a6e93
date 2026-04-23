@@ -313,6 +313,32 @@ export function useJarvisRealtimeVoice(options: UseJarvisRealtimeVoiceOptions = 
     };
   }, [stop]);
 
+  // Resilience: when the tab/app returns to foreground, reset stuck processing
+  // flag and refresh auth session so the next interaction works after a
+  // notification or background suspension.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const onVisibility = async () => {
+      if (document.visibilityState !== 'visible') return;
+      // Reset processing flag if it was left stuck by an aborted call
+      if (isProcessingRef.current && !isRecording && !isSpeaking) {
+        console.log('[JarvisRealtimeVoice] visibility resume — clearing stuck processing flag');
+        isProcessingRef.current = false;
+        updateState('idle');
+      }
+      // Defensive auth refresh
+      try {
+        await supabase.auth.refreshSession();
+      } catch (e) {
+        console.warn('[JarvisRealtimeVoice] visibility refresh failed:', e);
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [isRecording, isSpeaking, updateState]);
+
   return {
     // State
     state,

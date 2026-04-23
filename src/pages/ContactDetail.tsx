@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -82,6 +82,7 @@ interface MsgRow {
 export default function ContactDetail() {
   const { contactId } = useParams<{ contactId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
 
   const [contact, setContact] = useState<Contact | null>(null);
@@ -194,6 +195,56 @@ export default function ContactDetail() {
   useEffect(() => {
     if (!contactId || !user) return;
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contactId, user?.id]);
+
+  // Si venimos de "vincular historial" (?refresh=1) o si los headlines cargaron
+  // vacíos pero el contacto YA tiene mensajes, forzamos un refresh para no
+  // mostrar la "pantalla vieja".
+  const headlinesForcedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!contactId || !user || hLoading) return;
+    if (headlinesForcedFor.current === contactId) return;
+
+    const cameFromLink = searchParams.get("refresh") === "1";
+    const hasMessagesButEmptyPending =
+      (contact?.wa_message_count ?? 0) > 0 &&
+      (!headlines?.pending?.title || headlines.pending.title.trim() === "");
+
+    if (cameFromLink || hasMessagesButEmptyPending) {
+      headlinesForcedFor.current = contactId;
+      void refreshHeadlines();
+      if (cameFromLink) {
+        // limpiar el flag de la URL
+        const next = new URLSearchParams(searchParams);
+        next.delete("refresh");
+        setSearchParams(next, { replace: true });
+      }
+    }
+  }, [contactId, user, hLoading, headlines, contact?.wa_message_count, searchParams, setSearchParams, refreshHeadlines]);
+
+  // Realtime: si contact-analysis termina en background, recargar la ficha sola
+  useEffect(() => {
+    if (!contactId || !user) return;
+    const channel = supabase
+      .channel(`contact-detail-${contactId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "people_contacts",
+          filter: `id=eq.${contactId}`,
+        },
+        () => {
+          void load();
+          void refreshHeadlines();
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contactId, user?.id]);
 

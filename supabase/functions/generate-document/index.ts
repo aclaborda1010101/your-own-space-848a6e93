@@ -2171,10 +2171,11 @@ serve(async (req: Request) => {
     }
     // ══════════════════════════════════════════════════════════════════════
     // Step 102: Documento de Alcance Profesional para Cliente (≤15 págs)
-    //   - Capas funcionales con tareas clasificadas por complejidad
-    //   - Stack de IA por tipo (texto, voz, imagen, vídeo, OCR, RAG…)
-    //   - Estimación de coste mensual de IA por servicio
-    //   - Fases + Gantt + Inversión
+    //   Pipeline 3 pasadas:
+    //     A) Inventario exhaustivo del PRD entero por chunks (40-80 ítems)
+    //     B) Agrupación en 5-8 áreas funcionales con complejidad
+    //     C) Fotografía cliente + solución narrativa + consumos IA
+    //   Sin nombres de modelos. Áreas reales, no genéricas.
     // ══════════════════════════════════════════════════════════════════════
     else if (stepNumber === 102 && typeof processedContent === "object" && processedContent !== null) {
       const proposal = processedContent as any;
@@ -2182,59 +2183,149 @@ serve(async (req: Request) => {
 
       const rawScope = typeof proposal.scope === "string" ? proposal.scope : "";
       const rawTech = typeof proposal.techSummary === "string" ? proposal.techSummary : "";
+      const rawPrdFull = typeof proposal.prdFullRaw === "string" ? proposal.prdFullRaw : rawTech;
       const rawAi = proposal.aiOpportunities ? JSON.stringify(proposal.aiOpportunities).slice(0, 8000) : "";
+      const briefingObj = proposal.briefing && typeof proposal.briefing === "object" ? proposal.briefing : null;
+      const briefingRaw = briefingObj ? JSON.stringify(briefingObj).slice(0, 16000) : "";
 
-      // Build a single LLM call to extract structured data
+      // ───────────────────────────────────────────────────────────────
+      // PASADA A — Inventario exhaustivo de funcionalidades
+      // Trocea el PRD en chunks ≤25k chars con solapamiento.
+      // ───────────────────────────────────────────────────────────────
+      const chunkText = (text: string, size = 25000, overlap = 1500): string[] => {
+        if (!text) return [];
+        if (text.length <= size) return [text];
+        const out: string[] = [];
+        let start = 0;
+        while (start < text.length) {
+          out.push(text.slice(start, start + size));
+          start += (size - overlap);
+        }
+        return out;
+      };
+
+      const prdChunks = chunkText(rawPrdFull + "\n\n=== ALCANCE ===\n" + rawScope, 25000, 1500);
+      const inventoryItems: Array<{ name: string; description: string; raw_quote?: string }> = [];
+
+      const inventorySystem = `Eres un consultor que extrae el inventario funcional COMPLETO de un proyecto software.
+Tu misión: NO RESUMIR, NO AGRUPAR, NO FILTRAR. Extrae cada módulo, funcionalidad, capacidad, agente, integración, automatización, scraping, llamada, seguimiento, reporting, dashboard, alerta o flujo que aparezca en el texto.
+Devuelves SOLO JSON estricto, sin markdown.
+NO uses jerga técnica (nada de SQL, Edge Function, Supabase, RLS, hooks, schemas, "Lovable", endpoints, triggers, tablas).`;
+
+      for (let ci = 0; ci < Math.min(prdChunks.length, 8); ci++) {
+        const chunk = prdChunks[ci];
+        const userPrompt = `Extrae TODAS las funcionalidades, módulos y capacidades que aparecen en este fragmento ${ci + 1}/${prdChunks.length} del proyecto.
+
+Devuelve JSON con esta estructura EXACTA:
+{
+  "items": [
+    { "name": "Nombre breve y comercial (3-7 palabras)", "description": "1-2 frases describiendo qué hace en lenguaje de negocio" }
+  ]
+}
+
+REGLAS:
+- Extrae TODO lo que sea una funcionalidad real para el usuario final (entre 8 y 25 ítems por fragmento).
+- Incluye scraping, monitorización externa, llamadas, conversación comercial, detección temprana, seguimiento, integraciones, dashboards, alertas, automatizaciones, perfiles, reporting…
+- NO inventes nada que no esté en el texto.
+- NO incluyas tareas técnicas internas (esquemas, migraciones, hooks, triggers).
+- Si una funcionalidad ya la mencionaste en otro fragmento, repítela igual (luego deduplico).
+
+FRAGMENTO:
+${chunk}
+
+Devuelve SOLO el JSON.`;
+
+        try {
+          const raw = await callLovableAI(inventorySystem, userPrompt, { model: "gemini-pro", maxTokens: 6000 });
+          const parsed = parseAIJson(raw);
+          if (parsed && Array.isArray(parsed.items)) {
+            for (const it of parsed.items) {
+              if (it && typeof it.name === "string" && it.name.trim()) {
+                inventoryItems.push({
+                  name: String(it.name).trim().slice(0, 120),
+                  description: String(it.description || "").trim().slice(0, 400),
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.error(`[step 102] inventory chunk ${ci} failed:`, e);
+        }
+      }
+
+      // Deduplicación simple por nombre normalizado
+      const seenNames = new Set<string>();
+      const uniqueInventory = inventoryItems.filter(it => {
+        const key = it.name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim().slice(0, 60);
+        if (seenNames.has(key)) return false;
+        seenNames.add(key);
+        return true;
+      }).slice(0, 80);
+
+      console.log(`[step 102] inventory extracted: ${inventoryItems.length} raw → ${uniqueInventory.length} unique`);
+
+      // ───────────────────────────────────────────────────────────────
+      // PASADA B — Agrupación en áreas + fotografía cliente + solución + consumos
+      // Una sola llamada con TODO el contexto consolidado.
+      // ───────────────────────────────────────────────────────────────
       const ratesCatalog = Object.entries(AI_RATES)
         .map(([k, v]) => `${k}: ${v.label} — input $${v.inputPerMillion}/M tok, output $${v.outputPerMillion}/M tok`)
         .join("\n");
 
-      const systemPrompt = `Eres un consultor senior que estructura propuestas de proyectos software con IA para entregar al CLIENTE final.
-Tu salida es JSON ESTRICTO, sin markdown, sin texto fuera del JSON.
-NO uses jerga técnica (NUNCA menciones SQL, Edge Function, Supabase, RLS, Deno, hooks, schemas, migrations, "Lovable", endpoints, triggers, ni nombres de tablas).
-Hablas en español, tono profesional pero claro.`;
+      const synthSystem = `Eres un consultor senior que prepara un Documento de Alcance funcional para entregar al CLIENTE final.
+El cliente conoce algo de IA pero no es técnico. Habla con claridad, en español, profesional.
+NUNCA mencionas modelos concretos (NO digas Claude, GPT, Gemini, Sonnet, Whisper, etc.). Habla por FUNCIÓN ("Análisis conversacional con LLM", "Transcripción de voz", "Lectura de documentos", "Generación de respuestas").
+NUNCA usas jerga técnica de implementación (NO SQL, NO Edge Function, NO Supabase, NO RLS, NO hooks, NO schemas, NO "Lovable", NO endpoints, NO triggers, NO tablas).
+Devuelves SOLO JSON estricto, sin markdown.`;
 
-      const userPrompt = `Analiza el alcance, PRD simplificado y oportunidades de IA del proyecto y devuelve un JSON con esta estructura EXACTA:
+      const synthUser = `Tienes el inventario funcional COMPLETO del proyecto (extraído del PRD), el briefing inicial del cliente y las oportunidades de IA detectadas.
+
+Construye un JSON con esta estructura EXACTA:
 
 {
-  "executive_summary": "Párrafo de 4-6 líneas describiendo qué resuelve el proyecto, para quién y el valor diferencial. Sin tecnicismos.",
-  "solution_description": "Descripción narrativa de 8-12 líneas de la solución completa, qué hará el sistema desde el punto de vista del usuario. Sin tecnicismos.",
-  "layers": [
+  "client_snapshot": {
+    "context": "2-4 frases describiendo el contexto y situación actual del cliente (lo que tiene hoy, dónde opera, qué hace).",
+    "current_pain": ["3-5 dolores o problemas concretos que el cliente tiene HOY (frases cortas, en su lenguaje)"],
+    "what_they_have": ["2-4 cosas que ya tienen y NO les funcionan bien o se quedan cortas"],
+    "what_they_need": "1-2 frases sintetizando qué necesitan resolver y por qué ahora."
+  },
+  "solution_narrative": "8-12 líneas describiendo CÓMO lo vamos a resolver: 'Una aplicación que hace esto, esto, esto…'. Detalle funcional real, no marketing vacío. Menciona explícitamente las grandes piezas: captación, scraping, llamadas, seguimiento, inteligencia, etc. NO tecnicismos.",
+  "areas": [
     {
-      "name": "Nombre de la capa funcional (ej: 'Captación y entrada de datos', 'Inteligencia y decisión', 'Operación diaria', 'Integraciones externas')",
-      "description": "1-2 líneas explicando el propósito de la capa",
+      "name": "Nombre del área de trabajo (ej: 'Captación de oportunidades', 'Monitorización externa y scraping', 'Llamada y conversación comercial', 'Cualificación e inteligencia de leads', 'Seguimiento y nurturing', 'Operación interna', 'Integraciones', 'Reporting y dashboards')",
+      "description": "1-2 líneas explicando el propósito del área en términos de negocio.",
       "tasks": [
-        { "name": "Nombre breve y comercial de la tarea/módulo", "description": "1-2 líneas de qué hace, en lenguaje de negocio", "complexity": "simple" | "media" | "compleja" }
+        { "name": "Nombre comercial breve", "description": "1-2 líneas funcionales", "complexity": "simple" | "media" | "compleja" }
       ]
     }
   ],
-  "ai_stack": [
-    { "type": "Texto/LLM" | "Voz (STT/TTS)" | "Visión/OCR" | "Imagen generativa" | "Vídeo" | "Embeddings/RAG", "name": "nombre comercial", "model_key": "una clave del catálogo de tarifas si aplica, o null", "usage": "Para qué se usa exactamente en este proyecto, 1 línea", "criticality": "alta" | "media" | "baja" }
-  ],
   "ai_monthly_estimate": [
-    { "service": "nombre comercial del servicio (ej: 'Análisis de mensajes WhatsApp con LLM')", "model_key": "clave del catálogo de tarifas", "estimated_volume": "ej: '50.000 tokens entrada + 15.000 salida por día' o '500 minutos audio/mes'", "monthly_cost_eur_low": número, "monthly_cost_eur_expected": número, "monthly_cost_eur_high": número }
+    { "service": "Nombre POR FUNCIÓN (ej: 'Análisis conversacional con LLM', 'Transcripción de llamadas a texto', 'Lectura de documentos PDF', 'Generación de respuestas comerciales', 'Embeddings para búsqueda semántica', 'Visión / OCR de documentos', 'Generación de imagen', 'Generación de vídeo')", "model_key": "una clave del catálogo de tarifas para el cálculo (gemini-pro, gemini-flash, claude-sonnet, gpt-5, whisper, embeddings, gemini-vision…)", "estimated_volume": "Volumen mensual realista en lenguaje del cliente (ej: '~3.000 conversaciones/mes', '~500 minutos de audio/mes', '~10.000 documentos/mes')", "monthly_cost_eur_low": número, "monthly_cost_eur_expected": número, "monthly_cost_eur_high": número }
   ],
   "milestones": [
-    { "phase_name": "Coincide con una fase del presupuesto", "deliverables": ["entregable 1", "entregable 2"] }
+    { "phase_name": "Coincide con una fase del presupuesto", "deliverables": ["entregable visible para el cliente 1", "entregable 2"] }
   ]
 }
 
 REGLAS DURAS:
-- Devuelve entre 3 y 6 capas. Cada capa entre 3 y 8 tareas. Total tareas ≤ 30.
-- Clasifica complejidad realista (no todo "compleja").
-- ai_stack: máximo 10 IAs, agrupa por tipo, prioriza las realmente usadas.
-- ai_monthly_estimate: máximo 8 servicios. Calcula coste en EUR mensual usando este catálogo de tarifas (USD/M tok ≈ EUR para simplificar):
+- "areas": entre 5 y 8 áreas. Cada una entre 4 y 8 tareas. Total tareas entre 25 y 50. Asigna complejidad realista (mezcla simple/media/compleja, no todo "compleja").
+- Las áreas se construyen REORGANIZANDO el inventario funcional que te paso (no inventes áreas que no estén respaldadas).
+- Si el inventario menciona scraping, llamadas, seguimiento, monitorización externa, etc. → tienen que aparecer como áreas o tareas explícitas.
+- "ai_monthly_estimate": máximo 8 entradas. Agrupadas POR FUNCIÓN, no por modelo. Calcula coste mensual EUR usando este catálogo (USD/M tok ≈ EUR para simplificar):
 ${ratesCatalog}
-- Si no hay datos suficientes para una sección, devuelve array vacío. NO inventes capas técnicas tipo "base de datos" o "backend".
-- milestones: una entrada por cada fase del presupuesto, con 2-4 entregables visibles para el cliente.
+- "milestones": una entrada por cada fase del presupuesto con 2-4 entregables visibles para el cliente.
+- "client_snapshot": si el briefing es vacío o nulo, infiere del PRD/alcance. Si no hay datos suficientes, deja arrays vacíos (no inventes).
 
-CONTEXTO DEL PROYECTO:
+══════ CONTEXTO ══════
 
-== ALCANCE ==
-${rawScope.slice(0, 12000)}
+== INVENTARIO FUNCIONAL COMPLETO (${uniqueInventory.length} ítems extraídos del PRD) ==
+${uniqueInventory.map((it, i) => `${i + 1}. ${it.name}${it.description ? ` — ${it.description}` : ""}`).join("\n")}
 
-== RESUMEN TÉCNICO (PRD simplificado) ==
-${rawTech.slice(0, 10000)}
+== BRIEFING DEL CLIENTE (paso 2 del wizard) ==
+${briefingRaw || "(sin briefing estructurado, infiere del alcance)"}
+
+== ALCANCE (paso 3) ==
+${rawScope.slice(0, 10000)}
 
 == OPORTUNIDADES DE IA DETECTADAS ==
 ${rawAi}
@@ -2246,61 +2337,73 @@ Devuelve SOLO el JSON.`;
 
       let structured: any = null;
       try {
-        const aiRaw = await callLovableAI(systemPrompt, userPrompt, { model: "gemini-pro", maxTokens: 9000 });
+        const aiRaw = await callLovableAI(synthSystem, synthUser, { model: "gemini-pro", maxTokens: 12000 });
         structured = parseAIJson(aiRaw);
       } catch (e) {
-        console.error("[step 102] AI structuring failed:", e);
+        console.error("[step 102] synthesis pass failed:", e);
       }
 
-      // Fallback structure if AI fails
       if (!structured || typeof structured !== "object") {
         structured = {
-          executive_summary: "",
-          solution_description: "",
-          layers: [],
-          ai_stack: [],
+          client_snapshot: { context: "", current_pain: [], what_they_have: [], what_they_need: "" },
+          solution_narrative: "",
+          areas: [],
           ai_monthly_estimate: [],
           milestones: [],
         };
       }
 
-      // ── Render ──
+      // ───────────────────────────────────────────────────────────────
+      // RENDER
+      // ───────────────────────────────────────────────────────────────
       parts.push(`<h1>Documento de Alcance</h1>`);
       parts.push(`<p style="font-size:10pt;color:#6B7280;margin-bottom:20px;">Documento preparado para <strong>${escHtml(company || projectName || "el cliente")}</strong> — ${new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}</p>`);
 
-      // 1. Resumen ejecutivo
-      parts.push(`<h1>1. Resumen Ejecutivo</h1>`);
-      if (structured.executive_summary) {
-        parts.push(`<p>${escHtml(structured.executive_summary)}</p>`);
-      } else {
-        parts.push(`<p>${escHtml(sanitizeTextForClient(rawScope.split("\n").slice(0, 6).join(" ")).slice(0, 600))}</p>`);
+      // 1. Fotografía inicial del cliente
+      parts.push(`<h1>1. Fotografía inicial del cliente</h1>`);
+      const snap = structured.client_snapshot || {};
+      if (snap.context) {
+        parts.push(`<h2>Contexto y situación actual</h2>`);
+        parts.push(`<p>${escHtml(snap.context)}</p>`);
+      }
+      if (Array.isArray(snap.current_pain) && snap.current_pain.length) {
+        parts.push(`<h2>Dolores y problemas detectados</h2>`);
+        parts.push(`<ul>${snap.current_pain.slice(0, 6).map((p: string) => `<li>${escHtml(String(p))}</li>`).join("")}</ul>`);
+      }
+      if (Array.isArray(snap.what_they_have) && snap.what_they_have.length) {
+        parts.push(`<h2>Qué tienen hoy y se queda corto</h2>`);
+        parts.push(`<ul>${snap.what_they_have.slice(0, 5).map((p: string) => `<li>${escHtml(String(p))}</li>`).join("")}</ul>`);
+      }
+      if (snap.what_they_need) {
+        parts.push(`<h2>Qué necesitan resolver</h2>`);
+        parts.push(`<p>${escHtml(snap.what_they_need)}</p>`);
       }
 
-      // 2. Descripción de la solución
-      parts.push(`<h1>2. Descripción de la Solución</h1>`);
-      if (structured.solution_description) {
-        parts.push(`<p>${escHtml(structured.solution_description)}</p>`);
+      // 2. Cómo lo vamos a resolver
+      parts.push(`<h1>2. Cómo lo vamos a resolver</h1>`);
+      if (structured.solution_narrative) {
+        parts.push(`<p>${escHtml(structured.solution_narrative)}</p>`);
       }
 
-      // 3. Alcance por capas
-      parts.push(`<h1>3. Alcance del Proyecto por Capas</h1>`);
-      parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin-bottom:12px;">El alcance se organiza en capas funcionales. Cada tarea se clasifica por complejidad: <span style="background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:8px;font-size:8.5pt;">Simple</span> <span style="background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:8px;font-size:8.5pt;">Media</span> <span style="background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:8px;font-size:8.5pt;">Compleja</span></p>`);
+      // 3. Áreas de trabajo
+      parts.push(`<h1>3. Áreas de trabajo</h1>`);
+      parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin-bottom:12px;">El alcance se organiza en áreas funcionales. Cada tarea se clasifica por complejidad: <span style="background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:8px;font-size:8.5pt;">Simple</span> <span style="background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:8px;font-size:8.5pt;">Media</span> <span style="background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:8px;font-size:8.5pt;">Compleja</span></p>`);
 
-      const layers = Array.isArray(structured.layers) ? structured.layers.slice(0, 6) : [];
+      const areas = Array.isArray(structured.areas) ? structured.areas.slice(0, 8) : [];
       const complexityBadge = (c: string) => {
         const cl = (c || "").toLowerCase();
         if (cl.includes("simple")) return `<span style="background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:8px;font-size:8pt;font-weight:600;">SIMPLE</span>`;
         if (cl.includes("compleja") || cl.includes("complex")) return `<span style="background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:8px;font-size:8pt;font-weight:600;">COMPLEJA</span>`;
         return `<span style="background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:8px;font-size:8pt;font-weight:600;">MEDIA</span>`;
       };
-      for (let li = 0; li < layers.length; li++) {
-        const layer = layers[li];
+      for (let ai = 0; ai < areas.length; ai++) {
+        const area = areas[ai];
         parts.push(`<div class="opp-card" style="margin-bottom:14px;page-break-inside:avoid;">`);
-        parts.push(`<h3 style="margin-bottom:4px;">Capa ${li + 1}: ${escHtml(layer.name || "")}</h3>`);
-        if (layer.description) {
-          parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin:0 0 10px;">${escHtml(layer.description)}</p>`);
+        parts.push(`<h3 style="margin-bottom:4px;">Área ${ai + 1}: ${escHtml(area.name || "")}</h3>`);
+        if (area.description) {
+          parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin:0 0 10px;">${escHtml(area.description)}</p>`);
         }
-        const tasks = Array.isArray(layer.tasks) ? layer.tasks.slice(0, 8) : [];
+        const tasks = Array.isArray(area.tasks) ? area.tasks.slice(0, 8) : [];
         if (tasks.length) {
           parts.push(`<table style="margin-top:6px;"><tr><th style="width:38%;">Tarea / Módulo</th><th>Descripción</th><th style="width:80px;text-align:center;">Complejidad</th></tr>`);
           for (const t of tasks) {
@@ -2311,26 +2414,12 @@ Devuelve SOLO el JSON.`;
         parts.push(`</div>`);
       }
 
-      // 4. Stack de IA
-      const aiStack = Array.isArray(structured.ai_stack) ? structured.ai_stack.slice(0, 10) : [];
-      if (aiStack.length) {
-        parts.push(`<h1>4. Stack de Inteligencia Artificial</h1>`);
-        parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin-bottom:10px;">Modelos y servicios de IA utilizados en el proyecto, agrupados por tipo de capacidad.</p>`);
-        parts.push(`<table><tr><th>Tipo</th><th>Modelo / Servicio</th><th>Uso en el proyecto</th><th style="width:70px;text-align:center;">Criticidad</th></tr>`);
-        for (const ai of aiStack) {
-          const crit = (ai.criticality || "").toLowerCase();
-          const critColor = crit.includes("alta") ? "#DC2626" : crit.includes("baja") ? "#6B7280" : "#D97706";
-          parts.push(`<tr><td><strong style="font-size:9pt;">${escHtml(ai.type || "")}</strong></td><td style="font-size:9pt;">${escHtml(ai.name || "")}</td><td style="font-size:9pt;">${escHtml(ai.usage || "")}</td><td style="text-align:center;font-size:8.5pt;color:${critColor};font-weight:600;text-transform:uppercase;">${escHtml(ai.criticality || "media")}</td></tr>`);
-        }
-        parts.push(`</table>`);
-      }
-
-      // 5. Coste mensual de IA
+      // 4. Consumos previstos de IA (sin nombres de modelo)
       const aiCosts = Array.isArray(structured.ai_monthly_estimate) ? structured.ai_monthly_estimate.slice(0, 8) : [];
       if (aiCosts.length) {
-        parts.push(`<h1>5. Coste Operativo Mensual Estimado de IA</h1>`);
-        parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin-bottom:10px;">Estimación de coste mensual por consumo de servicios de IA en producción. Se ofrece un rango (escenario bajo / esperado / alto) en función del volumen real de uso.</p>`);
-        parts.push(`<table><tr><th>Servicio de IA</th><th>Volumen estimado</th><th style="text-align:right;width:70px;">Bajo</th><th style="text-align:right;width:80px;">Esperado</th><th style="text-align:right;width:70px;">Alto</th></tr>`);
+        parts.push(`<h1>4. Consumos mensuales previstos de IA</h1>`);
+        parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin-bottom:10px;">Estimación de coste mensual por consumo de servicios de IA en producción, agrupado por función. Se ofrece un rango (escenario bajo / esperado / alto) en función del volumen real de uso.</p>`);
+        parts.push(`<table><tr><th>Función / Servicio</th><th>Volumen mensual estimado</th><th style="text-align:right;width:70px;">Bajo</th><th style="text-align:right;width:80px;">Esperado</th><th style="text-align:right;width:70px;">Alto</th></tr>`);
         let totalLow = 0, totalExp = 0, totalHigh = 0;
         for (const c of aiCosts) {
           const low = Number(c.monthly_cost_eur_low) || 0;
@@ -2344,9 +2433,9 @@ Devuelve SOLO el JSON.`;
         parts.push(`<p style="font-size:8.5pt;color:#9CA3AF;font-style:italic;margin-top:6px;">Estimación basada en tarifas públicas de los proveedores. El coste real depende del volumen efectivo de uso y puede variar en producción.</p>`);
       }
 
-      // 6. Planificación temporal — fases con Gantt
+      // 5. Planificación temporal — fases con Gantt
       if (proposal.budget?.development?.phases?.length) {
-        parts.push(`<h1>6. Planificación e Implementación</h1>`);
+        parts.push(`<h1>5. Planificación e implementación</h1>`);
         const phases = proposal.budget.development.phases;
         const milestones = Array.isArray(structured.milestones) ? structured.milestones : [];
         const getPhaseWeeks = (p: any): number => {
@@ -2377,7 +2466,7 @@ Devuelve SOLO el JSON.`;
         }
 
         // Gantt
-        parts.push(`<h2>Cronograma Visual</h2>`);
+        parts.push(`<h2>Cronograma visual</h2>`);
         parts.push(`<div style="margin:16px 0;">`);
         let cumulativeWeeks = 0;
         const colors = ["#0D9488", "#0891B2", "#7C3AED", "#DB2777", "#EA580C", "#059669"];
@@ -2401,8 +2490,8 @@ Devuelve SOLO el JSON.`;
         parts.push(`</div>`);
       }
 
-      // 7. Inversión
-      parts.push(`<h1>7. Inversión</h1>`);
+      // 6. Inversión
+      parts.push(`<h1>6. Inversión</h1>`);
       if (proposal.budget?.development) {
         const dev = proposal.budget.development;
         if (dev.total_development_eur != null) {
@@ -2421,7 +2510,7 @@ Devuelve SOLO el JSON.`;
         const rec = proposal.budget.recurring_monthly;
         const totalMonthly = rec.total_monthly_eur ?? 0;
         if (totalMonthly > 0) {
-          parts.push(`<h2>Costes Recurrentes Mensuales</h2>`);
+          parts.push(`<h2>Costes recurrentes mensuales</h2>`);
           if (rec.items?.length) {
             parts.push(`<table><tr><th>Concepto</th><th style="text-align:right;width:120px;">Coste (€/mes)</th></tr>`);
             for (const item of rec.items) {
@@ -2434,7 +2523,7 @@ Devuelve SOLO el JSON.`;
       }
 
       if (proposal.budget?.monetization_models?.length) {
-        parts.push(`<h2>Opciones Comerciales</h2>`);
+        parts.push(`<h2>Opciones comerciales</h2>`);
         for (const model of proposal.budget.monetization_models) {
           parts.push(`<div class="opp-card" style="page-break-inside:avoid;">`);
           parts.push(`<h4>${escHtml(model.name)}</h4>`);
@@ -2462,8 +2551,8 @@ Devuelve SOLO el JSON.`;
         }
       }
 
-      // 8. Condiciones y próximos pasos
-      parts.push(`<h1>8. Condiciones y Próximos Pasos</h1>`);
+      // 7. Condiciones y próximos pasos
+      parts.push(`<h1>7. Condiciones y próximos pasos</h1>`);
       parts.push(`<ul>`);
       parts.push(`<li>Los precios indicados no incluyen IVA.</li>`);
       parts.push(`<li>La propuesta tiene una validez de 30 días naturales.</li>`);

@@ -332,9 +332,10 @@ export const ProjectProposalExport = ({
       <div className="p-4 space-y-4">
         <p className="text-xs text-muted-foreground">
           Genera documentos PDF profesionales para enviar al cliente: el <strong>Documento de Alcance</strong> (≤15 págs)
-          incluye descripción, capas con tareas clasificadas por complejidad, stack de IA, coste mensual estimado de IA,
-          fases con cronograma e inversión. La <strong>Propuesta Comercial</strong> es una versión más breve (≤10 págs)
-          y la <strong>Propuesta Completa</strong> incluye toda la información técnica.
+          incluye la fotografía inicial del cliente, cómo lo vamos a resolver, áreas de trabajo con tareas
+          clasificadas por complejidad, consumos mensuales estimados de IA, planificación temporal e inversión.
+          La <strong>Propuesta Comercial</strong> es una versión más breve (≤10 págs) y la <strong>Propuesta
+          Completa</strong> incluye toda la información técnica.
         </p>
 
         {models.length > 0 && (

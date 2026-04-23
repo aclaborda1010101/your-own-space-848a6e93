@@ -11850,6 +11850,15 @@ export type Database = {
         }
         Returns: undefined
       }
+      enqueue_history_ingest_job: {
+        Args: {
+          p_source_id: string
+          p_source_table: string
+          p_source_type: string
+          p_user_id: string
+        }
+        Returns: undefined
+      }
       enqueue_taxonomy_batches_for_rag: {
         Args: { p_batch_size?: number; p_rag_id: string }
         Returns: number
@@ -12151,6 +12160,14 @@ export type Database = {
           tags: string[]
         }[]
       }
+      search_projects_fuzzy: {
+        Args: { p_limit?: number; p_search_term: string; p_user_id: string }
+        Returns: {
+          id: string
+          name: string
+          score: number
+        }[]
+      }
       search_rag_chunks: {
         Args: {
           match_count?: number
@@ -12242,6 +12259,7 @@ export type Database = {
         | "manual"
         | "plaud"
         | "telegram"
+        | "project"
       node_status: "online" | "offline" | "busy" | "maintenance" | "critical"
       priority_level: "P0" | "P1" | "P2"
       project_format: "series" | "mini" | "film" | "short" | "ad" | "comic"
@@ -12401,6 +12419,7 @@ export const Constants = {
         "manual",
         "plaud",
         "telegram",
+        "project",
       ],
       node_status: ["online", "offline", "busy", "maintenance", "critical"],
       priority_level: ["P0", "P1", "P2"],

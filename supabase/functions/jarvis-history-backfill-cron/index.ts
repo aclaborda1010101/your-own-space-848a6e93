@@ -16,7 +16,7 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 
-const SOURCE_ROTATION = ["whatsapp", "email", "transcription", "plaud"];
+const SOURCE_ROTATION = ["whatsapp", "email", "transcription", "plaud", "project", "contact_note"];
 
 async function callIngest(body: Record<string, unknown>): Promise<any> {
   const r = await fetch(`${SUPABASE_URL}/functions/v1/jarvis-history-ingest`, {

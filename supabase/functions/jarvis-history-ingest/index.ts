@@ -477,6 +477,24 @@ async function backfill(source_type: string, user_id: string, batch_size: number
       .order("created_at", { ascending: false })
       .limit(batch_size * 3);
     candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "plaud_transcriptions" }));
+  } else if (source_type === "project") {
+    const { data } = await sb
+      .from("project_wizard_steps")
+      .select("id, updated_at, user_id")
+      .eq("user_id", user_id)
+      .not("output_data", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(batch_size * 3);
+    candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "project_wizard_steps" }));
+  } else if (source_type === "contact_note") {
+    const { data } = await sb
+      .from("people_contacts")
+      .select("id, updated_at")
+      .eq("user_id", user_id)
+      .not("context", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(batch_size * 3);
+    candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "people_contacts" }));
   }
 
   // Filter out already-ingested

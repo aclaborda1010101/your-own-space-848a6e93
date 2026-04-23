@@ -517,7 +517,7 @@ async function backfill(source_type: string, user_id: string, batch_size: number
 
   let totalInserted = 0;
   let totalSkipped = 0;
-  const concurrency = source_type === "whatsapp" ? 8 : 3;
+  const concurrency = source_type === "whatsapp" ? 8 : source_type === "project" ? 1 : 3;
   for (let i = 0; i < todo.length; i += concurrency) {
     const results = await Promise.all(todo.slice(i, i + concurrency).map((c) => ingestOne({
       user_id,

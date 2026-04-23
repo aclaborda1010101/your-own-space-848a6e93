@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
 import { buildAgentPrompt } from "../_shared/rag-loader.ts";
 import { JARVIS_ORCHESTRATION_RULES } from "../_shared/jarvis-orchestration-rules.ts";
+import { resolveEntities } from "../_shared/entity-resolver.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -97,6 +98,7 @@ async function getSemanticHistory(
   supabase: any,
   userId: string,
   message: string,
+  peopleIds: string[] = [],
 ): Promise<string> {
   const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
   if (!OPENAI_API_KEY) return "";
@@ -120,13 +122,27 @@ async function getSemanticHistory(
     const embedding = embJson.data?.[0]?.embedding;
     if (!embedding) return "";
 
-    // 2) Hybrid search
-    const { data: hits } = await supabase.rpc("search_history_hybrid", {
-      p_user_id: userId,
-      query_embedding: embedding,
-      query_text: message.slice(0, 500),
-      match_count: 8,
-    });
+    // 2) Hybrid search — first filtered by resolved people, fallback to global
+    let hits: any[] = [];
+    if (peopleIds.length > 0) {
+      const { data } = await supabase.rpc("search_history_hybrid", {
+        p_user_id: userId,
+        query_embedding: embedding,
+        query_text: message.slice(0, 500),
+        p_people: peopleIds,
+        match_count: 8,
+      });
+      hits = data || [];
+    }
+    if (hits.length === 0) {
+      const { data } = await supabase.rpc("search_history_hybrid", {
+        p_user_id: userId,
+        query_embedding: embedding,
+        query_text: message.slice(0, 500),
+        match_count: 8,
+      });
+      hits = data || [];
+    }
 
     if (!hits || hits.length === 0) return "";
 
@@ -213,11 +229,14 @@ serve(async (req) => {
 
     console.log(`[Gateway] ${platform} message from ${user_id}: ${message.substring(0, 80)}...`);
 
-    // Fetch context in parallel (now includes semantic history retrieval)
+    // Resolve entities (contacts/projects) mentioned in the message
+    const entityResolution = await resolveEntities(supabase, user_id, message);
+
+    // Fetch context in parallel — semantic history filtered by resolved people when possible
     const [context, recentHistory, semanticHistory] = await Promise.all([
       getUserContext(supabase, user_id),
       conversation_history ? Promise.resolve([]) : getRecentHistory(supabase, user_id, platform),
-      getSemanticHistory(supabase, user_id, message),
+      getSemanticHistory(supabase, user_id, message, entityResolution.peopleIds),
     ]);
 
     // Detect specialist
@@ -246,6 +265,11 @@ serve(async (req) => {
 
     if (context.memories.length > 0) {
       contextStr += `\n🧠 MEMORIAS: ${context.memories.map((m: { content: string }) => m.content).join(" | ")}`;
+    }
+
+    // Inject resolved entities (contacts/projects) so the LLM uses concrete ids
+    if (entityResolution.promptBlock) {
+      contextStr += entityResolution.promptBlock;
     }
 
     // Inject semantic history retrieval (the actual game-changer)

@@ -265,6 +265,82 @@ async function loadSource(
         user_id: m.user_id,
       };
     }
+    case "project_wizard_steps": {
+      const { data: step } = await sb
+        .from("project_wizard_steps")
+        .select("id, project_id, step_number, step_name, output_data, user_id, created_at, updated_at")
+        .eq("id", source_id)
+        .single();
+      if (!step || !step.output_data) return null;
+      // Look up project name for context
+      let projectName = "proyecto";
+      try {
+        const { data: proj } = await sb
+          .from("business_projects")
+          .select("name")
+          .eq("id", step.project_id)
+          .maybeSingle();
+        if (proj?.name) projectName = proj.name;
+      } catch (_e) { /* ignore */ }
+      // Stringify output_data — already structured (PRD/scope/audit/etc)
+      let body = "";
+      try {
+        body = typeof step.output_data === "string"
+          ? step.output_data
+          : JSON.stringify(step.output_data, null, 2);
+      } catch {
+        body = String(step.output_data);
+      }
+      if (!body.trim()) return null;
+      return {
+        content: `[Proyecto ${projectName} · Paso ${step.step_number} ${step.step_name || ""}]\n\n${body}`,
+        occurred_at: step.updated_at || step.created_at || new Date().toISOString(),
+        people: [],
+        metadata: { project_id: step.project_id, project_name: projectName, step_number: step.step_number, step_name: step.step_name },
+        user_id: step.user_id,
+      };
+    }
+    case "business_project_timeline": {
+      const { data: ev } = await sb
+        .from("business_project_timeline")
+        .select("id, project_id, user_id, title, description, channel, contact_id, event_date, created_at")
+        .eq("id", source_id)
+        .single();
+      if (!ev) return null;
+      const body = `${ev.title || ""}\n${ev.description || ""}`.trim();
+      if (!body) return null;
+      let projectName = "proyecto";
+      try {
+        const { data: proj } = await sb
+          .from("business_projects")
+          .select("name")
+          .eq("id", ev.project_id)
+          .maybeSingle();
+        if (proj?.name) projectName = proj.name;
+      } catch (_e) { /* ignore */ }
+      return {
+        content: `[Timeline ${projectName}${ev.channel ? " · " + ev.channel : ""}] ${body}`,
+        occurred_at: ev.event_date || ev.created_at || new Date().toISOString(),
+        people: ev.contact_id ? [ev.contact_id] : [],
+        metadata: { project_id: ev.project_id, project_name: projectName, channel: ev.channel, title: ev.title },
+        user_id: ev.user_id,
+      };
+    }
+    case "people_contacts": {
+      const { data: c } = await sb
+        .from("people_contacts")
+        .select("id, user_id, name, context, role, company, updated_at, created_at")
+        .eq("id", source_id)
+        .single();
+      if (!c || !c.context || !c.context.trim()) return null;
+      return {
+        content: `[Nota de contacto · ${c.name}${c.role ? " (" + c.role + ")" : ""}${c.company ? " — " + c.company : ""}]\n${c.context}`,
+        occurred_at: c.updated_at || c.created_at || new Date().toISOString(),
+        people: [c.id],
+        metadata: { contact_name: c.name, role: c.role, company: c.company },
+        user_id: c.user_id,
+      };
+    }
     default:
       console.warn("[ingest] unknown source_table:", source_table);
       return null;
@@ -401,6 +477,24 @@ async function backfill(source_type: string, user_id: string, batch_size: number
       .order("created_at", { ascending: false })
       .limit(batch_size * 3);
     candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "plaud_transcriptions" }));
+  } else if (source_type === "project") {
+    const { data } = await sb
+      .from("project_wizard_steps")
+      .select("id, updated_at, user_id")
+      .eq("user_id", user_id)
+      .not("output_data", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(batch_size * 3);
+    candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "project_wizard_steps" }));
+  } else if (source_type === "contact_note") {
+    const { data } = await sb
+      .from("people_contacts")
+      .select("id, updated_at")
+      .eq("user_id", user_id)
+      .not("context", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(batch_size * 3);
+    candidates = (data || []).map((r: any) => ({ id: r.id, source_table: "people_contacts" }));
   }
 
   // Filter out already-ingested

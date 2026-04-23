@@ -91,6 +91,7 @@ export function useJarvisRealtimeVoice(options: UseJarvisRealtimeVoiceOptions = 
   });
 
   // Process transcript through Claude via jarvis-realtime edge function
+  // Adds defensive session refresh + 401 retry to survive notifications/backgrounding.
   const processWithClaude = useCallback(async (text: string): Promise<string | null> => {
     if (!user?.id) {
       toast.error('No autenticado');
@@ -98,9 +99,9 @@ export function useJarvisRealtimeVoice(options: UseJarvisRealtimeVoiceOptions = 
     }
 
     updateState('thinking');
-    
-    try {
-      const { data, error: fnError } = await supabase.functions.invoke('jarvis-realtime', {
+
+    const invokeOnce = async () => {
+      return await supabase.functions.invoke('jarvis-realtime', {
         body: {
           transcript: text,
           agentType,
@@ -108,12 +109,44 @@ export function useJarvisRealtimeVoice(options: UseJarvisRealtimeVoiceOptions = 
           userId: user.id,
         },
       });
+    };
+
+    try {
+      // Defensive: check session is still valid; refresh if it's near expiry.
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const expiresAt = session?.expires_at ? session.expires_at * 1000 : 0;
+        if (!session || Date.now() > expiresAt - 60_000) {
+          await supabase.auth.refreshSession();
+        }
+      } catch (refreshErr) {
+        console.warn('[JarvisRealtimeVoice] session pre-check failed:', refreshErr);
+      }
+
+      let { data, error: fnError } = await invokeOnce();
+
+      // Retry once on 401 / Unauthorized after a forced refresh
+      const isAuthError = fnError && (
+        (fnError as any).status === 401 ||
+        /unauth/i.test((fnError as any).message || '')
+      );
+      if (isAuthError) {
+        console.warn('[JarvisRealtimeVoice] 401 — refreshing session and retrying once');
+        try {
+          await supabase.auth.refreshSession();
+        } catch (e) {
+          console.warn('[JarvisRealtimeVoice] refreshSession failed:', e);
+        }
+        const retry = await invokeOnce();
+        data = retry.data;
+        fnError = retry.error;
+      }
 
       if (fnError) {
         throw fnError;
       }
 
-      if (data.error) {
+      if (data?.error) {
         throw new Error(data.error);
       }
 
@@ -279,6 +312,32 @@ export function useJarvisRealtimeVoice(options: UseJarvisRealtimeVoiceOptions = 
       stop();
     };
   }, [stop]);
+
+  // Resilience: when the tab/app returns to foreground, reset stuck processing
+  // flag and refresh auth session so the next interaction works after a
+  // notification or background suspension.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+
+    const onVisibility = async () => {
+      if (document.visibilityState !== 'visible') return;
+      // Reset processing flag if it was left stuck by an aborted call
+      if (isProcessingRef.current && !isRecording && !isSpeaking) {
+        console.log('[JarvisRealtimeVoice] visibility resume — clearing stuck processing flag');
+        isProcessingRef.current = false;
+        updateState('idle');
+      }
+      // Defensive auth refresh
+      try {
+        await supabase.auth.refreshSession();
+      } catch (e) {
+        console.warn('[JarvisRealtimeVoice] visibility refresh failed:', e);
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [isRecording, isSpeaking, updateState]);
 
   return {
     // State

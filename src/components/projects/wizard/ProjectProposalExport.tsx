@@ -199,7 +199,8 @@ export const ProjectProposalExport = ({
       stepNumber,
       content: {
         scope,
-        aiOpportunities: stepNumber === 100 ? aiOpportunities : undefined,
+        // Pass aiOpportunities to both step 100 (full) and step 102 (scope doc)
+        aiOpportunities: stepNumber === 100 || stepNumber === 102 ? aiOpportunities : undefined,
         techSummary,
         budget,
       },

@@ -9307,7 +9307,7 @@ export type Database = {
           created_at: string
           id: string
           owner_id: string
-          resource_id: string | null
+          resource_id: string
           resource_type: string
           role: string
           shared_with_id: string
@@ -9316,7 +9316,7 @@ export type Database = {
           created_at?: string
           id?: string
           owner_id: string
-          resource_id?: string | null
+          resource_id: string
           resource_type: string
           role?: string
           shared_with_id: string
@@ -9325,7 +9325,7 @@ export type Database = {
           created_at?: string
           id?: string
           owner_id?: string
-          resource_id?: string | null
+          resource_id?: string
           resource_type?: string
           role?: string
           shared_with_id?: string

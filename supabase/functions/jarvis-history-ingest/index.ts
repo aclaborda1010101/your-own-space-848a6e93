@@ -293,9 +293,9 @@ async function loadSource(
         body = String(step.output_data);
       }
       if (!body.trim()) return null;
-      // Hard cap at 60KB to prevent worker resource exhaustion during chunking
-      if (body.length > 60000) {
-        body = body.slice(0, 60000) + "\n\n[...truncado para indexación]";
+      // Hard cap at 30KB to prevent worker resource exhaustion during chunking
+      if (body.length > 30000) {
+        body = body.slice(0, 30000) + "\n\n[...truncado para indexación]";
       }
       return {
         content: `[Proyecto ${projectName} · Paso ${step.step_number} ${step.step_name || ""}]\n\n${body}`,

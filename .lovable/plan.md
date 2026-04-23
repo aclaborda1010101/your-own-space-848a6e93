@@ -1,72 +1,96 @@
 
 
-## Por qué Hiba se ve "vieja" / "nada pendiente"
+## Documento de Alcance para el Cliente (post-presupuesto)
 
-### Estado real de los datos (verificado en BD)
+### Qué tienes hoy
 
-Hay **una sola** Hiba (`4902796c…`) y SÍ tiene todo generado:
+En el wizard, tras aprobar el PRD y generar el presupuesto, aparece el panel **"Propuesta para el Cliente"** con dos botones:
+- **Propuesta Comercial (≤10 págs)** → step 101
+- **Propuesta Completa** → step 100 (muy técnico/largo)
 
-- `wa_message_count`: **197** mensajes vinculados.
-- `personality_profile`: **17 KB** (perfil completo).
-- `historical_analysis`: 2.4 KB.
-- `contact_headlines.payload` (lo que pinta la pantalla):
-  - **Salud**: 8/10 "Fuerte" 🤝
-  - **Pendiente**: "Reunión de informática y cañas" — 24 abr 2026 — `freshness_status: active`
-  - **Tono**: Colaborativo. Topics: Clases IA 60% / Agenda 25% / Personal 15%.
+La 101 ya cubre: resumen ejecutivo, descripción de solución, alcance (lista plana), fases con Gantt, inversión y condiciones. **Pero** le faltan exactamente las cosas que pides:
+- Tareas clasificadas por **complejidad** (simple / media / compleja)
+- Listado de **IAs por tipo** (texto, voz, imagen, vídeo, OCR…) con justificación
+- **Estimación de coste mensual de IA** por consultas (hoy `recurring_monthly.ai_apis` es un número opaco)
+- Mejor jerarquía visual del alcance (capas / secciones), no solo una tabla plana
 
-Generado el **22 abr 2026 21:08** sobre 197 mensajes. Es decir: el backend ya hizo el trabajo.
+### Qué voy a construir
 
-### Por qué la UI no lo refleja
+Un **tercer botón** en el panel "Propuesta para el Cliente":
 
-El frontend lee desde `useContactHeadlines → get-contact-headlines` y en local pinta lo que devolvió la primera vez. Una vez ejecutado correctamente el `link-contact-history` + `contact-analysis`, el cliente NO se entera porque:
+> **Documento de Alcance Profesional (≤15 págs)** — `stepNumber: 102`
 
-1. `AddToNetworkDialog` invocó `link-contact-history`, pero no refresca la ficha del contacto al volver.
-2. `ContactDetail` solo recarga headlines en el primer `mount`. Si abriste la ficha **antes** de que terminara el análisis, sigues viendo el `payload` viejo (vacío) en memoria + el render cacheado por React.
-3. El service worker (`/sw.js`) cachea `/red-estrategica` y la ficha → tras un análisis backend, recarga normal sigue mostrando lo anterior hasta hard-refresh.
+Pensado exactamente para entregar al cliente tras cerrar el precio. Sustituye al uso actual del 101 cuando quieras un entregable formal con detalle de IAs y costes operativos. (El 100/101 se mantienen tal cual.)
 
-### Solución (sin tocar backend, todo está bien en BD)
+### Estructura del documento (≤15 páginas)
 
-**1. `src/pages/ContactDetail.tsx` — Auto-refresh tras montar la ficha**
+1. **Portada** — cliente, proyecto, fecha, versión.
+2. **Resumen ejecutivo** (½ página) — qué problema resolvemos y para quién.
+3. **Descripción de la solución** (1-2 págs) — narrativa entendible, sin jerga técnica.
+4. **Alcance del proyecto por capas** (3-4 págs)
+   - Agrupado en **secciones funcionales** (no lista plana): p.ej. *Capa de Captación*, *Capa de Inteligencia*, *Capa de Operación*, *Integraciones*.
+   - Cada sección lista sus **módulos/tareas** con badge de complejidad: 🟢 Simple · 🟡 Media · 🔴 Compleja.
+   - 1-2 líneas de descripción por tarea, sin SQL ni nombres de Edge Functions.
+5. **Stack de Inteligencia Artificial** (2 págs)
+   - Tabla de IAs usadas agrupadas por tipo: **Texto/LLM**, **Voz (STT/TTS)**, **Visión/OCR**, **Imagen generativa**, **Vídeo**, **Embeddings/RAG**.
+   - Por cada IA: proveedor/modelo, dónde se usa en el proyecto, criticidad.
+6. **Coste operativo mensual estimado de IA** (1 pág)
+   - Tabla por servicio: volumen estimado de consultas/mes × tarifa → coste mensual.
+   - Total con rango bajo / esperado / alto (escenarios).
+   - Usa `src/config/projectCostRates.ts` (ya existe) como fuente de tarifas.
+7. **Planificación temporal** (1-2 págs)
+   - Fases con duración en semanas + **Gantt visual** (ya existe en 101).
+   - Hitos y entregables por fase.
+8. **Inversión** (1 pág)
+   - Desglose por fase (sin horas internas ni márgenes).
+   - Costes recurrentes mensuales (hosting + IA + mantenimiento) con totales.
+   - Modelos comerciales seleccionados.
+9. **Condiciones y próximos pasos** (½ pág).
 
-En el efecto de carga inicial, además de `load()`, **forzar** `refreshHeadlines()` cuando:
-- `wa_message_count > 0` y
-- el `payload.pending.title` está vacío o `freshness_status === 'stale'`
+Total objetivo: **12-15 páginas**, con cards, tablas y badges de color (mismo CSS profesional que ya usa la 101).
 
-Pasar `force: true` a `useContactHeadlines` la primera vez por contacto que cumpla esa condición. Garantiza que Hiba (y cualquier contacto recién vinculado) regenere headlines al abrir la ficha.
+### De dónde sale cada dato
 
-**2. `src/pages/ContactDetail.tsx` — Realtime sobre `people_contacts`**
+| Sección | Fuente |
+|---|---|
+| Descripción / alcance | step 3 (Alcance) + step 5 (PRD), pasados por sanitizador anti-tecnicismos ya existente (`simplifyPrd`) |
+| Capas y complejidad | Re-clasificación por LLM (Gemini Pro) sobre el PRD: agrupa módulos en 4-6 capas y marca complejidad por módulo |
+| Stack de IA | Auditoría IA (step 4) + manifest si existe → consolidados por una llamada LLM que normaliza por tipo (texto/voz/imagen/vídeo/visión/RAG) |
+| Coste IA mensual | LLM estima volumen mensual por servicio y multiplica por `RATES` de `src/config/projectCostRates.ts` |
+| Fases y timeline | `budgetData.development.phases` (ya tiene `duration_weeks` o se deriva de horas) |
+| Inversión | `budgetData` filtrado en modo `client` (sin márgenes) |
+| Modelos comerciales | Selección del usuario en el panel (igual que hoy) |
 
-Suscribirse a cambios de la fila del contacto (`postgres_changes` en `people_contacts` filtrando por `id`). Cuando cambie `wa_message_count` o `personality_profile`:
-- Llamar `load()` (recarga `personality_profile`, scores, ai_tags).
-- Llamar `refreshHeadlines(true)` para invalidar la cache de headlines.
+### Cómo se genera (sin tocar arquitectura)
 
-Así, mientras `contact-analysis` esté corriendo en background, la ficha se actualiza sola sin que el usuario tenga que recargar.
+1. **Botón en `ProjectProposalExport.tsx`** llama a `generate-document` con `stepNumber: 102` y `exportMode: "client"`.
+2. **Nuevo bloque en `generate-document/index.ts`** (`else if (stepNumber === 102)`) que:
+   - Recibe scope+PRD+auditoría+budget+monetización seleccionada.
+   - Hace **una sola llamada** a `chat()` con `gemini-pro` para obtener un JSON estructurado: `{ layers: [{name, description, tasks: [{name, complexity, description}]}], ai_stack: [{type, name, model, usage, criticality}], ai_monthly_estimate: [{service, volume, unit_cost, monthly_eur}] }`.
+   - Renderiza HTML profesional con badges de complejidad (verde/amarillo/rojo), tabla de IAs y tabla de costes IA.
+   - Reutiliza el renderer de fases/Gantt/inversión del step 101.
+3. Añade `102: "Documento de Alcance"` a `STEP_TITLES` y a `isClientFacing`.
+4. El parser anti-tecnicismos (`simplifyPrd`, `sanitizeTextForClient`) ya está y se reutiliza.
 
-**3. `src/components/contact/AddToNetworkDialog.tsx` — Polling tras link**
+### Archivos a editar/crear
 
-Tras `link-contact-history` exitoso con `linked_messages > 0`, navegar a la ficha del contacto resuelto (`target_contact_id` que devuelve la edge function) **con un flag** `?refresh=1`. La ficha lo detecta y dispara `refresh: true` en headlines + `load()`.
+- **Editar** `supabase/functions/generate-document/index.ts`:
+  - Añadir `STEP_TITLES[102] = "Documento de Alcance"`.
+  - Añadir `102` a `isClientFacing`.
+  - Nuevo bloque `else if (stepNumber === 102) { ... }` con renderer + 1 llamada a LLM para estructurar capas/IAs/costes.
+- **Editar** `src/components/projects/wizard/ProjectProposalExport.tsx`:
+  - Tercer botón **"Documento de Alcance (≤15 págs)"** que llama a `buildPayload(102)`.
+- **Sin migraciones**, sin tablas nuevas, sin cambios en BD.
+- **Sin tocar** el panel de presupuesto, ni los flujos 100/101 actuales.
 
-**4. Forzar refresh para Hiba ahora mismo (one-shot, sin código)**
+### Detalles técnicos relevantes
 
-En la ficha de Hiba pulsa **"Reanalizar perfil"** (botón ya existente, llama a `contact-analysis` con `include_historical:false`). Tras 30-60 s y con el cambio del paso 2 desplegado, verás:
-- Pendiente: "Reunión de informática y cañas — 24 abr"
-- Salud 8/10 Fuerte
-- Topics: Clases IA / Agenda / Personal
+- Modelo: `gemini-pro` (mejor razonamiento estructural; la llamada es única y JSON).
+- Tarifas IA: importadas desde `src/config/projectCostRates.ts` y duplicadas como constante en la edge function (no se puede importar `src/` desde edge).
+- Cap del documento: tras render, si HTML > umbral, se trunca la sección de "Stack IA" a top-10 servicios y "Capas" a top-6 capas para asegurar ≤15 págs.
+- Modo cliente estricto: misma sanitización que 101 (sin SQL, sin nombres de Edge Functions, sin "Lovable", sin RLS, sin márgenes internos).
 
-### Diagnóstico técnico (resumen)
+### Resultado para ti
 
-```text
-BD       → Hiba ✅ (197 msgs, profile 17KB, headlines actualizados 22-abr)
-Edge fn  → get-contact-headlines devuelve el payload bueno
-Cliente  → muestra payload obsoleto en memoria, no re-fetch al cambiar
-           wa_message_count en BD → "pantalla vieja"
-```
-
-### Archivos a editar
-
-- `src/pages/ContactDetail.tsx` — auto-refresh inicial condicional + suscripción realtime a `people_contacts`.
-- `src/components/contact/AddToNetworkDialog.tsx` — pasar `?refresh=1` al navegar tras link.
-- `src/hooks/useContactHeadlines.ts` — aceptar trigger externo `forceOnMount` (opcional, parametrizable).
-
-Sin cambios de backend ni migraciones. Todo el problema es de sincronización cliente↔BD.
+Tras aprobar PRD → generar presupuesto → seleccionar modelos comerciales → click en **"Documento de Alcance (≤15 págs)"** → PDF profesional listo para enviar al cliente con: solución, capas y tareas con complejidad, IAs por tipo, coste IA mensual estimado, fases con Gantt, inversión y condiciones.
 

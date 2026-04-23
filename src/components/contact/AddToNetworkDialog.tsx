@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -66,6 +67,7 @@ function normalizePhone(raw: string): string {
 
 export function AddToNetworkDialog({ open, onOpenChange, excludeIds, onAdded }: Props) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<Candidate[]>([]);
@@ -220,10 +222,16 @@ export function AddToNetworkDialog({ open, onOpenChange, excludeIds, onAdded }: 
                 return;
               }
               const linked = (data as any)?.linked_messages ?? 0;
+              // El backend puede haber MERGEADO con un contacto existente
+              // que ya tenía wa_id. Usamos el id resuelto para navegar.
+              const resolvedId =
+                (data as any)?.target_contact_id || inserted.id;
               if (linked > 0) {
                 toast.success(`${linked} mensajes vinculados a ${cleanName}`, {
-                  description: "Generando perfil… aparecerá en unos minutos.",
+                  description: "Generando perfil… abriendo ficha.",
                 });
+                onOpenChange(false);
+                navigate(`/red-estrategica/${resolvedId}?refresh=1`);
               } else {
                 toast.info(`Sin historial WhatsApp para ${cleanName}`, {
                   description: "El contacto está creado y listo para recibir mensajes.",

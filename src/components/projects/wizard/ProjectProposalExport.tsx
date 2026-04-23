@@ -277,6 +277,31 @@ export const ProjectProposalExport = ({
     }
   };
 
+  const handleGenerateScope = async () => {
+    if (selectedModels.length === 0) {
+      toast.error("Selecciona al menos un modelo de monetización");
+      return;
+    }
+    setGeneratingScope(true);
+    try {
+      const payload = buildPayload(102);
+      const { data, error } = await supabase.functions.invoke(
+        "generate-document",
+        { body: payload }
+      );
+      if (error) throw error;
+      await downloadFile(data, `documento-alcance-${projectName || "proyecto"}.pdf`);
+      toast.success("Documento de alcance descargado");
+    } catch (err: any) {
+      console.error("Scope document export error:", err);
+      toast.error(
+        "Error al generar documento: " + (err.message || "Error desconocido")
+      );
+    } finally {
+      setGeneratingScope(false);
+    }
+  };
+
   return (
     <CollapsibleCard
       id="proposal-export"

@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { FileText, Loader2, Download, FileDown } from "lucide-react";
+import { FileText, Loader2, Download, FileDown, FileText as FileScope } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 

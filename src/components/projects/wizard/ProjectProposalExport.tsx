@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { FileText, Loader2, Download, FileDown } from "lucide-react";
+import { FileText, Loader2, Download, FileDown, FileText as FileScope } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -163,6 +163,7 @@ export const ProjectProposalExport = ({
 }: ProjectProposalExportProps) => {
   const [generating, setGenerating] = useState(false);
   const [generatingSimple, setGeneratingSimple] = useState(false);
+  const [generatingScope, setGeneratingScope] = useState(false);
   const [selectedModels, setSelectedModels] = useState<number[]>(
     budgetData?.monetization_models?.map((_: any, i: number) => i) || []
   );
@@ -198,7 +199,8 @@ export const ProjectProposalExport = ({
       stepNumber,
       content: {
         scope,
-        aiOpportunities: stepNumber === 100 ? aiOpportunities : undefined,
+        // Pass aiOpportunities to both step 100 (full) and step 102 (scope doc)
+        aiOpportunities: stepNumber === 100 || stepNumber === 102 ? aiOpportunities : undefined,
         techSummary,
         budget,
       },
@@ -275,6 +277,31 @@ export const ProjectProposalExport = ({
     }
   };
 
+  const handleGenerateScope = async () => {
+    if (selectedModels.length === 0) {
+      toast.error("Selecciona al menos un modelo de monetización");
+      return;
+    }
+    setGeneratingScope(true);
+    try {
+      const payload = buildPayload(102);
+      const { data, error } = await supabase.functions.invoke(
+        "generate-document",
+        { body: payload }
+      );
+      if (error) throw error;
+      await downloadFile(data, `documento-alcance-${projectName || "proyecto"}.pdf`);
+      toast.success("Documento de alcance descargado");
+    } catch (err: any) {
+      console.error("Scope document export error:", err);
+      toast.error(
+        "Error al generar documento: " + (err.message || "Error desconocido")
+      );
+    } finally {
+      setGeneratingScope(false);
+    }
+  };
+
   return (
     <CollapsibleCard
       id="proposal-export"
@@ -292,9 +319,10 @@ export const ProjectProposalExport = ({
     >
       <div className="p-4 space-y-4">
         <p className="text-xs text-muted-foreground">
-          Genera documentos PDF profesionales para enviar al cliente: una propuesta comercial
-          completa (hasta 10 páginas) con descripción del producto, alcance, fases, timings y
-          presupuesto, o una propuesta técnica detallada con toda la información.
+          Genera documentos PDF profesionales para enviar al cliente: el <strong>Documento de Alcance</strong> (≤15 págs)
+          incluye descripción, capas con tareas clasificadas por complejidad, stack de IA, coste mensual estimado de IA,
+          fases con cronograma e inversión. La <strong>Propuesta Comercial</strong> es una versión más breve (≤10 págs)
+          y la <strong>Propuesta Completa</strong> incluye toda la información técnica.
         </p>
 
         {models.length > 0 && (
@@ -323,6 +351,25 @@ export const ProjectProposalExport = ({
             </div>
           </div>
         )}
+
+        <div className="flex flex-col gap-2">
+          <Button
+            onClick={handleGenerateScope}
+            disabled={generatingScope || selectedModels.length === 0}
+            className="gap-2 w-full"
+          >
+            {generatingScope ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generando documento de alcance...
+              </>
+            ) : (
+              <>
+                <FileScope className="w-4 h-4" />
+                Documento de Alcance (≤15 págs) — Recomendado
+              </>
+            )}
+          </Button>
 
         <div className="flex flex-col sm:flex-row gap-2">
           <Button
@@ -361,6 +408,7 @@ export const ProjectProposalExport = ({
               </>
             )}
           </Button>
+        </div>
         </div>
       </div>
     </CollapsibleCard>

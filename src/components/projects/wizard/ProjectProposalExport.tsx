@@ -352,6 +352,25 @@ export const ProjectProposalExport = ({
           </div>
         )}
 
+        <div className="flex flex-col gap-2">
+          <Button
+            onClick={handleGenerateScope}
+            disabled={generatingScope || selectedModels.length === 0}
+            className="gap-2 w-full"
+          >
+            {generatingScope ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Generando documento de alcance...
+              </>
+            ) : (
+              <>
+                <FileScope className="w-4 h-4" />
+                Documento de Alcance (≤15 págs) — Recomendado
+              </>
+            )}
+          </Button>
+
         <div className="flex flex-col sm:flex-row gap-2">
           <Button
             onClick={handleGenerateSimple}

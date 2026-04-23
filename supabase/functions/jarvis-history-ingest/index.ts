@@ -560,7 +560,7 @@ serve(async (req) => {
     }
 
     if (mode === "backfill") {
-      const { user_id, source_type, batch_size = 50, days = 90, fast_meta = source_type === "whatsapp" } = body;
+      const { user_id, source_type, batch_size = 50, days = 90, fast_meta = (source_type === "whatsapp" || source_type === "project") } = body;
       if (!user_id || !source_type) {
         return new Response(
           JSON.stringify({ error: "Missing user_id or source_type" }),

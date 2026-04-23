@@ -2169,6 +2169,311 @@ serve(async (req: Request) => {
 
       htmlContent = parts.join("\n");
     }
+    // ══════════════════════════════════════════════════════════════════════
+    // Step 102: Documento de Alcance Profesional para Cliente (≤15 págs)
+    //   - Capas funcionales con tareas clasificadas por complejidad
+    //   - Stack de IA por tipo (texto, voz, imagen, vídeo, OCR, RAG…)
+    //   - Estimación de coste mensual de IA por servicio
+    //   - Fases + Gantt + Inversión
+    // ══════════════════════════════════════════════════════════════════════
+    else if (stepNumber === 102 && typeof processedContent === "object" && processedContent !== null) {
+      const proposal = processedContent as any;
+      const parts: string[] = [];
+
+      const rawScope = typeof proposal.scope === "string" ? proposal.scope : "";
+      const rawTech = typeof proposal.techSummary === "string" ? proposal.techSummary : "";
+      const rawAi = proposal.aiOpportunities ? JSON.stringify(proposal.aiOpportunities).slice(0, 8000) : "";
+
+      // Build a single LLM call to extract structured data
+      const ratesCatalog = Object.entries(AI_RATES)
+        .map(([k, v]) => `${k}: ${v.label} — input $${v.inputPerMillion}/M tok, output $${v.outputPerMillion}/M tok`)
+        .join("\n");
+
+      const systemPrompt = `Eres un consultor senior que estructura propuestas de proyectos software con IA para entregar al CLIENTE final.
+Tu salida es JSON ESTRICTO, sin markdown, sin texto fuera del JSON.
+NO uses jerga técnica (NUNCA menciones SQL, Edge Function, Supabase, RLS, Deno, hooks, schemas, migrations, "Lovable", endpoints, triggers, ni nombres de tablas).
+Hablas en español, tono profesional pero claro.`;
+
+      const userPrompt = `Analiza el alcance, PRD simplificado y oportunidades de IA del proyecto y devuelve un JSON con esta estructura EXACTA:
+
+{
+  "executive_summary": "Párrafo de 4-6 líneas describiendo qué resuelve el proyecto, para quién y el valor diferencial. Sin tecnicismos.",
+  "solution_description": "Descripción narrativa de 8-12 líneas de la solución completa, qué hará el sistema desde el punto de vista del usuario. Sin tecnicismos.",
+  "layers": [
+    {
+      "name": "Nombre de la capa funcional (ej: 'Captación y entrada de datos', 'Inteligencia y decisión', 'Operación diaria', 'Integraciones externas')",
+      "description": "1-2 líneas explicando el propósito de la capa",
+      "tasks": [
+        { "name": "Nombre breve y comercial de la tarea/módulo", "description": "1-2 líneas de qué hace, en lenguaje de negocio", "complexity": "simple" | "media" | "compleja" }
+      ]
+    }
+  ],
+  "ai_stack": [
+    { "type": "Texto/LLM" | "Voz (STT/TTS)" | "Visión/OCR" | "Imagen generativa" | "Vídeo" | "Embeddings/RAG", "name": "nombre comercial", "model_key": "una clave del catálogo de tarifas si aplica, o null", "usage": "Para qué se usa exactamente en este proyecto, 1 línea", "criticality": "alta" | "media" | "baja" }
+  ],
+  "ai_monthly_estimate": [
+    { "service": "nombre comercial del servicio (ej: 'Análisis de mensajes WhatsApp con LLM')", "model_key": "clave del catálogo de tarifas", "estimated_volume": "ej: '50.000 tokens entrada + 15.000 salida por día' o '500 minutos audio/mes'", "monthly_cost_eur_low": número, "monthly_cost_eur_expected": número, "monthly_cost_eur_high": número }
+  ],
+  "milestones": [
+    { "phase_name": "Coincide con una fase del presupuesto", "deliverables": ["entregable 1", "entregable 2"] }
+  ]
+}
+
+REGLAS DURAS:
+- Devuelve entre 3 y 6 capas. Cada capa entre 3 y 8 tareas. Total tareas ≤ 30.
+- Clasifica complejidad realista (no todo "compleja").
+- ai_stack: máximo 10 IAs, agrupa por tipo, prioriza las realmente usadas.
+- ai_monthly_estimate: máximo 8 servicios. Calcula coste en EUR mensual usando este catálogo de tarifas (USD/M tok ≈ EUR para simplificar):
+${ratesCatalog}
+- Si no hay datos suficientes para una sección, devuelve array vacío. NO inventes capas técnicas tipo "base de datos" o "backend".
+- milestones: una entrada por cada fase del presupuesto, con 2-4 entregables visibles para el cliente.
+
+CONTEXTO DEL PROYECTO:
+
+== ALCANCE ==
+${rawScope.slice(0, 12000)}
+
+== RESUMEN TÉCNICO (PRD simplificado) ==
+${rawTech.slice(0, 10000)}
+
+== OPORTUNIDADES DE IA DETECTADAS ==
+${rawAi}
+
+== FASES DEL PRESUPUESTO ==
+${JSON.stringify(proposal.budget?.development?.phases?.map((p: any) => ({ name: p.name, description: p.description, weeks: p.duration_weeks || p.weeks })) || [])}
+
+Devuelve SOLO el JSON.`;
+
+      let structured: any = null;
+      try {
+        const aiRaw = await callLovableAI(systemPrompt, userPrompt, { model: "gemini-pro", maxTokens: 9000 });
+        structured = parseAIJson(aiRaw);
+      } catch (e) {
+        console.error("[step 102] AI structuring failed:", e);
+      }
+
+      // Fallback structure if AI fails
+      if (!structured || typeof structured !== "object") {
+        structured = {
+          executive_summary: "",
+          solution_description: "",
+          layers: [],
+          ai_stack: [],
+          ai_monthly_estimate: [],
+          milestones: [],
+        };
+      }
+
+      // ── Render ──
+      parts.push(`<h1>Documento de Alcance</h1>`);
+      parts.push(`<p style="font-size:10pt;color:#6B7280;margin-bottom:20px;">Documento preparado para <strong>${escHtml(company || projectName || "el cliente")}</strong> — ${new Date().toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}</p>`);
+
+      // 1. Resumen ejecutivo
+      parts.push(`<h1>1. Resumen Ejecutivo</h1>`);
+      if (structured.executive_summary) {
+        parts.push(`<p>${escHtml(structured.executive_summary)}</p>`);
+      } else {
+        parts.push(`<p>${escHtml(sanitizeTextForClient(rawScope.split("\n").slice(0, 6).join(" ")).slice(0, 600))}</p>`);
+      }
+
+      // 2. Descripción de la solución
+      parts.push(`<h1>2. Descripción de la Solución</h1>`);
+      if (structured.solution_description) {
+        parts.push(`<p>${escHtml(structured.solution_description)}</p>`);
+      }
+
+      // 3. Alcance por capas
+      parts.push(`<h1>3. Alcance del Proyecto por Capas</h1>`);
+      parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin-bottom:12px;">El alcance se organiza en capas funcionales. Cada tarea se clasifica por complejidad: <span style="background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:8px;font-size:8.5pt;">Simple</span> <span style="background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:8px;font-size:8.5pt;">Media</span> <span style="background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:8px;font-size:8.5pt;">Compleja</span></p>`);
+
+      const layers = Array.isArray(structured.layers) ? structured.layers.slice(0, 6) : [];
+      const complexityBadge = (c: string) => {
+        const cl = (c || "").toLowerCase();
+        if (cl.includes("simple")) return `<span style="background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:8px;font-size:8pt;font-weight:600;">SIMPLE</span>`;
+        if (cl.includes("compleja") || cl.includes("complex")) return `<span style="background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:8px;font-size:8pt;font-weight:600;">COMPLEJA</span>`;
+        return `<span style="background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:8px;font-size:8pt;font-weight:600;">MEDIA</span>`;
+      };
+      for (let li = 0; li < layers.length; li++) {
+        const layer = layers[li];
+        parts.push(`<div class="opp-card" style="margin-bottom:14px;page-break-inside:avoid;">`);
+        parts.push(`<h3 style="margin-bottom:4px;">Capa ${li + 1}: ${escHtml(layer.name || "")}</h3>`);
+        if (layer.description) {
+          parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin:0 0 10px;">${escHtml(layer.description)}</p>`);
+        }
+        const tasks = Array.isArray(layer.tasks) ? layer.tasks.slice(0, 8) : [];
+        if (tasks.length) {
+          parts.push(`<table style="margin-top:6px;"><tr><th style="width:38%;">Tarea / Módulo</th><th>Descripción</th><th style="width:80px;text-align:center;">Complejidad</th></tr>`);
+          for (const t of tasks) {
+            parts.push(`<tr><td><strong>${escHtml(t.name || "")}</strong></td><td style="font-size:9pt;">${escHtml(t.description || "")}</td><td style="text-align:center;">${complexityBadge(t.complexity)}</td></tr>`);
+          }
+          parts.push(`</table>`);
+        }
+        parts.push(`</div>`);
+      }
+
+      // 4. Stack de IA
+      const aiStack = Array.isArray(structured.ai_stack) ? structured.ai_stack.slice(0, 10) : [];
+      if (aiStack.length) {
+        parts.push(`<h1>4. Stack de Inteligencia Artificial</h1>`);
+        parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin-bottom:10px;">Modelos y servicios de IA utilizados en el proyecto, agrupados por tipo de capacidad.</p>`);
+        parts.push(`<table><tr><th>Tipo</th><th>Modelo / Servicio</th><th>Uso en el proyecto</th><th style="width:70px;text-align:center;">Criticidad</th></tr>`);
+        for (const ai of aiStack) {
+          const crit = (ai.criticality || "").toLowerCase();
+          const critColor = crit.includes("alta") ? "#DC2626" : crit.includes("baja") ? "#6B7280" : "#D97706";
+          parts.push(`<tr><td><strong style="font-size:9pt;">${escHtml(ai.type || "")}</strong></td><td style="font-size:9pt;">${escHtml(ai.name || "")}</td><td style="font-size:9pt;">${escHtml(ai.usage || "")}</td><td style="text-align:center;font-size:8.5pt;color:${critColor};font-weight:600;text-transform:uppercase;">${escHtml(ai.criticality || "media")}</td></tr>`);
+        }
+        parts.push(`</table>`);
+      }
+
+      // 5. Coste mensual de IA
+      const aiCosts = Array.isArray(structured.ai_monthly_estimate) ? structured.ai_monthly_estimate.slice(0, 8) : [];
+      if (aiCosts.length) {
+        parts.push(`<h1>5. Coste Operativo Mensual Estimado de IA</h1>`);
+        parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin-bottom:10px;">Estimación de coste mensual por consumo de servicios de IA en producción. Se ofrece un rango (escenario bajo / esperado / alto) en función del volumen real de uso.</p>`);
+        parts.push(`<table><tr><th>Servicio de IA</th><th>Volumen estimado</th><th style="text-align:right;width:70px;">Bajo</th><th style="text-align:right;width:80px;">Esperado</th><th style="text-align:right;width:70px;">Alto</th></tr>`);
+        let totalLow = 0, totalExp = 0, totalHigh = 0;
+        for (const c of aiCosts) {
+          const low = Number(c.monthly_cost_eur_low) || 0;
+          const exp = Number(c.monthly_cost_eur_expected) || 0;
+          const high = Number(c.monthly_cost_eur_high) || 0;
+          totalLow += low; totalExp += exp; totalHigh += high;
+          parts.push(`<tr><td><strong style="font-size:9pt;">${escHtml(c.service || "")}</strong></td><td style="font-size:8.5pt;color:#6B7280;">${escHtml(c.estimated_volume || "")}</td><td style="text-align:right;font-size:9pt;">€${low.toLocaleString("es-ES")}</td><td style="text-align:right;font-size:9pt;font-weight:600;">€${exp.toLocaleString("es-ES")}</td><td style="text-align:right;font-size:9pt;">€${high.toLocaleString("es-ES")}</td></tr>`);
+        }
+        parts.push(`<tr style="background:#F9FAFB;font-weight:700;"><td colspan="2" style="text-align:right;">TOTAL MENSUAL</td><td style="text-align:right;">€${totalLow.toLocaleString("es-ES")}</td><td style="text-align:right;color:#0D9488;">€${totalExp.toLocaleString("es-ES")}</td><td style="text-align:right;">€${totalHigh.toLocaleString("es-ES")}</td></tr>`);
+        parts.push(`</table>`);
+        parts.push(`<p style="font-size:8.5pt;color:#9CA3AF;font-style:italic;margin-top:6px;">Estimación basada en tarifas públicas de los proveedores. El coste real depende del volumen efectivo de uso y puede variar en producción.</p>`);
+      }
+
+      // 6. Planificación temporal — fases con Gantt
+      if (proposal.budget?.development?.phases?.length) {
+        parts.push(`<h1>6. Planificación e Implementación</h1>`);
+        const phases = proposal.budget.development.phases;
+        const milestones = Array.isArray(structured.milestones) ? structured.milestones : [];
+        const getPhaseWeeks = (p: any): number => {
+          if (p.duration_weeks != null && p.duration_weeks > 0) return p.duration_weeks;
+          if (p.weeks != null && p.weeks > 0) return p.weeks;
+          return Math.max(1, Math.round((p.hours || 0) / 40));
+        };
+        const totalWeeks = phases.reduce((s: number, p: any) => s + getPhaseWeeks(p), 0) || 1;
+
+        for (let pi = 0; pi < phases.length; pi++) {
+          const p = phases[pi];
+          const weeks = getPhaseWeeks(p);
+          const ms = milestones.find((m: any) => (m.phase_name || "").toLowerCase().includes((p.name || "").toLowerCase().slice(0, 12)));
+          parts.push(`<div class="opp-card" style="margin-bottom:12px;page-break-inside:avoid;">`);
+          parts.push(`<h4>Fase ${pi}: ${escHtml(p.name || `Fase ${pi}`)}</h4>`);
+          if (p.description) {
+            parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin:4px 0 8px;">${escHtml(p.description)}</p>`);
+          }
+          parts.push(`<div class="opp-metrics"><div class="opp-metric"><span class="opp-metric-val">${weeks <= 1 ? "1 semana" : `${weeks} semanas`}</span><span class="opp-metric-label">Duración</span></div></div>`);
+          if (ms?.deliverables?.length) {
+            parts.push(`<p style="font-size:9pt;font-weight:600;margin:8px 0 4px;color:#0A3039;">Entregables:</p><ul style="margin:0;padding-left:18px;">`);
+            for (const d of ms.deliverables.slice(0, 4)) {
+              parts.push(`<li style="font-size:9pt;">${escHtml(d)}</li>`);
+            }
+            parts.push(`</ul>`);
+          }
+          parts.push(`</div>`);
+        }
+
+        // Gantt
+        parts.push(`<h2>Cronograma Visual</h2>`);
+        parts.push(`<div style="margin:16px 0;">`);
+        let cumulativeWeeks = 0;
+        const colors = ["#0D9488", "#0891B2", "#7C3AED", "#DB2777", "#EA580C", "#059669"];
+        for (let pi = 0; pi < phases.length; pi++) {
+          const p = phases[pi];
+          const phaseWeeks = getPhaseWeeks(p);
+          const leftPct = (cumulativeWeeks / totalWeeks) * 100;
+          const widthPct = Math.max(5, (phaseWeeks / totalWeeks) * 100);
+          parts.push(`<div style="display:flex;align-items:center;margin-bottom:8px;">`);
+          parts.push(`<div style="width:140px;flex-shrink:0;font-size:8.5pt;font-weight:600;">${escHtml(p.name || `Fase ${pi}`)}</div>`);
+          parts.push(`<div style="flex:1;height:24px;background:var(--bg-light);border-radius:4px;position:relative;border:1px solid var(--border-light);">`);
+          parts.push(`<div style="position:absolute;left:${leftPct}%;width:${widthPct}%;height:100%;background:${colors[pi % colors.length]};border-radius:3px;display:flex;align-items:center;justify-content:center;">`);
+          parts.push(`<span style="font-size:7pt;color:white;font-weight:600;">${phaseWeeks}sem</span>`);
+          parts.push(`</div></div></div>`);
+          cumulativeWeeks += phaseWeeks;
+        }
+        parts.push(`</div>`);
+        parts.push(`<div class="kpi-row">`);
+        parts.push(`<div class="kpi-box"><div class="kpi-value">${totalWeeks} semanas</div><div class="kpi-label">Duración total estimada</div></div>`);
+        parts.push(`<div class="kpi-box"><div class="kpi-value">${phases.length}</div><div class="kpi-label">Fases de implementación</div></div>`);
+        parts.push(`</div>`);
+      }
+
+      // 7. Inversión
+      parts.push(`<h1>7. Inversión</h1>`);
+      if (proposal.budget?.development) {
+        const dev = proposal.budget.development;
+        if (dev.total_development_eur != null) {
+          parts.push(`<div class="roi-box" style="margin-bottom:16px;"><div class="roi-number">€${Number(dev.total_development_eur).toLocaleString("es-ES")}</div><div class="roi-label">Inversión total en desarrollo</div></div>`);
+        }
+        if (dev.phases?.length) {
+          parts.push(`<table><tr><th>Fase</th><th>Descripción</th><th style="text-align:right;width:110px;">Inversión (€)</th></tr>`);
+          for (const p of dev.phases) {
+            parts.push(`<tr><td><strong>${escHtml(p.name || "")}</strong></td><td style="font-size:9pt;">${escHtml(p.description || "")}</td><td style="text-align:right;">${(p.cost_eur ?? 0).toLocaleString("es-ES")}</td></tr>`);
+          }
+          parts.push(`</table>`);
+        }
+      }
+
+      if (proposal.budget?.recurring_monthly) {
+        const rec = proposal.budget.recurring_monthly;
+        const totalMonthly = rec.total_monthly_eur ?? 0;
+        if (totalMonthly > 0) {
+          parts.push(`<h2>Costes Recurrentes Mensuales</h2>`);
+          if (rec.items?.length) {
+            parts.push(`<table><tr><th>Concepto</th><th style="text-align:right;width:120px;">Coste (€/mes)</th></tr>`);
+            for (const item of rec.items) {
+              parts.push(`<tr><td>${escHtml(item.name || "")}</td><td style="text-align:right;">${(item.cost_eur ?? 0).toLocaleString("es-ES")}</td></tr>`);
+            }
+            parts.push(`</table>`);
+          }
+          parts.push(`<div class="kpi-row"><div class="kpi-box"><div class="kpi-value">€${totalMonthly.toLocaleString("es-ES")}/mes</div><div class="kpi-label">Total recurrente</div></div></div>`);
+        }
+      }
+
+      if (proposal.budget?.monetization_models?.length) {
+        parts.push(`<h2>Opciones Comerciales</h2>`);
+        for (const model of proposal.budget.monetization_models) {
+          parts.push(`<div class="opp-card" style="page-break-inside:avoid;">`);
+          parts.push(`<h4>${escHtml(model.name)}</h4>`);
+          if (model.description) {
+            parts.push(`<p style="font-size:9.5pt;color:#6B7280;margin:4px 0 12px;">${escHtml(model.description)}</p>`);
+          }
+          const metrics: string[] = [];
+          const setupNum = Number(model.setup_price_eur);
+          const monthlyNum = Number(model.monthly_price_eur);
+          if (!isNaN(setupNum) && setupNum > 0) {
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${setupNum.toLocaleString("es-ES")}</span><span class="opp-metric-label">Setup</span></div>`);
+          } else if (model.setup_price_eur) {
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(model.setup_price_eur))}</span><span class="opp-metric-label">Setup</span></div>`);
+          }
+          if (!isNaN(monthlyNum) && monthlyNum > 0) {
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">€${monthlyNum.toLocaleString("es-ES")}/mes</span><span class="opp-metric-label">Mensual</span></div>`);
+          } else if (model.monthly_price_eur) {
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(String(model.monthly_price_eur))}</span><span class="opp-metric-label">Mensual</span></div>`);
+          }
+          if (metrics.length === 0 && model.price_range) {
+            metrics.push(`<div class="opp-metric"><span class="opp-metric-val">${escHtml(model.price_range)}</span><span class="opp-metric-label">Precio</span></div>`);
+          }
+          if (metrics.length) parts.push(`<div class="opp-metrics">${metrics.join("")}</div>`);
+          parts.push(`</div>`);
+        }
+      }
+
+      // 8. Condiciones y próximos pasos
+      parts.push(`<h1>8. Condiciones y Próximos Pasos</h1>`);
+      parts.push(`<ul>`);
+      parts.push(`<li>Los precios indicados no incluyen IVA.</li>`);
+      parts.push(`<li>La propuesta tiene una validez de 30 días naturales.</li>`);
+      parts.push(`<li>Los plazos se cuentan desde la fecha de arranque acordada.</li>`);
+      parts.push(`<li>Se requiere la colaboración activa del cliente para validaciones y feedback en cada fase.</li>`);
+      parts.push(`<li>Los costes operativos de IA son estimaciones basadas en volúmenes esperados; el coste real puede variar.</li>`);
+      parts.push(`</ul>`);
+
+      htmlContent = parts.join("\n");
+    }
     // ── Step 6: Budget-specific renderer ──
     else if (stepNumber === 6 && typeof processedContent === "object" && processedContent !== null) {
       const b = processedContent as any;

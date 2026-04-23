@@ -20,6 +20,7 @@ import { SharedWithMeCard } from "@/components/settings/SharedWithMeCard";
 import { SharingManagerCard } from "@/components/settings/SharingManagerCard";
 import { WhatsAppConnectionCard } from "@/components/settings/WhatsAppConnectionCard";
 import { JarvisLearningCard } from "@/components/settings/JarvisLearningCard";
+import { JarvisReindexCard } from "@/components/settings/JarvisReindexCard";
 import { ImportMacContactsDialog } from "@/components/contacts/ImportMacContactsDialog";
 const SettingsSection = ({
   icon,
@@ -156,6 +157,10 @@ const Settings = () => {
 
       <SettingsSection icon={<Brain className="h-4 w-4 sm:h-5 sm:w-5" />} title="JARVIS aprendió" description="Patrones detectados y salud de las sugerencias">
         <JarvisLearningCard />
+      </SettingsSection>
+
+      <SettingsSection icon={<RotateCcw className="h-4 w-4 sm:h-5 sm:w-5" />} title="Reindexar conocimiento JARVIS" description="Procesa todo tu histórico para que JARVIS responda con contexto completo">
+        <JarvisReindexCard />
       </SettingsSection>
 
       <SettingsSection icon={<DollarSign className="h-4 w-4 sm:h-5 sm:w-5" />} title="Consumo de IA" description="Desglose de gasto por modelo, tokens y precio">

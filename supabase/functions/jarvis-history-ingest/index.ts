@@ -283,13 +283,22 @@ async function loadSource(
         if (proj?.name) projectName = proj.name;
       } catch (_e) { /* ignore */ }
       // Stringify output_data — already structured (PRD/scope/audit/etc)
+      // Wizard step payloads can be 100-200KB and OOM the worker.
+      // Strategy: only keep top-level keys, truncate each value to 4KB, cap total at 25KB.
       let body = "";
       try {
-        body = typeof step.output_data === "string"
-          ? step.output_data
-          : JSON.stringify(step.output_data, null, 2);
+        if (typeof step.output_data === "string") {
+          body = step.output_data.slice(0, 25000);
+        } else if (step.output_data && typeof step.output_data === "object") {
+          const compact: Record<string, string> = {};
+          for (const [k, v] of Object.entries(step.output_data)) {
+            const s = typeof v === "string" ? v : JSON.stringify(v);
+            compact[k] = s.length > 4000 ? s.slice(0, 4000) + "…[trunc]" : s;
+          }
+          body = JSON.stringify(compact, null, 2).slice(0, 25000);
+        }
       } catch {
-        body = String(step.output_data);
+        body = String(step.output_data).slice(0, 25000);
       }
       if (!body.trim()) return null;
       return {
@@ -512,7 +521,7 @@ async function backfill(source_type: string, user_id: string, batch_size: number
 
   let totalInserted = 0;
   let totalSkipped = 0;
-  const concurrency = source_type === "whatsapp" ? 8 : 3;
+  const concurrency = source_type === "whatsapp" ? 8 : source_type === "project" ? 1 : 3;
   for (let i = 0; i < todo.length; i += concurrency) {
     const results = await Promise.all(todo.slice(i, i + concurrency).map((c) => ingestOne({
       user_id,
@@ -555,7 +564,7 @@ serve(async (req) => {
     }
 
     if (mode === "backfill") {
-      const { user_id, source_type, batch_size = 50, days = 90, fast_meta = source_type === "whatsapp" } = body;
+      const { user_id, source_type, batch_size = 50, days = 90, fast_meta = (source_type === "whatsapp" || source_type === "project") } = body;
       if (!user_id || !source_type) {
         return new Response(
           JSON.stringify({ error: "Missing user_id or source_type" }),

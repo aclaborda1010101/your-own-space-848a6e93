@@ -1525,7 +1525,7 @@ serve(async (req: Request) => {
     const ver = version || "v1";
     const isClientMode = exportMode === "client";
     const isInternalMode = exportMode === "internal";
-    const isClientFacing = !isInternalMode && ([3, 5, 7, 100, 101].includes(stepNumber) || stepNumber === 6);
+    const isClientFacing = !isInternalMode && ([3, 5, 7, 100, 101, 102].includes(stepNumber) || stepNumber === 6);
     const isDraft = isClientMode && allowDraft === true;
 
     // ── Validate-only mode: return validation without generating PDF ──

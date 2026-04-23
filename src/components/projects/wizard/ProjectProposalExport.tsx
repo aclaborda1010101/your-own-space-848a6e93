@@ -177,6 +177,7 @@ export const ProjectProposalExport = ({
   };
 
   const buildPayload = (stepNumber: number) => {
+    const step2 = steps.find((s) => s.stepNumber === 2);
     const step3 = steps.find((s) => s.stepNumber === 3);
     const step4 = steps.find((s) => s.stepNumber === 4);
     const step5 = steps.find((s) => s.stepNumber === 5);
@@ -192,6 +193,14 @@ export const ProjectProposalExport = ({
       (typeof step5?.outputData === "string" ? step5.outputData : "");
     const techSummary = simplifyPrd(prdRaw);
 
+    // Briefing: "fotografía inicial" del cliente (paso 2)
+    // Enviamos el output crudo (sin simplificar) — el backend lo resume y limpia.
+    const briefing = step2?.outputData || null;
+
+    // PRD completo en crudo para step 102 (pipeline 3 pasadas).
+    // Lo necesitamos sin simplificar porque la pasada A debe ver TODO el detalle funcional.
+    const prdFullRaw = stepNumber === 102 ? prdRaw : undefined;
+
     const budget = sanitizeBudgetForClient(budgetData, selectedModels);
 
     return {
@@ -202,6 +211,9 @@ export const ProjectProposalExport = ({
         // Pass aiOpportunities to both step 100 (full) and step 102 (scope doc)
         aiOpportunities: stepNumber === 100 || stepNumber === 102 ? aiOpportunities : undefined,
         techSummary,
+        // Briefing y PRD crudo solo se usan en step 102 (Documento de Alcance)
+        briefing: stepNumber === 102 ? briefing : undefined,
+        prdFullRaw,
         budget,
       },
       contentType: "json",
@@ -320,9 +332,10 @@ export const ProjectProposalExport = ({
       <div className="p-4 space-y-4">
         <p className="text-xs text-muted-foreground">
           Genera documentos PDF profesionales para enviar al cliente: el <strong>Documento de Alcance</strong> (≤15 págs)
-          incluye descripción, capas con tareas clasificadas por complejidad, stack de IA, coste mensual estimado de IA,
-          fases con cronograma e inversión. La <strong>Propuesta Comercial</strong> es una versión más breve (≤10 págs)
-          y la <strong>Propuesta Completa</strong> incluye toda la información técnica.
+          incluye la fotografía inicial del cliente, cómo lo vamos a resolver, áreas de trabajo con tareas
+          clasificadas por complejidad, consumos mensuales estimados de IA, planificación temporal e inversión.
+          La <strong>Propuesta Comercial</strong> es una versión más breve (≤10 págs) y la <strong>Propuesta
+          Completa</strong> incluye toda la información técnica.
         </p>
 
         {models.length > 0 && (

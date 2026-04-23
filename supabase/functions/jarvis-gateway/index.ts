@@ -267,6 +267,11 @@ serve(async (req) => {
       contextStr += `\n🧠 MEMORIAS: ${context.memories.map((m: { content: string }) => m.content).join(" | ")}`;
     }
 
+    // Inject resolved entities (contacts/projects) so the LLM uses concrete ids
+    if (entityResolution.promptBlock) {
+      contextStr += entityResolution.promptBlock;
+    }
+
     // Inject semantic history retrieval (the actual game-changer)
     if (semanticHistory) {
       contextStr += semanticHistory;

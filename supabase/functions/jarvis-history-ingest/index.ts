@@ -283,20 +283,24 @@ async function loadSource(
         if (proj?.name) projectName = proj.name;
       } catch (_e) { /* ignore */ }
       // Stringify output_data — already structured (PRD/scope/audit/etc)
-      // Truncate aggressively: wizard step payloads can be 100KB+ and OOM the worker
+      // Wizard step payloads can be 100-200KB and OOM the worker.
+      // Strategy: only keep top-level keys, truncate each value to 4KB, cap total at 25KB.
       let body = "";
       try {
-        body = typeof step.output_data === "string"
-          ? step.output_data
-          : JSON.stringify(step.output_data, null, 2);
+        if (typeof step.output_data === "string") {
+          body = step.output_data.slice(0, 25000);
+        } else if (step.output_data && typeof step.output_data === "object") {
+          const compact: Record<string, string> = {};
+          for (const [k, v] of Object.entries(step.output_data)) {
+            const s = typeof v === "string" ? v : JSON.stringify(v);
+            compact[k] = s.length > 4000 ? s.slice(0, 4000) + "…[trunc]" : s;
+          }
+          body = JSON.stringify(compact, null, 2).slice(0, 25000);
+        }
       } catch {
-        body = String(step.output_data);
+        body = String(step.output_data).slice(0, 25000);
       }
       if (!body.trim()) return null;
-      // Hard cap at 30KB to prevent worker resource exhaustion during chunking
-      if (body.length > 30000) {
-        body = body.slice(0, 30000) + "\n\n[...truncado para indexación]";
-      }
       return {
         content: `[Proyecto ${projectName} · Paso ${step.step_number} ${step.step_name || ""}]\n\n${body}`,
         occurred_at: step.updated_at || step.created_at || new Date().toISOString(),

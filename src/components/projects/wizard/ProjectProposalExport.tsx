@@ -177,6 +177,7 @@ export const ProjectProposalExport = ({
   };
 
   const buildPayload = (stepNumber: number) => {
+    const step2 = steps.find((s) => s.stepNumber === 2);
     const step3 = steps.find((s) => s.stepNumber === 3);
     const step4 = steps.find((s) => s.stepNumber === 4);
     const step5 = steps.find((s) => s.stepNumber === 5);
@@ -192,6 +193,14 @@ export const ProjectProposalExport = ({
       (typeof step5?.outputData === "string" ? step5.outputData : "");
     const techSummary = simplifyPrd(prdRaw);
 
+    // Briefing: "fotografía inicial" del cliente (paso 2)
+    // Enviamos el output crudo (sin simplificar) — el backend lo resume y limpia.
+    const briefing = step2?.outputData || null;
+
+    // PRD completo en crudo para step 102 (pipeline 3 pasadas).
+    // Lo necesitamos sin simplificar porque la pasada A debe ver TODO el detalle funcional.
+    const prdFullRaw = stepNumber === 102 ? prdRaw : undefined;
+
     const budget = sanitizeBudgetForClient(budgetData, selectedModels);
 
     return {
@@ -202,6 +211,9 @@ export const ProjectProposalExport = ({
         // Pass aiOpportunities to both step 100 (full) and step 102 (scope doc)
         aiOpportunities: stepNumber === 100 || stepNumber === 102 ? aiOpportunities : undefined,
         techSummary,
+        // Briefing y PRD crudo solo se usan en step 102 (Documento de Alcance)
+        briefing: stepNumber === 102 ? briefing : undefined,
+        prdFullRaw,
         budget,
       },
       contentType: "json",

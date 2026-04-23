@@ -1,96 +1,93 @@
 
 
-## Documento de Alcance para el Cliente (post-presupuesto)
+## 3 mejoras independientes
 
-### Qué tienes hoy
+Atacamos los tres problemas que has descrito por separado, sin que se pisen.
 
-En el wizard, tras aprobar el PRD y generar el presupuesto, aparece el panel **"Propuesta para el Cliente"** con dos botones:
-- **Propuesta Comercial (≤10 págs)** → step 101
-- **Propuesta Completa** → step 100 (muy técnico/largo)
+---
 
-La 101 ya cubre: resumen ejecutivo, descripción de solución, alcance (lista plana), fases con Gantt, inversión y condiciones. **Pero** le faltan exactamente las cosas que pides:
-- Tareas clasificadas por **complejidad** (simple / media / compleja)
-- Listado de **IAs por tipo** (texto, voz, imagen, vídeo, OCR…) con justificación
-- **Estimación de coste mensual de IA** por consultas (hoy `recurring_monthly.ai_apis` es un número opaco)
-- Mejor jerarquía visual del alcance (capas / secciones), no solo una tabla plana
+### 1) Propuesta de AFFLUX se queda corta — falta profundidad real del proyecto
 
-### Qué voy a construir
+**Diagnóstico**
 
-Un **tercer botón** en el panel "Propuesta para el Cliente":
+Tu PRD de AFFLUX en BD ocupa **166 KB** y el alcance interno **34 KB**, pero el "Documento de Alcance ≤15 págs" (step 102) que generaste hace una sola pasada con el LLM y le metemos como mucho 12 KB del alcance + 10 KB del PRD recortados. Resultado: el modelo solo "ve" la superficie y escribe 3-4 capas genéricas. Por eso te falta scraping inmobiliario, llamada comercial, detección temprana, seguimiento de oportunidades fuera de web, etc.
 
-> **Documento de Alcance Profesional (≤15 págs)** — `stepNumber: 102`
+**Qué cambia**
 
-Pensado exactamente para entregar al cliente tras cerrar el precio. Sustituye al uso actual del 101 cuando quieras un entregable formal con detalle de IAs y costes operativos. (El 100/101 se mantienen tal cual.)
+Reescribimos el bloque step 102 con un pipeline en 3 pasadas (sin tocar el botón ni la UI):
 
-### Estructura del documento (≤15 páginas)
+1. **Pasada A — Inventario exhaustivo**: el LLM lee el PRD entero por trozos (chunks de ~25 KB con solapamiento) y devuelve un listado plano de TODOS los módulos/funcionalidades que detecta, con su descripción de negocio. Sin filtros. Objetivo: 40-80 ítems, no 15.
+2. **Pasada B — Agrupación en capas**: con el inventario completo, una segunda llamada lo organiza en **5-8 capas funcionales** (en AFFLUX serían: Captación de oportunidades, Scraping y monitorización externa, Llamada y conversación comercial, Cualificación e inteligencia, Seguimiento y nurturing, Operación interna, Integraciones, Reporting). Asigna complejidad a cada tarea.
+3. **Pasada C — Stack IA + costes**: igual que ahora, pero alimentada con el inventario ya agrupado.
 
-1. **Portada** — cliente, proyecto, fecha, versión.
-2. **Resumen ejecutivo** (½ página) — qué problema resolvemos y para quién.
-3. **Descripción de la solución** (1-2 págs) — narrativa entendible, sin jerga técnica.
-4. **Alcance del proyecto por capas** (3-4 págs)
-   - Agrupado en **secciones funcionales** (no lista plana): p.ej. *Capa de Captación*, *Capa de Inteligencia*, *Capa de Operación*, *Integraciones*.
-   - Cada sección lista sus **módulos/tareas** con badge de complejidad: 🟢 Simple · 🟡 Media · 🔴 Compleja.
-   - 1-2 líneas de descripción por tarea, sin SQL ni nombres de Edge Functions.
-5. **Stack de Inteligencia Artificial** (2 págs)
-   - Tabla de IAs usadas agrupadas por tipo: **Texto/LLM**, **Voz (STT/TTS)**, **Visión/OCR**, **Imagen generativa**, **Vídeo**, **Embeddings/RAG**.
-   - Por cada IA: proveedor/modelo, dónde se usa en el proyecto, criticidad.
-6. **Coste operativo mensual estimado de IA** (1 pág)
-   - Tabla por servicio: volumen estimado de consultas/mes × tarifa → coste mensual.
-   - Total con rango bajo / esperado / alto (escenarios).
-   - Usa `src/config/projectCostRates.ts` (ya existe) como fuente de tarifas.
-7. **Planificación temporal** (1-2 págs)
-   - Fases con duración en semanas + **Gantt visual** (ya existe en 101).
-   - Hitos y entregables por fase.
-8. **Inversión** (1 pág)
-   - Desglose por fase (sin horas internas ni márgenes).
-   - Costes recurrentes mensuales (hosting + IA + mantenimiento) con totales.
-   - Modelos comerciales seleccionados.
-9. **Condiciones y próximos pasos** (½ pág).
+**Lo que verás en el PDF**
 
-Total objetivo: **12-15 páginas**, con cards, tablas y badges de color (mismo CSS profesional que ya usa la 101).
+- Capas reales del proyecto (no 3 genéricas).
+- 30-50 tareas visibles agrupadas, no 15.
+- Cada tarea con badge de complejidad y descripción comercial.
+- Sigue cabiendo en ≤15 págs porque cada tarea son 1-2 líneas.
 
-### De dónde sale cada dato
+**Archivos**: `supabase/functions/generate-document/index.ts` (solo el bloque `stepNumber === 102`).
 
-| Sección | Fuente |
-|---|---|
-| Descripción / alcance | step 3 (Alcance) + step 5 (PRD), pasados por sanitizador anti-tecnicismos ya existente (`simplifyPrd`) |
-| Capas y complejidad | Re-clasificación por LLM (Gemini Pro) sobre el PRD: agrupa módulos en 4-6 capas y marca complejidad por módulo |
-| Stack de IA | Auditoría IA (step 4) + manifest si existe → consolidados por una llamada LLM que normaliza por tipo (texto/voz/imagen/vídeo/visión/RAG) |
-| Coste IA mensual | LLM estima volumen mensual por servicio y multiplica por `RATES` de `src/config/projectCostRates.ts` |
-| Fases y timeline | `budgetData.development.phases` (ya tiene `duration_weeks` o se deriva de horas) |
-| Inversión | `budgetData` filtrado en modo `client` (sin márgenes) |
-| Modelos comerciales | Selección del usuario en el panel (igual que hoy) |
+---
 
-### Cómo se genera (sin tocar arquitectura)
+### 2) JARVIS no entiende nombres de contactos aproximados ("Iva", "Adri Panda", "Steve")
 
-1. **Botón en `ProjectProposalExport.tsx`** llama a `generate-document` con `stepNumber: 102` y `exportMode: "client"`.
-2. **Nuevo bloque en `generate-document/index.ts`** (`else if (stepNumber === 102)`) que:
-   - Recibe scope+PRD+auditoría+budget+monetización seleccionada.
-   - Hace **una sola llamada** a `chat()` con `gemini-pro` para obtener un JSON estructurado: `{ layers: [{name, description, tasks: [{name, complexity, description}]}], ai_stack: [{type, name, model, usage, criticality}], ai_monthly_estimate: [{service, volume, unit_cost, monthly_eur}] }`.
-   - Renderiza HTML profesional con badges de complejidad (verde/amarillo/rojo), tabla de IAs y tabla de costes IA.
-   - Reutiliza el renderer de fases/Gantt/inversión del step 101.
-3. Añade `102: "Documento de Alcance"` a `STEP_TITLES` y a `isClientFacing`.
-4. El parser anti-tecnicismos (`simplifyPrd`, `sanitizeTextForClient`) ya está y se reutiliza.
+**Diagnóstico**
 
-### Archivos a editar/crear
+Verificado en el código: ni `jarvis-realtime` (el que usa el botón de voz) ni `jarvis-gateway` consultan nunca la tabla `people_contacts`. El RAG context que se le inyecta a Claude solo trae perfil, check-ins, tareas y eventos. El LLM no tiene de dónde sacar que "Iva" = "Iva Abouk". Por eso se queda pillado.
 
-- **Editar** `supabase/functions/generate-document/index.ts`:
-  - Añadir `STEP_TITLES[102] = "Documento de Alcance"`.
-  - Añadir `102` a `isClientFacing`.
-  - Nuevo bloque `else if (stepNumber === 102) { ... }` con renderer + 1 llamada a LLM para estructurar capas/IAs/costes.
-- **Editar** `src/components/projects/wizard/ProjectProposalExport.tsx`:
-  - Tercer botón **"Documento de Alcance (≤15 págs)"** que llama a `buildPayload(102)`.
-- **Sin migraciones**, sin tablas nuevas, sin cambios en BD.
-- **Sin tocar** el panel de presupuesto, ni los flujos 100/101 actuales.
+**Qué cambia**
 
-### Detalles técnicos relevantes
+Añadimos **resolución difusa de contactos** en `jarvis-realtime/index.ts` (y reutilizable en gateway):
 
-- Modelo: `gemini-pro` (mejor razonamiento estructural; la llamada es única y JSON).
-- Tarifas IA: importadas desde `src/config/projectCostRates.ts` y duplicadas como constante en la edge function (no se puede importar `src/` desde edge).
-- Cap del documento: tras render, si HTML > umbral, se trunca la sección de "Stack IA" a top-10 servicios y "Capas" a top-6 capas para asegurar ≤15 págs.
-- Modo cliente estricto: misma sanitización que 101 (sin SQL, sin nombres de Edge Functions, sin "Lovable", sin RLS, sin márgenes internos).
+1. Antes de llamar a Claude, detectamos en el transcript posibles **nombres propios** (palabras capitalizadas o tras patrones tipo "con/de/a/sobre X", "qué dije a X", "hablé con X").
+2. Para cada candidato hacemos una **búsqueda fuzzy** contra `people_contacts` del usuario:
+   - Match exacto sin tildes/case → top.
+   - Substring (Iva ⊂ "Iva Abouk" o "Iva Book").
+   - Distancia de Levenshtein ≤ 2 sobre cada palabra del nombre del contacto (Adri ↔ Adri Panda, Steve ↔ Steven).
+   - Iniciales / apodos almacenados (si existen en `nicknames` o `aliases`).
+3. Devolvemos los 1-3 contactos más probables con **score**. Si el score top supera un umbral, los inyectamos en el system prompt como bloque:
 
-### Resultado para ti
+   ```
+   📇 CONTACTOS MENCIONADOS (resolución automática):
+   - "Iva" → Iva Abouk (score 0.92) | última interacción: ...
+     * Últimos 3 mensajes resumidos: ...
+   ```
 
-Tras aprobar PRD → generar presupuesto → seleccionar modelos comerciales → click en **"Documento de Alcance (≤15 págs)"** → PDF profesional listo para enviar al cliente con: solución, capas y tareas con complejidad, IAs por tipo, coste IA mensual estimado, fases con Gantt, inversión y condiciones.
+4. Con eso, Claude responde directamente sobre el contacto sin pedir el nombre exacto.
+5. Si hay **ambigüedad** (dos candidatos con score parecido), instruimos al prompt a preguntar: *"¿Te refieres a Iva Abouk o a Iva Book?"* — en lugar de quedarse bloqueado.
+
+**Archivos**: `supabase/functions/jarvis-realtime/index.ts` (nueva función `resolveContacts()` + integración en el system prompt). Misma función portada a `jarvis-gateway/index.ts` cuando se detecte intención conversacional sobre contactos.
+
+**Sin cambios** en BD ni en la UI.
+
+---
+
+### 3) JARVIS Real-Time se queda "desautorizado" al recibir una notificación
+
+**Diagnóstico**
+
+Cuando entra una push o cambias de app, el navegador suspende la pestaña; al volver, el `access_token` puede haber caducado. `useJarvisRealtimeVoice` llama a `supabase.functions.invoke('jarvis-realtime')`, que adjunta el JWT actual del cliente — si ha caducado y no se ha refrescado, la edge devuelve 401 y el componente se queda en estado `error`. Hoy no hay reintento automático ni refresh forzado.
+
+**Qué cambia**
+
+En `src/hooks/useJarvisRealtimeVoice.tsx` (`processWithClaude`):
+
+1. **Refresh defensivo previo**: antes de cada `functions.invoke`, comprobamos `expires_at` de la sesión. Si quedan < 60 s, llamamos `supabase.auth.refreshSession()` y esperamos.
+2. **Reintento con re-auth**: si la invoke devuelve 401/`Unauthorized` o `JWT expired`, forzamos `refreshSession()` y reintentamos UNA vez. Si sigue fallando, mostramos toast claro "Sesión renovada, intenta de nuevo" y dejamos el estado en `idle` (no `error`) para que el botón siga usable sin recargar la app.
+3. **Listener `visibilitychange`**: cuando la pestaña vuelve a foreground, verificamos sesión y refrescamos preventivamente. Así, después de una notificación, el siguiente click ya está autenticado.
+4. **Limpieza de estado bloqueado**: si `isProcessingRef` quedó `true` por un fallo silencioso, lo reseteamos al volver a foreground.
+
+**Archivos**: `src/hooks/useJarvisRealtimeVoice.tsx` (sin tocar UI ni edge function).
+
+---
+
+### Orden de ejecución
+
+1. Mejora propuesta AFFLUX (edge function only).
+2. Resolución difusa de contactos (edge function only).
+3. Resiliencia auth real-time (frontend hook only).
+
+Sin migraciones, sin tablas nuevas, sin tocar componentes visuales. Cada cambio es independiente.
 

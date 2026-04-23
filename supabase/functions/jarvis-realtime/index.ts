@@ -1,6 +1,72 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
 import { recordCost, calculateCost } from "../_shared/cost-tracker.ts";
+import { resolveEntities } from "../_shared/entity-resolver.ts";
+
+// ─────────────────────────────────────────────────────────
+// Semantic retrieval — embed user message + hybrid history search
+// Optionally filter by resolved people ids.
+// ─────────────────────────────────────────────────────────
+async function getSemanticHistory(
+  supabase: any,
+  userId: string,
+  message: string,
+  peopleIds: string[] = [],
+): Promise<string> {
+  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+  if (!OPENAI_API_KEY) return "";
+  try {
+    const embRes = await fetch("https://api.openai.com/v1/embeddings", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: message.slice(0, 8000),
+        dimensions: 1024,
+      }),
+    });
+    if (!embRes.ok) return "";
+    const embJson = await embRes.json();
+    const embedding = embJson.data?.[0]?.embedding;
+    if (!embedding) return "";
+
+    // 1st pass: filtered by people if any
+    let hits: any[] = [];
+    if (peopleIds.length > 0) {
+      const { data } = await supabase.rpc("search_history_hybrid", {
+        p_user_id: userId,
+        query_embedding: embedding,
+        query_text: message.slice(0, 500),
+        p_people: peopleIds,
+        match_count: 8,
+      });
+      hits = data || [];
+    }
+    // 2nd pass: global if filtered yielded nothing
+    if (hits.length === 0) {
+      const { data } = await supabase.rpc("search_history_hybrid", {
+        p_user_id: userId,
+        query_embedding: embedding,
+        query_text: message.slice(0, 500),
+        match_count: 8,
+      });
+      hits = data || [];
+    }
+    if (hits.length === 0) return "";
+    const lines = hits.map((h: any) => {
+      const date = h.occurred_at ? new Date(h.occurred_at).toISOString().split("T")[0] : "";
+      const summary = h.content_summary || (h.content || "").slice(0, 200);
+      return `[${h.source_type} ${date}] ${summary}`;
+    });
+    return "\n📚 HISTÓRICO RELEVANTE:\n" + lines.join("\n");
+  } catch (e) {
+    console.warn("[jarvis-realtime] semantic retrieval error:", e);
+    return "";
+  }
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -463,20 +529,24 @@ serve(async (req) => {
     // 1. Get system prompt
     const systemPrompt = AGENT_PROMPTS[effectiveAgent];
 
-    // 2. Get RAG context (tasks, events, check-ins, profile)
-    const ragContext = await getRAGContext(supabase, effectiveAgent, userId);
+    // 2. Resolve entities mentioned in the transcript (contacts, projects)
+    const entityResolution = await resolveEntities(supabase, userId, transcript);
 
-    // 3. Get persistent memory
-    const memoryContext = await getMemoryContext(supabase, userId);
+    // 3. Fetch RAG, memory, history and semantic history in parallel
+    const [ragContext, memoryContext, history, semanticHistory] = await Promise.all([
+      getRAGContext(supabase, effectiveAgent, userId),
+      getMemoryContext(supabase, userId),
+      getConversationHistory(supabase, userId, effectiveAgent, sessionId, 15),
+      getSemanticHistory(supabase, userId, transcript, entityResolution.peopleIds),
+    ]);
 
-    // 4. Get conversation history
-    const history = await getConversationHistory(supabase, userId, effectiveAgent, sessionId, 15);
-
-    // 5. Build full system prompt
+    // 4. Build full system prompt
     const fullSystemPrompt = [
       systemPrompt,
       memoryContext ? `\n--- MEMORIA PERSISTENTE ---${memoryContext}` : '',
       ragContext ? `\n--- CONTEXTO ACTUAL ---${ragContext}` : '',
+      entityResolution.promptBlock || '',
+      semanticHistory || '',
       '\nIMPORTANTE: Si el usuario comparte información personal relevante (nombre, familia, trabajo, objetivos, preferencias), recuérdalo para futuras conversaciones.',
     ].filter(Boolean).join('\n');
 

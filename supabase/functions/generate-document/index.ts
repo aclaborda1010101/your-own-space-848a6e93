@@ -1437,8 +1437,66 @@ const STEP_TITLES: Record<number, string> = {
   14: "Roadmap Vendible",
   100: "Propuesta de Solución",
   101: "Resumen Ejecutivo",
+  102: "Documento de Alcance",
   200: "Estrategia de Lanzamiento",
 };
+
+// ══════════════════════════════════════════════════════════════════════
+// AI tariff catalog — keep in sync with src/config/projectCostRates.ts
+// USD per million tokens
+// ══════════════════════════════════════════════════════════════════════
+const AI_RATES: Record<string, { inputPerMillion: number; outputPerMillion: number; label: string }> = {
+  "gemini-flash":      { inputPerMillion: 0.075, outputPerMillion: 0.30,  label: "Google Gemini Flash" },
+  "gemini-flash-lite": { inputPerMillion: 0.25,  outputPerMillion: 1.50,  label: "Google Gemini Flash Lite" },
+  "gemini-pro":        { inputPerMillion: 2.00,  outputPerMillion: 12.00, label: "Google Gemini Pro" },
+  "claude-sonnet":     { inputPerMillion: 3.00,  outputPerMillion: 15.00, label: "Anthropic Claude Sonnet" },
+  "claude-haiku":      { inputPerMillion: 0.25,  outputPerMillion: 1.25,  label: "Anthropic Claude Haiku" },
+  "gpt-5":             { inputPerMillion: 2.50,  outputPerMillion: 10.00, label: "OpenAI GPT-5" },
+  "gpt-5-mini":        { inputPerMillion: 0.50,  outputPerMillion: 2.00,  label: "OpenAI GPT-5 Mini" },
+  "deepseek-v3":       { inputPerMillion: 0.27,  outputPerMillion: 1.10,  label: "DeepSeek V3" },
+  "whisper":           { inputPerMillion: 0,     outputPerMillion: 0,     label: "OpenAI Whisper (audio)" },
+  "gemini-vision":     { inputPerMillion: 0.075, outputPerMillion: 0.30,  label: "Gemini Vision (imagen/OCR)" },
+  "gemini-image-gen":  { inputPerMillion: 0,     outputPerMillion: 0,     label: "Gemini Image Generation" },
+  "veo":               { inputPerMillion: 0,     outputPerMillion: 0,     label: "Google Veo (vídeo)" },
+  "embeddings":        { inputPerMillion: 0.02,  outputPerMillion: 0,     label: "Text Embeddings" },
+};
+
+async function callLovableAI(systemPrompt: string, userPrompt: string, opts: { model?: string; maxTokens?: number } = {}): Promise<string> {
+  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
+  const modelMap: Record<string, string> = {
+    "gemini-pro": "google/gemini-3.1-pro-preview",
+    "gemini-flash": "google/gemini-3-flash-preview",
+  };
+  const model = modelMap[opts.model || "gemini-pro"] || "google/gemini-3.1-pro-preview";
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      max_tokens: opts.maxTokens || 8000,
+    }),
+  });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`AI gateway error ${resp.status}: ${txt.slice(0, 200)}`);
+  }
+  const json = await resp.json();
+  return json?.choices?.[0]?.message?.content || "";
+}
+
+function parseAIJson(raw: string): any {
+  let s = (raw || "").trim();
+  s = s.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+  const firstBrace = s.indexOf("{");
+  const lastBrace = s.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) s = s.slice(firstBrace, lastBrace + 1);
+  try { return JSON.parse(s); } catch { return null; }
+}
 
 // ══════════════════════════════════════════════════════════════════════
 // Main handler

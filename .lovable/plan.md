@@ -1,93 +1,119 @@
 
 
-## 3 mejoras independientes
+## Dos mejoras coordinadas
 
-Atacamos los tres problemas que has descrito por separado, sin que se pisen.
+### Parte A — Documento de Alcance AFFLUX más funcional, menos "técnico de IA"
 
----
+**Qué cambia (step 102 del `generate-document`)**
 
-### 1) Propuesta de AFFLUX se queda corta — falta profundidad real del proyecto
+Reescribo la estructura del documento siguiendo lo que pides:
 
-**Diagnóstico**
+1. **Fotografía inicial del cliente** (nueva sección 1) — Lo que nos contó el cliente: contexto, situación actual, dolores, necesidades, lo que tiene hoy y por qué no le funciona. Sale del briefing/extracción del paso 2.
+2. **Cómo lo vamos a resolver** (nueva sección 2) — Narrativa: "una aplicación que hace esto, esto y esto". 8-12 líneas con detalle funcional real (no marketing vacío, no SQL).
+3. **Áreas de trabajo** (sección 3, antes "capas") — Mantenemos la organización por áreas funcionales con tareas y badge de complejidad, pero **enriquecida** con el pipeline de 3 pasadas que ya planificamos:
+   - Pasada A: inventario exhaustivo del PRD entero por chunks → 40-80 ítems crudos.
+   - Pasada B: agrupación en 5-8 áreas (Captación, Scraping externo, Llamada comercial, Cualificación, Seguimiento, Operación, Integraciones, Reporting…) con complejidad realista.
+   - Cada tarea: nombre comercial + 1-2 líneas funcionales.
+4. **Consumos previstos de IA** (sección 4) — Mantenemos tabla de **uso por servicio** (volumen estimado + coste mensual EUR bajo/esperado/alto). **Eliminamos**:
+   - La sección entera de "Stack de IA" con nombres de modelos (Claude, Gemini, etc.).
+   - Cualquier mención a `claude-sonnet`, `gpt-5`, `gemini-pro` en el cuerpo del documento.
 
-Tu PRD de AFFLUX en BD ocupa **166 KB** y el alcance interno **34 KB**, pero el "Documento de Alcance ≤15 págs" (step 102) que generaste hace una sola pasada con el LLM y le metemos como mucho 12 KB del alcance + 10 KB del PRD recortados. Resultado: el modelo solo "ve" la superficie y escribe 3-4 capas genéricas. Por eso te falta scraping inmobiliario, llamada comercial, detección temprana, seguimiento de oportunidades fuera de web, etc.
+   Lo agrupamos por **función**, no por modelo: "Análisis conversacional", "Transcripción de llamadas", "Lectura de documentos PDF", "Generación de respuestas comerciales", "Embeddings para búsqueda semántica"… Cada fila: para qué sirve + volumen mensual + EUR/mes.
+5. **Planificación temporal** (sección 5) — Igual que ahora (fases + Gantt visual).
+6. **Inversión** (sección 6) — Igual que ahora (sin márgenes internos, modelos comerciales seleccionados).
+7. **Condiciones y próximos pasos** (sección 7) — Igual.
 
-**Qué cambia**
+**Resultado**: ≤15 págs, sin nombres de modelos pero con consumos cuantificados, con áreas de trabajo profundas y con la fotografía inicial del cliente que pediste.
 
-Reescribimos el bloque step 102 con un pipeline en 3 pasadas (sin tocar el botón ni la UI):
-
-1. **Pasada A — Inventario exhaustivo**: el LLM lee el PRD entero por trozos (chunks de ~25 KB con solapamiento) y devuelve un listado plano de TODOS los módulos/funcionalidades que detecta, con su descripción de negocio. Sin filtros. Objetivo: 40-80 ítems, no 15.
-2. **Pasada B — Agrupación en capas**: con el inventario completo, una segunda llamada lo organiza en **5-8 capas funcionales** (en AFFLUX serían: Captación de oportunidades, Scraping y monitorización externa, Llamada y conversación comercial, Cualificación e inteligencia, Seguimiento y nurturing, Operación interna, Integraciones, Reporting). Asigna complejidad a cada tarea.
-3. **Pasada C — Stack IA + costes**: igual que ahora, pero alimentada con el inventario ya agrupado.
-
-**Lo que verás en el PDF**
-
-- Capas reales del proyecto (no 3 genéricas).
-- 30-50 tareas visibles agrupadas, no 15.
-- Cada tarea con badge de complejidad y descripción comercial.
-- Sigue cabiendo en ≤15 págs porque cada tarea son 1-2 líneas.
-
-**Archivos**: `supabase/functions/generate-document/index.ts` (solo el bloque `stepNumber === 102`).
+**Archivo único**: `supabase/functions/generate-document/index.ts` — solo el bloque `stepNumber === 102` (~250 líneas). Prompts de pasada A/B se reescriben para no devolver `ai_stack` y devolver `client_snapshot` + `solution_narrative`.
 
 ---
 
-### 2) JARVIS no entiende nombres de contactos aproximados ("Iva", "Adri Panda", "Steve")
+### Parte B — JARVIS entiende contactos, proyectos, emails y notas en lenguaje natural
 
-**Diagnóstico**
+**Diagnóstico verificado en BD**
 
-Verificado en el código: ni `jarvis-realtime` (el que usa el botón de voz) ni `jarvis-gateway` consultan nunca la tabla `people_contacts`. El RAG context que se le inyecta a Claude solo trae perfil, check-ins, tareas y eventos. El LLM no tiene de dónde sacar que "Iva" = "Iva Abouk". Por eso se queda pillado.
+| Fuente | Filas en BD | Indexado para búsqueda semántica |
+|---|---|---|
+| WhatsApp | 311 chunks | ✅ Sí |
+| Chat JARVIS | 2 chunks | ✅ Sí |
+| **Emails** | **805** | ❌ **No** |
+| **Proyectos (wizard steps)** | **68 pasos / 12 proyectos** | ❌ **No** |
+| **Plaud (transcripciones reuniones)** | tabla existe | ❌ **No** |
+| **Notas de contacto** | existe | ❌ **No** |
+| Contactos | 2589 | ❌ no fuzzy en gateway |
+
+Por eso JARVIS no sabe nada de "Adflux", del contacto de Adflux, del email que te mandó alguien o del problema mayor del cliente: **esa información existe, pero el knowledge graph no la ve**. Solo tiene WhatsApp.
+
+Ya existen `search_history_hybrid` (ya usado por gateway) y `search_contacts_fuzzy` (sin usar). El enum `jarvis_source_type` ya incluye `email`, `plaud`, `contact_note`, `calendar` — solo falta poblarlos. Falta añadir un valor `project` al enum.
 
 **Qué cambia**
 
-Añadimos **resolución difusa de contactos** en `jarvis-realtime/index.ts` (y reutilizable en gateway):
+**B.1 — Indexación masiva del knowledge graph (migración + edge function)**
 
-1. Antes de llamar a Claude, detectamos en el transcript posibles **nombres propios** (palabras capitalizadas o tras patrones tipo "con/de/a/sobre X", "qué dije a X", "hablé con X").
-2. Para cada candidato hacemos una **búsqueda fuzzy** contra `people_contacts` del usuario:
-   - Match exacto sin tildes/case → top.
-   - Substring (Iva ⊂ "Iva Abouk" o "Iva Book").
-   - Distancia de Levenshtein ≤ 2 sobre cada palabra del nombre del contacto (Adri ↔ Adri Panda, Steve ↔ Steven).
-   - Iniciales / apodos almacenados (si existen en `nicknames` o `aliases`).
-3. Devolvemos los 1-3 contactos más probables con **score**. Si el score top supera un umbral, los inyectamos en el system prompt como bloque:
+- Añadir `'project'` al enum `jarvis_source_type`.
+- Edge function nueva `jarvis-history-backfill` que:
+  - Lee emails, plaud, notas de contacto, eventos, y los 12 proyectos (briefing + PRD + alcance + auditoría) de cada usuario.
+  - Trocea (~1500 chars), genera embedding (text-embedding-3-small dim 1024 — el mismo que ya usa gateway), e inserta en `jarvis_history_chunks` con `source_type`, `people` (uuid de contactos mencionados), `occurred_at`, `metadata` (project_id si aplica).
+  - Idempotente vía `content_hash`. Procesa en lotes para no saturar.
+- Disparador inicial: botón en Settings (o llamada manual) + cron nocturno que indexa lo nuevo de cada fuente.
+- **Trigger en vivo**: triggers ligeros en `jarvis_emails_cache`, `plaud_recordings`, `business_project_timeline`, `project_wizard_steps` que insertan en `jarvis_ingestion_jobs` (cola que ya existe), procesada por `rag-job-runner`.
 
+**B.2 — Resolución difusa de entidades antes de cada respuesta**
+
+En `jarvis-realtime/index.ts` (botón de voz) y `jarvis-gateway/index.ts` (chat), antes de llamar al LLM:
+
+1. Detectar **candidatos a entidad** en el transcript (palabras capitalizadas, nombres tras "con/de/sobre/a/contacto de", referencias a proyectos).
+2. Para cada candidato, en paralelo:
+   - `search_contacts_fuzzy(user, term, 3)` → contactos.
+   - Comparar contra `business_projects.name` con similarity → proyectos.
+3. Si hay match con score alto, inyectar bloque en system prompt:
    ```
-   📇 CONTACTOS MENCIONADOS (resolución automática):
-   - "Iva" → Iva Abouk (score 0.92) | última interacción: ...
-     * Últimos 3 mensajes resumidos: ...
+   📇 ENTIDADES MENCIONADAS:
+   - "Iva" → Iva Abouk (contacto, score 0.92)
+   - "Adflux" → AFFLUX (proyecto, score 0.95)
    ```
+4. Pasar los uuids resueltos como `p_people` a `search_history_hybrid` para que el RAG semántico devuelva chunks **filtrados por esa persona/proyecto** (no solo por keyword).
+5. Si dos candidatos empatan, instruir al prompt: "pregunta para desambiguar" (no quedarse pillado).
 
-4. Con eso, Claude responde directamente sobre el contacto sin pedir el nombre exacto.
-5. Si hay **ambigüedad** (dos candidatos con score parecido), instruimos al prompt a preguntar: *"¿Te refieres a Iva Abouk o a Iva Book?"* — en lugar de quedarse bloqueado.
+**B.3 — Cobertura semántica completa en el contexto**
 
-**Archivos**: `supabase/functions/jarvis-realtime/index.ts` (nueva función `resolveContacts()` + integración en el system prompt). Misma función portada a `jarvis-gateway/index.ts` cuando se detecte intención conversacional sobre contactos.
+`jarvis-realtime` hoy no llama a `getSemanticHistory`. Lo añadimos (ya está implementado en gateway, lo portamos). Resultado: la pregunta "¿cuál era el mayor problema en Adflux?" pasa por:
 
-**Sin cambios** en BD ni en la UI.
+1. Resolver "Adflux" → project AFFLUX + contactos vinculados.
+2. `search_history_hybrid` filtrado por ese proyecto + contactos → trae emails, transcripciones Plaud, mensajes WhatsApp, notas, brief del proyecto.
+3. Claude responde con esos hechos reales en contexto.
 
----
+**B.4 — Resiliencia auth (lo del punto 3 anterior)**
 
-### 3) JARVIS Real-Time se queda "desautorizado" al recibir una notificación
-
-**Diagnóstico**
-
-Cuando entra una push o cambias de app, el navegador suspende la pestaña; al volver, el `access_token` puede haber caducado. `useJarvisRealtimeVoice` llama a `supabase.functions.invoke('jarvis-realtime')`, que adjunta el JWT actual del cliente — si ha caducado y no se ha refrescado, la edge devuelve 401 y el componente se queda en estado `error`. Hoy no hay reintento automático ni refresh forzado.
-
-**Qué cambia**
-
-En `src/hooks/useJarvisRealtimeVoice.tsx` (`processWithClaude`):
-
-1. **Refresh defensivo previo**: antes de cada `functions.invoke`, comprobamos `expires_at` de la sesión. Si quedan < 60 s, llamamos `supabase.auth.refreshSession()` y esperamos.
-2. **Reintento con re-auth**: si la invoke devuelve 401/`Unauthorized` o `JWT expired`, forzamos `refreshSession()` y reintentamos UNA vez. Si sigue fallando, mostramos toast claro "Sesión renovada, intenta de nuevo" y dejamos el estado en `idle` (no `error`) para que el botón siga usable sin recargar la app.
-3. **Listener `visibilitychange`**: cuando la pestaña vuelve a foreground, verificamos sesión y refrescamos preventivamente. Así, después de una notificación, el siguiente click ya está autenticado.
-4. **Limpieza de estado bloqueado**: si `isProcessingRef` quedó `true` por un fallo silencioso, lo reseteamos al volver a foreground.
-
-**Archivos**: `src/hooks/useJarvisRealtimeVoice.tsx` (sin tocar UI ni edge function).
+Mantenemos lo planificado ya: refresh defensivo + reintento 401 + listener `visibilitychange` en `useJarvisRealtimeVoice.tsx` para que la notificación no rompa la sesión.
 
 ---
+
+### Archivos a tocar
+
+| Archivo | Cambio |
+|---|---|
+| `supabase/functions/generate-document/index.ts` | Reescribe bloque step 102: nueva fotografía cliente + solución narrativa + áreas + consumos sin modelos |
+| `supabase/migrations/<new>.sql` | Añade `'project'` al enum + triggers de ingest + índice GIN en nombres de proyectos para fuzzy |
+| `supabase/functions/jarvis-history-backfill/index.ts` (nueva) | Backfill masivo de emails/plaud/proyectos/notas → chunks + embeddings |
+| `supabase/functions/jarvis-realtime/index.ts` | + `resolveEntities()` + `getSemanticHistory()` + filtro por `people` |
+| `supabase/functions/jarvis-gateway/index.ts` | + `resolveEntities()` + filtro por `people`/proyecto en hybrid search |
+| `supabase/functions/_shared/entity-resolver.ts` (nueva) | Lógica compartida de detección + fuzzy + scoring |
+| `src/hooks/useJarvisRealtimeVoice.tsx` | Refresh defensivo + reintento 401 + visibilitychange |
+| `src/pages/Settings.tsx` (mínimo) | Botón "Reindexar todo el knowledge graph" que llama al backfill |
+
+### Sin tocar
+
+- UI del wizard, panel de propuesta, paneles de proyectos.
+- Schema de `people_contacts`, `business_projects`, `jarvis_emails_cache`.
+- Modelo de TTS/STT.
 
 ### Orden de ejecución
 
-1. Mejora propuesta AFFLUX (edge function only).
-2. Resolución difusa de contactos (edge function only).
-3. Resiliencia auth real-time (frontend hook only).
-
-Sin migraciones, sin tablas nuevas, sin tocar componentes visuales. Cada cambio es independiente.
+1. Parte A (documento AFFLUX) — autocontenido, validable de inmediato.
+2. Migración: enum + triggers + índices.
+3. `entity-resolver.ts` compartido + integración en gateway y realtime.
+4. `jarvis-history-backfill` + botón Settings → primer reindex completo.
+5. Resiliencia auth en hook real-time.
 

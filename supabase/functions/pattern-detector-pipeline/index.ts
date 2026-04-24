@@ -49,7 +49,7 @@ function cleanJson(text: string): string {
   return c;
 }
 
-function safeParseJson(text: string): unknown {
+function safeParseJson(text: string): any {
   const cleaned = cleanJson(text);
   const preview = cleaned.substring(0, 300);
   

@@ -1,7 +1,7 @@
 /**
  * input-sampler.ts — Smart sampler for long extract inputs.
  *
- * Goal: keep the LLM input bounded (~85k–90k chars) WITHOUT losing critical
+ * Goal: keep the LLM input bounded (~65k–70k chars) WITHOUT losing critical
  * mid-document signal. Strategy:
  *   - Always preserve the head and tail of the document.
  *   - Around each occurrence of a "critical keyword", keep a ±2k window.
@@ -11,11 +11,11 @@
  * Pure function — no IO, no LLM. Easy to unit-test.
  */
 
-const SAMPLER_BUDGET = 90_000;
+const SAMPLER_BUDGET = 68_000;
 const SAMPLER_TRIGGER = 90_000;
-const HEAD_CHARS = 30_000;
-const TAIL_CHARS = 25_000;
-const WINDOW_RADIUS = 2_000;
+const HEAD_CHARS = 24_000;
+const TAIL_CHARS = 18_000;
+const WINDOW_RADIUS = 1_500;
 
 /** Keyword groups — ordered by priority (most critical first). */
 const KEYWORD_PRIORITY_GROUPS: string[][] = [

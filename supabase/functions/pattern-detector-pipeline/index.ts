@@ -23,7 +23,7 @@ async function updateRun(runId: string, updates: Record<string, unknown>) {
   if (error) console.error("updateRun error:", error);
 }
 
-async function getRunPhaseResults(runId: string): Promise<Record<string, unknown>> {
+async function getRunPhaseResults(runId: string): Promise<Record<string, any>> {
   const { data } = await supabase
     .from("pattern_detector_runs")
     .select("phase_results")
@@ -49,7 +49,7 @@ function cleanJson(text: string): string {
   return c;
 }
 
-function safeParseJson(text: string): unknown {
+function safeParseJson(text: string): any {
   const cleaned = cleanJson(text);
   const preview = cleaned.substring(0, 300);
   
@@ -2977,25 +2977,10 @@ Responde con JSON:
         let compositeMetricsBlock = "";
 
         // Fetch relevant datasets for this run (from Drive ingestion)
-        let datasetContextPipeline = "";
-        try {
-          const { data: relevantDatasets } = await supabase
-            .from("pattern_detector_datasets")
-            .select("file_name, classification, relevance_reason, extracted_text")
-            .eq("run_id", runId)
-            .eq("status", "relevant")
-            .order("relevance_score", { ascending: false });
-
-          if (relevantDatasets && relevantDatasets.length > 0) {
-            const datasetSummaries = relevantDatasets.map((d: any) => {
-              const textSample = (d.extracted_text || "").slice(0, 2000);
-              return `- ${d.file_name} [${d.classification}]: ${d.relevance_reason}\n  Extracto: ${textSample}`;
-            }).join("\n\n");
-            datasetContextPipeline = `\n\n═══ DATOS PROPIOS DEL PROYECTO (Datasets Drive) ═══\nSe han analizado ${relevantDatasets.length} archivos relevantes. Usa esta información para fundamentar patrones con datos reales:\n\n${datasetSummaries}`;
-          }
-        } catch (e) {
-          console.log("No dataset context available in pipeline_run:", e);
-        }
+        // NOTE: pipeline_run does not own a pattern_detector_runs row, so per-run
+        // dataset enrichment is not available here. Project-level dataset context
+        // is injected through `briefingContext` instead.
+        const datasetContextPipeline = "";
 
         if (sectorKey === "centros_comerciales") {
           unconventionalSystemRule = `
@@ -3837,7 +3822,7 @@ Responde con:
 
         let ragIdx = 1;
         for (const [srcName, sigs] of sourceGroups) {
-          const srcInfo = sourcesByName.get(srcName);
+          const srcInfo = sourcesByName.get(srcName) as any;
           ragsExternos.push({
             id: `RAG_EXT_${ragIdx}`,
             nombre: `RAG Externo: ${srcName}`,

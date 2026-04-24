@@ -26,7 +26,7 @@ interface LLMResult {
 }
 
 const TRANSIENT_STATUSES = new Set([500, 502, 503, 504]);
-const MAX_RETRIES = 3;
+const DEFAULT_MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 1500;
 
 function sleep(ms: number) {

@@ -526,6 +526,13 @@ export function runAllValidators(
     allViolations.push(...flatResult.violations);
   }
 
+  // 7. Registry approval guard (step 25 only) — semantic check on component.status
+  if (stepNumber === 25 && outputData) {
+    const approvalResult = validateRegistryNoApproval(outputData);
+    Object.assign(allFlags, approvalResult.flags);
+    allViolations.push(...approvalResult.violations);
+  }
+
   // Add validation metadata
   if (allViolations.length > 0) {
     allFlags.validation_ran = true;
@@ -702,6 +709,61 @@ export function validateFlatNamingContamination(
 
   return {
     valid: true, // v1: flag only, don't block
+    violations,
+    flags,
+  };
+}
+
+/**
+ * Step 25 — Registry approval guard (semantic).
+ * F3 must NEVER mark components as approved_for_scope. That decision belongs
+ * to F4a/F4b downstream. This validator inspects the actual `status` value of
+ * each component in `component_registry.components` (and `legacy_components`
+ * if present). Narrative mentions in `mutation_history[].reason` or warnings
+ * are explicitly allowed.
+ *
+ * Emits code F3_APPROVED_FOR_SCOPE_FORBIDDEN with severity error per offending
+ * component.
+ */
+export function validateRegistryNoApproval(outputData: any): ValidationResult {
+  const violations: ValidationViolation[] = [];
+  const flags: Record<string, any> = {};
+
+  if (!outputData || typeof outputData !== "object") {
+    return { valid: true, violations, flags };
+  }
+
+  const registry = outputData.component_registry;
+  if (!registry || typeof registry !== "object") {
+    return { valid: true, violations, flags };
+  }
+
+  const buckets: Array<{ key: string; items: any }> = [
+    { key: "components", items: registry.components },
+    { key: "legacy_components", items: registry.legacy_components },
+  ];
+
+  for (const { key, items } of buckets) {
+    if (!Array.isArray(items)) continue;
+    for (const comp of items) {
+      if (comp && typeof comp === "object" && comp.status === "approved_for_scope") {
+        const id = comp.component_id || comp.id || "<unknown_id>";
+        const name = comp.name || comp.title || "<unnamed>";
+        violations.push({
+          type: "forbidden_key",
+          severity: "error",
+          detail: `[F3_APPROVED_FOR_SCOPE_FORBIDDEN] F3 cannot approve components for scope. Component ${id} (${name}) in component_registry.${key} has status "approved_for_scope". Must be downgraded to candidate_validated before persisting Step 25.`,
+        });
+      }
+    }
+  }
+
+  if (violations.length > 0) {
+    flags.f3_approved_for_scope_violations = violations.length;
+  }
+
+  return {
+    valid: violations.length === 0,
     violations,
     flags,
   };

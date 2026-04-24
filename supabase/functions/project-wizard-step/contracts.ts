@@ -226,7 +226,11 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
       "monetization_models", "pricing", "budget", "monetization",
       "approved_for_scope",
     ],
-    forbiddenTerms: ["CREATE TABLE", "approved_for_scope"],
+    // Note: "approved_for_scope" intentionally NOT in forbiddenTerms — it may legitimately appear
+    // in narrative text (e.g. mutation_history[].reason documenting a downgrade). The semantic
+    // check `validateRegistryNoApproval` in validators.ts blocks the actual forbidden case:
+    // any component with status === "approved_for_scope".
+    forbiddenTerms: ["CREATE TABLE"],
     inputStepsAllowed: [2],
     outputSchemaVersion: "v1.0",
   },

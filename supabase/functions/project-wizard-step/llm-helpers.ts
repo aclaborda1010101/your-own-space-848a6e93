@@ -41,13 +41,17 @@ async function callGateway(
     temperature: number;
     maxTokens: number;
     jsonMode?: boolean;
+    /** Optional override for retry attempts (default 3). Used by `extract`
+     * to keep wall time under Edge Function 150s idle timeout. */
+    maxRetries?: number;
   }
 ): Promise<LLMResult> {
   const apiKey = getApiKey();
+  const maxRetries = typeof opts.maxRetries === "number" ? opts.maxRetries : DEFAULT_MAX_RETRIES;
 
   let lastError: unknown = null;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const { signal, clear } = createTimeoutSignal();
     try {
       const body: Record<string, unknown> = {

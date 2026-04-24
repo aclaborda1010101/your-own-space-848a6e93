@@ -586,6 +586,48 @@ REGLAS PARA deep_patterns:
         }
       }
 
+      // ── Pipeline v2: post-parse hardening ──
+      if (!briefing.parse_error) {
+        // 1. Strip registry leaks (Ajuste 2)
+        const leak = stripRegistryLeaks(briefing);
+        briefing = leak.cleaned;
+        if (leak.leakDetected) {
+          appendExtractionWarning(briefing, {
+            type: "registry_leak_prevented",
+            message: "F1 attempted to emit registry/component data. It was removed because ComponentRegistryItems are created only in F2/F3.",
+            details: leak.leakDetails,
+          });
+          console.warn("[wizard][F1] registry leak prevented:", leak.leakDetails);
+        }
+
+        // 2. Ensure legacy brief shape (compat UI)
+        briefing = ensureLegacyBriefShape(briefing);
+
+        // 3. Naming collision check (server-side, solo si product_name explícito)
+        const v2 = briefing.business_extraction_v2;
+        if (v2 && typeof v2 === "object" && v2.client_naming_check && typeof v2.client_naming_check === "object") {
+          const cnc = v2.client_naming_check;
+          const clientName = (typeof cnc.client_company_name === "string" && cnc.client_company_name.trim().length > 0)
+            ? cnc.client_company_name
+            : (companyName || "");
+          const productName = typeof cnc.proposed_product_name === "string" ? cnc.proposed_product_name : null;
+          if (clientName && productName && productName.trim().length > 0) {
+            const collision = checkNamingCollision(clientName, productName);
+            cnc.collision_detected = collision.detected;
+            if (collision.reason) cnc.collision_reason = collision.reason;
+          } else {
+            cnc.collision_detected = false;
+          }
+        }
+
+        // 4. Brief metadata
+        briefing.brief_version = typeof briefing.brief_version === "string" ? briefing.brief_version : "2.0.0";
+        briefing.legacy_compatibility = { mapped_to_old_brief_fields: true };
+
+        // 5. Attach F0 signals (límites ya aplicados en runF0SignalPreservation)
+        briefing._f0_signals = f0Result;
+      }
+
       // ── P0: Detect parallel projects in raw input ──
       if (!briefing.parse_error) {
         const parallelProjects = detectParallelProjects(contentForExtraction || inputContent || "", briefing);

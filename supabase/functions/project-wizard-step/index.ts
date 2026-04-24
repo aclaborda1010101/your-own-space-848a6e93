@@ -372,11 +372,14 @@ Empresa cliente: ${companyName}
 Tipo de proyecto: ${projectType}
 Necesidad declarada por el cliente: ${clientNeed || "No proporcionada — extraer del material"}
 
+${renderF0SignalsBlock(f0Result)}
+
 Material de entrada:
 ${contentForExtraction}
 
 GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
 {
+  "brief_version": "2.0.0",
   "project_summary": {
     "title": "",
     "context": "3-5 frases: qué empresa, qué problema, qué se plantea, magnitud",

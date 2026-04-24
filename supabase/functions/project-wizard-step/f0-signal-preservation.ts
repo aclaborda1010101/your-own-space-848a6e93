@@ -119,7 +119,11 @@ function clampStringArray(arr: unknown, maxItems: number, maxChars = 200): strin
     .slice(0, maxItems);
 }
 
-function applyLimits(raw: any): SignalPreservationResult {
+/**
+ * Aplica límites duros y normaliza la forma del resultado F0.
+ * Pure function — exportada para testabilidad. NO cambia comportamiento runtime.
+ */
+export function clampF0Result(raw: any): SignalPreservationResult {
   const truncated: string[] = [];
   const golden = asArray(raw?.golden_quotes);
   const discarded = asArray(raw?.discarded_content_with_business_signal_candidates);
@@ -250,7 +254,7 @@ Extrae señal según las reglas. Devuelve SOLO el JSON.`;
       console.warn("[F0] JSON parse failed — returning empty F0 result.");
       return emptyF0Result("parse_failed");
     }
-    return applyLimits(parsed);
+    return clampF0Result(parsed);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`[F0] LLM call failed: ${msg}`);

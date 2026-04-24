@@ -42,6 +42,9 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
       "architecture_signals", "extraction_warnings", "deep_patterns",
       "parallel_projects", "_was_filtered", "_filtered_content",
       "_contract_validation", "_brief_validation",
+      // Pipeline v2 (aditivo, no rompe legacy)
+      "brief_version", "business_extraction_v2", "legacy_compatibility",
+      "_f0_signals", "_truncation_repaired",
     ],
     forbiddenKeys: [
       "development_phases", "development", "phases", "monetization_models",
@@ -72,7 +75,7 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
       "layer_candidate", "module_type_candidate", "phase_candidate",
     ],
     inputStepsAllowed: [1],
-    outputSchemaVersion: "v3.1",
+    outputSchemaVersion: "v3.2",
   },
 
   // ── Step 3: Documento de Alcance ──

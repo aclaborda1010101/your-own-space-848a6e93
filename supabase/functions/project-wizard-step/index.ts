@@ -6,6 +6,10 @@ import { sanitizeClientOutput } from "./sanitizer.ts";
 import { callGeminiFlash, callGeminiFlashMarkdown, callClaudeSonnet, callGeminiPro, callGatewayRetry } from "./llm-helpers.ts";
 import { detectParallelProjects, injectParallelProjectExclusions, filterParallelProjectFindings } from "./parallel-projects.ts";
 import type { ParallelProject } from "./parallel-projects.ts";
+import { runF0SignalPreservation, emptyF0Result, renderF0SignalsBlock } from "./f0-signal-preservation.ts";
+import type { SignalPreservationResult } from "./f0-signal-preservation.ts";
+import { ensureLegacyBriefShape, stripRegistryLeaks, appendExtractionWarning } from "./f1-legacy-shape.ts";
+import { checkNamingCollision } from "../_shared/component-registry-contract.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -125,7 +129,21 @@ serve(async (req) => {
       let filteredContent: string | null = null;
       let wasFiltered = false;
 
-      if (needsTranscriptFilter(inputType || "", inputContent || "")) {
+      // ── Pipeline v2: F0 (signal preservation) en paralelo al filtro ──
+      const f0Promise: Promise<SignalPreservationResult> = runF0SignalPreservation(
+        inputContent || "",
+        { projectName, companyName, projectType },
+      ).catch((e) => {
+        console.warn("[wizard][F0] failed (non-blocking):", e instanceof Error ? e.message : e);
+        return emptyF0Result(e instanceof Error ? e.message : String(e));
+      });
+
+      const filterShouldRun = needsTranscriptFilter(inputType || "", inputContent || "");
+      let filterTokensInput = 0;
+      let filterTokensOutput = 0;
+
+      const filterPromise: Promise<{ filtered: string | null; ran: boolean }> = (async () => {
+        if (!filterShouldRun) return { filtered: null, ran: false };
         console.log("[wizard] Transcript filter triggered for project:", projectId);
         const filterPrompt = `Eres un editor de transcripciones especializado en aislar UN SOLO proyecto de entre múltiples temas discutidos.
 
@@ -149,20 +167,27 @@ ${inputContent}
 Devuelve SOLO el texto filtrado, sin explicaciones ni comentarios.`;
 
         const filterResult = await callGeminiFlashMarkdown("", filterPrompt);
+        filterTokensInput = filterResult.tokensInput;
+        filterTokensOutput = filterResult.tokensOutput;
+        return { filtered: filterResult.text.trim(), ran: true };
+      })();
 
-        filteredContent = filterResult.text.trim();
+      const [f0Result, filterOutcome] = await Promise.all([f0Promise, filterPromise]);
+
+      if (filterOutcome.ran && filterOutcome.filtered) {
+        filteredContent = filterOutcome.filtered;
         wasFiltered = true;
         contentForExtraction = filteredContent;
-
-        // Record filter cost
-        const filterCostUsd = (filterResult.tokensInput / 1_000_000) * 0.075 + (filterResult.tokensOutput / 1_000_000) * 0.30;
+        const filterCostUsd = (filterTokensInput / 1_000_000) * 0.075 + (filterTokensOutput / 1_000_000) * 0.30;
         await recordCost(supabase, {
           projectId, stepNumber: 2, service: "gemini-flash", operation: "transcript_filter",
-          tokensInput: filterResult.tokensInput, tokensOutput: filterResult.tokensOutput,
+          tokensInput: filterTokensInput, tokensOutput: filterTokensOutput,
           costUsd: filterCostUsd, userId: user.id,
         });
         console.log(`[wizard] Transcript filtered: ${inputContent.length} → ${filteredContent.length} chars`);
       }
+
+      console.log(`[wizard][F0] generated=${f0Result._meta?.generated ?? false} quotes=${f0Result.golden_quotes.length} discarded=${f0Result.discarded_content_with_business_signal_candidates.length}`);
 
       const systemPrompt = `Eres un analista senior de extracción de información con 15 años de experiencia en consultoría tecnológica.
 
@@ -289,6 +314,55 @@ LÍMITES DE VOLUMEN (OBLIGATORIO para evitar truncamiento):
 - architecture_signals: MÁXIMO 8 items
 - Si hay más elementos, prioriza los de mayor certainty y relevancia.
 
+═══════════════════════════════════════════════════════════════════════
+PIPELINE v2 — BUSINESS EXTRACTION BRIEF v2.0.0 (CAPA ADITIVA)
+═══════════════════════════════════════════════════════════════════════
+
+Eres un ARQUITECTO IA-NATIVO SENIOR. No estás aquí para resumir: estás aquí para preservar la señal de negocio que hace este proyecto único, distinguir lo que el cliente PIDE de lo que NECESITA, e identificar activos infrautilizados que se pueden convertir en componentes IA-nativos.
+
+REGLAS ANTI-PÉRDIDA DE SEÑAL (obligatorias):
+- Las frases laterales o "comentarios al pasar" suelen contener la señal más valiosa. NO las descartes.
+- Cifras concretas son sagradas: cópialas literalmente con su contexto.
+- Activos de datos infrautilizados (Excel artesanal, grabaciones, históricos, logs) son candidatos a Capa A — anótalos siempre.
+- Catalysts de negocio (eventos que mueven decisiones) son críticos para entender por qué AHORA.
+- "Founder soul" / criterio fundador es un RIESGO si depende solo de una persona — anótalo en constraints_and_risks o como soul_dependency_risk.
+
+GENERA SIEMPRE DOS CAPAS:
+1. CAMPOS LEGACY (project_summary, observed_facts, inferred_needs, solution_candidates, constraints_and_risks, open_questions, architecture_signals, deep_patterns, extraction_warnings) — OBLIGATORIOS.
+2. BLOQUE business_extraction_v2 — OBLIGATORIO. Estructura enriquecida descrita más abajo.
+Si hay tensión entre ambos: prioriza NO ROMPER LOS CAMPOS LEGACY.
+
+PROHIBIDO EN F1 (esta fase):
+- NO generes ComponentRegistryItem, "components" ni "component_registry".
+- NO uses IDs con patrón "COMP-XXX". Para v2 usa IDs blandos: CAT-001 (catalysts), ASSET-001 (data assets), PAIN-001 (economic pains), REQ-001 (client requested), SIGNAL-001 (opportunity signals), DECISION-001 (decision points), STAKE-001 (stakeholder), EXT-001 (external sources).
+- La creación de componentes formales es competencia EXCLUSIVA de F2/F3 en pasos posteriores.
+
+ESTRUCTURA OBLIGATORIA del bloque business_extraction_v2 (campos y LÍMITES máximos):
+- project_title (string)
+- business_model_summary (objeto: title, context, primary_goal, complexity_level, urgency_level)
+- observed_facts (≤25)
+- business_catalysts (≤10) — eventos/disparadores que mueven la decisión
+- underutilized_data_assets (≤8) — activos infrautilizados convertibles en knowledge_modules
+- quantified_economic_pains (≤10) — dolores con magnitud económica si está disponible
+- decision_points (≤8) — momentos clave de decisión en el workflow
+- stakeholder_map (≤10) — personas/roles relevantes con su influencia
+- client_requested_items (≤12) — lo que el cliente pidió EXPLÍCITAMENTE
+- inferred_needs (≤12) — necesidades inferidas (NO solicitadas)
+- ai_native_opportunity_signals (≤10) — señales de oportunidad IA-nativa
+- external_data_sources_mentioned (≤10)
+- architecture_signals (≤12)
+- initial_compliance_flags (≤10) — banderas iniciales (PII, salud, menores, etc.)
+- constraints_and_risks (≤10)
+- open_questions (≤10)
+- client_naming_check (objeto: client_company_name, proposed_product_name|null) — solo si el cliente propuso nombre EXPLÍCITAMENTE; si no, deja proposed_product_name=null. NO inventes nombres.
+
+Estos límites son ORIENTATIVOS y obligatorios para evitar que el brief crezca demasiado en reuniones largas. Prioriza calidad sobre cantidad.
+
+USA LAS F0_SIGNALS QUE SE INYECTAN EN EL USER PROMPT como referencia: las "discarded_content_with_business_signal_candidates" deben sobrevivir a esta extracción si tienen valor de negocio.
+
+CAMPO brief_version OBLIGATORIO en el JSON top-level: "2.0.0".
+═══════════════════════════════════════════════════════════════════════
+
 Responde SOLO con JSON válido. Sin explicaciones, sin markdown, sin backticks.
 ${buildContractPromptBlock(2)}`;
 
@@ -298,11 +372,14 @@ Empresa cliente: ${companyName}
 Tipo de proyecto: ${projectType}
 Necesidad declarada por el cliente: ${clientNeed || "No proporcionada — extraer del material"}
 
+${renderF0SignalsBlock(f0Result)}
+
 Material de entrada:
 ${contentForExtraction}
 
 GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
 {
+  "brief_version": "2.0.0",
   "project_summary": {
     "title": "",
     "context": "3-5 frases: qué empresa, qué problema, qué se plantea, magnitud",
@@ -413,7 +490,27 @@ GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
       "type": "parallel_project|ambiguous_scope|missing_evidence|premature_formalization|duplicate_domain",
       "description": "", "affected_items": [], "recommendation": ""
     }
-  ]
+  ],
+  "business_extraction_v2": {
+    "project_title": "",
+    "business_model_summary": { "title": "", "context": "", "primary_goal": "", "complexity_level": "medium", "urgency_level": "medium" },
+    "observed_facts": [],
+    "business_catalysts": [{ "id": "CAT-001", "title": "", "description": "", "evidence": "" }],
+    "underutilized_data_assets": [{ "id": "ASSET-001", "title": "", "description": "", "evidence": "", "convertible_to_layer": "A" }],
+    "quantified_economic_pains": [{ "id": "PAIN-001", "title": "", "description": "", "magnitude": "", "evidence": "" }],
+    "decision_points": [{ "id": "DECISION-001", "title": "", "description": "" }],
+    "stakeholder_map": [{ "id": "STAKE-001", "name": "", "role": "", "influence": "low|medium|high" }],
+    "client_requested_items": [{ "id": "REQ-001", "title": "", "description": "", "evidence": "" }],
+    "inferred_needs": [],
+    "ai_native_opportunity_signals": [{ "id": "SIGNAL-001", "title": "", "description": "", "layer_candidate": "A|B|C|D|E", "rationale": "" }],
+    "external_data_sources_mentioned": [{ "id": "EXT-001", "name": "", "kind": "" }],
+    "architecture_signals": [],
+    "initial_compliance_flags": [{ "flag": "PII|HEALTH|MINORS|BIOMETRIC|FINANCIAL|OTHER", "evidence": "" }],
+    "constraints_and_risks": [],
+    "open_questions": [],
+    "client_naming_check": { "client_company_name": "", "proposed_product_name": null }
+  },
+  "legacy_compatibility": { "mapped_to_old_brief_fields": true }
 }
 
 REGLAS PARA deep_patterns:
@@ -487,6 +584,48 @@ REGLAS PARA deep_patterns:
             briefing = { raw_text: result.text, parse_error: true };
           }
         }
+      }
+
+      // ── Pipeline v2: post-parse hardening ──
+      if (!briefing.parse_error) {
+        // 1. Strip registry leaks (Ajuste 2)
+        const leak = stripRegistryLeaks(briefing);
+        briefing = leak.cleaned;
+        if (leak.leakDetected) {
+          appendExtractionWarning(briefing, {
+            type: "registry_leak_prevented",
+            message: "F1 attempted to emit registry/component data. It was removed because ComponentRegistryItems are created only in F2/F3.",
+            details: leak.leakDetails,
+          });
+          console.warn("[wizard][F1] registry leak prevented:", leak.leakDetails);
+        }
+
+        // 2. Ensure legacy brief shape (compat UI)
+        briefing = ensureLegacyBriefShape(briefing);
+
+        // 3. Naming collision check (server-side, solo si product_name explícito)
+        const v2 = briefing.business_extraction_v2;
+        if (v2 && typeof v2 === "object" && v2.client_naming_check && typeof v2.client_naming_check === "object") {
+          const cnc = v2.client_naming_check;
+          const clientName = (typeof cnc.client_company_name === "string" && cnc.client_company_name.trim().length > 0)
+            ? cnc.client_company_name
+            : (companyName || "");
+          const productName = typeof cnc.proposed_product_name === "string" ? cnc.proposed_product_name : null;
+          if (clientName && productName && productName.trim().length > 0) {
+            const collision = checkNamingCollision(clientName, productName);
+            cnc.collision_detected = collision.detected;
+            if (collision.reason) cnc.collision_reason = collision.reason;
+          } else {
+            cnc.collision_detected = false;
+          }
+        }
+
+        // 4. Brief metadata
+        briefing.brief_version = typeof briefing.brief_version === "string" ? briefing.brief_version : "2.0.0";
+        briefing.legacy_compatibility = { mapped_to_old_brief_fields: true };
+
+        // 5. Attach F0 signals (límites ya aplicados en runF0SignalPreservation)
+        briefing._f0_signals = f0Result;
       }
 
       // ── P0: Detect parallel projects in raw input ──

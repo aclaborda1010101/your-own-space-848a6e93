@@ -526,6 +526,13 @@ export function runAllValidators(
     allViolations.push(...flatResult.violations);
   }
 
+  // 7. Registry approval guard (step 25 only) — semantic check on component.status
+  if (stepNumber === 25 && outputData) {
+    const approvalResult = validateRegistryNoApproval(outputData);
+    Object.assign(allFlags, approvalResult.flags);
+    allViolations.push(...approvalResult.violations);
+  }
+
   // Add validation metadata
   if (allViolations.length > 0) {
     allFlags.validation_ran = true;

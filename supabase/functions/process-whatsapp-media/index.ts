@@ -68,7 +68,7 @@ async function transcribeAudio(base64: string, mimetype: string): Promise<string
   if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY missing");
   const bytes = base64ToBytes(base64);
   const ext = mimetype.includes("mp4") ? "m4a" : mimetype.includes("wav") ? "wav" : "ogg";
-  const blob = new Blob([bytes], { type: mimetype || "audio/ogg" });
+  const blob = new Blob([bytes as BlobPart], { type: mimetype || "audio/ogg" });
   const form = new FormData();
   form.append("file", blob, `audio.${ext}`);
   form.append("model", "whisper-large-v3");
@@ -228,11 +228,14 @@ serve(async (req) => {
   } catch (err) {
     console.error("[process-whatsapp-media] error:", err);
     if (messageId) {
-      await supabase
-        .from("contact_messages")
-        .update({ content: `[⚠️ Multimedia no procesable: ${err instanceof Error ? err.message.slice(0, 100) : "error"}]` })
-        .eq("id", messageId)
-        .catch(() => {});
+      try {
+        await supabase
+          .from("contact_messages")
+          .update({ content: `[⚠️ Multimedia no procesable: ${err instanceof Error ? err.message.slice(0, 100) : "error"}]` })
+          .eq("id", messageId);
+      } catch (_) {
+        // ignore
+      }
     }
     return new Response(JSON.stringify({ ok: false, error: String(err) }), {
       status: 200,

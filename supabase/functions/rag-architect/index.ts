@@ -3,6 +3,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
 import { trackAICost } from "../_shared/cost-tracker.ts";
 
+// @ts-ignore - EdgeRuntime is provided by Supabase Edge Runtime
+declare const EdgeRuntime: { waitUntil: (p: Promise<unknown>) => void };
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -81,7 +84,7 @@ async function verifyRagAccess(ragId: string, userId: string): Promise<boolean> 
 }
 
 /** Fetch RAG project verifying access (owner or shared) */
-async function fetchRagWithAccess(ragId: string, userId: string, selectFields = "*") {
+async function fetchRagWithAccess(ragId: string, userId: string, selectFields = "*"): Promise<any> {
   const hasAccess = await verifyRagAccess(ragId, userId);
   if (!hasAccess) return null;
   const { data } = await supabase
@@ -89,7 +92,7 @@ async function fetchRagWithAccess(ragId: string, userId: string, selectFields = 
     .select(selectFields)
     .eq("id", ragId)
     .single();
-  return data;
+  return data as any;
 }
 
 function cleanJson(text: string): string {
@@ -2466,13 +2469,13 @@ Máximo 20 nodos y 30 edges. Solo entidades importantes y bien documentadas.`,
         const tgtId = nodeMap.get(tgtLabel);
         if (!srcId || !tgtId || srcId === tgtId) continue;
 
-        await supabase.from("rag_knowledge_graph_edges").insert({
+        await (supabase.from("rag_knowledge_graph_edges").insert({
           rag_id: ragId,
           source_node: srcId,
           target_node: tgtId,
           edge_type: (edge.relation as string) || "related_to",
           weight: (edge.weight as number) || 0.5,
-        }).then(() => {}).catch((err) => {
+        }) as unknown as Promise<unknown>).then(() => {}).catch((err: unknown) => {
           console.error(`[KG Edge Insert Error] Failed edge ${srcLabel} -> ${tgtLabel}:`, err);
         });
       }
@@ -2596,13 +2599,13 @@ Máximo 20 nodos y 30 edges. Solo entidades importantes y bien documentadas.`,
     const tgtId = nodeMap.get(tgtLabel);
     if (!srcId || !tgtId || srcId === tgtId) continue;
 
-    await supabase.from("rag_knowledge_graph_edges").insert({
+    await (supabase.from("rag_knowledge_graph_edges").insert({
       rag_id: ragId,
       source_node: srcId,
       target_node: tgtId,
       edge_type: (edge.relation as string) || "related_to",
       weight: (edge.weight as number) || 0.5,
-    }).then(() => {}).catch((err) => {
+    }) as unknown as Promise<unknown>).then(() => {}).catch((err: unknown) => {
       console.error(`[KG Edge Insert Error] Failed edge ${srcLabel} -> ${tgtLabel}:`, err);
     });
   }
@@ -2687,12 +2690,12 @@ Devuelve JSON:
 
     // Insert taxonomy entries
     for (const taxEntry of (parsed.taxonomy || []) as Array<Record<string, unknown>>) {
-      await supabase.from("rag_taxonomy").insert({
+      await (supabase.from("rag_taxonomy").insert({
         rag_id: ragId,
         category: (taxEntry.category as string) || "uncategorized",
         parent_category: (taxEntry.parent as string) || null,
         description: (taxEntry.description as string) || "",
-      }).then(() => {}).catch(() => {});
+      }) as unknown as Promise<unknown>).then(() => {}).catch(() => {});
     }
 
     // Insert variables
@@ -2715,12 +2718,12 @@ Devuelve JSON:
     }
 
     for (const v of insertedVars) {
-      await supabase.from("rag_variables").insert({
+      await (supabase.from("rag_variables").insert({
         rag_id: ragId,
         name: (v.name as string) || "",
         variable_type: (v.type as string) || "qualitative",
         description: (v.description as string) || "",
-      }).then(() => {}).catch(() => {});
+      }) as unknown as Promise<unknown>).then(() => {}).catch(() => {});
     }
 
     // Always recount and persist total_variables
@@ -2741,12 +2744,12 @@ Devuelve JSON:
       if (criticalVars.length > 0) {
         console.log(`[Taxonomy] Error recovery: inserting ${criticalVars.length} variables from domain_map`);
         for (const cv of criticalVars) {
-          await supabase.from("rag_variables").insert({
+          await (supabase.from("rag_variables").insert({
             rag_id: ragId,
             name: (cv.name as string) || (cv.nombre as string) || "",
             variable_type: (cv.type as string) || (cv.tipo as string) || "qualitative",
             description: (cv.description as string) || (cv.descripcion as string) || "",
-          }).then(() => {}).catch(() => {});
+          }) as unknown as Promise<unknown>).then(() => {}).catch(() => {});
         }
         const { count } = await supabase
           .from("rag_variables")
@@ -2826,7 +2829,7 @@ Si no hay contradicciones, devuelve {"contradictions": []}`,
         const chunkB = chunks[chunkBIdx];
         if (!chunkA || !chunkB) continue;
 
-        await supabase.from("rag_contradictions").insert({
+        await (supabase.from("rag_contradictions").insert({
           rag_id: ragId,
           chunk_a_id: chunkA.id,
           chunk_b_id: chunkB.id,
@@ -2834,7 +2837,7 @@ Si no hay contradicciones, devuelve {"contradictions": []}`,
           claim_b: (contra.claim_b as string) || "",
           severity: (contra.severity as string) || "medium",
           subdomain: subName,
-        }).then(() => {}).catch(() => {});
+        }) as unknown as Promise<unknown>).then(() => {}).catch(() => {});
       }
 
       if ((parsed.contradictions || []).length > 0) {
@@ -3274,14 +3277,14 @@ async function handleList(userId: string) {
 
     if (specificIds.length > 0) {
       queries.push(
-        supabase.from("rag_projects").select("*").in("id", specificIds)
-          .then(({ data }) => (data || []).filter(r => !ownedIds.has(r.id)))
+        (supabase.from("rag_projects").select("*").in("id", specificIds) as unknown as Promise<{ data: any[] | null }>)
+          .then(({ data }) => (data || []).filter((r: any) => !ownedIds.has(r.id)))
       );
     }
     if (wildcardOwners.length > 0) {
       queries.push(
-        supabase.from("rag_projects").select("*").in("user_id", wildcardOwners)
-          .then(({ data }) => (data || []).filter(r => !ownedIds.has(r.id)))
+        (supabase.from("rag_projects").select("*").in("user_id", wildcardOwners) as unknown as Promise<{ data: any[] | null }>)
+          .then(({ data }) => (data || []).filter((r: any) => !ownedIds.has(r.id)))
       );
     }
 
@@ -3433,12 +3436,12 @@ async function handleQuery(userId: string, body: Record<string, unknown>) {
   const allEmbeddings = [questionEmbedding, ...subEmbeddings];
 
   const searchPromises = allQueries.map((q, i) =>
-    supabase.rpc("search_rag_hybrid", {
+    (supabase.rpc("search_rag_hybrid", {
       query_embedding: `[${allEmbeddings[i].join(",")}]`,
       query_text: q,
       match_rag_id: ragId,
       match_count: 60, // 3× top_k for better re-ranking pool
-    }).then(({ data }) => data || []).catch(() => [])
+    }) as unknown as Promise<{ data: any }>).then(({ data }) => data || []).catch(() => [])
   );
   const searchResults = await Promise.all(searchPromises);
 

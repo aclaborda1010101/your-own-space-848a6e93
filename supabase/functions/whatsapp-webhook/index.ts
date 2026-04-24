@@ -35,7 +35,7 @@ async function sendWhatsAppMessage(to: string, text: string) {
 }
 
 async function resolveUserId(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   phoneNumber: string
 ): Promise<string | null> {
   const { data } = await supabase
@@ -49,7 +49,7 @@ async function resolveUserId(
 }
 
 async function handleLinkCode(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   phoneNumber: string,
   displayName: string,
   code: string
@@ -95,7 +95,7 @@ async function handleLinkCode(
 // ── CRM persistence (mirrors evolution-webhook logic) ─────────────────────────
 
 async function persistToCRM(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   supabaseUrl: string,
   supabaseKey: string,
   phoneNumber: string,

@@ -350,8 +350,8 @@ serve(async (req) => {
           if (plaudText.length >= 50) {
             console.log("[plaud-intelligence] Email not in cache, using plaud_transcriptions fallback");
             summaryText = plaudText;
-            title = existingPlaud.title || inline_title || title;
-            recordingDate = existingPlaud.recording_date || recordingDate;
+            title = existingPlaud!.title || inline_title || title;
+            recordingDate = existingPlaud!.recording_date || recordingDate;
           } else {
             console.warn("[plaud-intelligence] Email not found in cache and no reusable text found, skipping gracefully", { email_id });
             return new Response(

@@ -13,7 +13,7 @@ const WHOOP_API_VERSION = "v2";
 const WHOOP_AUTH_URL = "https://api.prod.whoop.com/oauth/oauth2";
 
 async function refreshTokenIfNeeded(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   tokenData: any,
   clientSecret: string
 ): Promise<string> {
@@ -64,14 +64,14 @@ async function fetchAllPages(url: string, accessToken: string): Promise<any[]> {
   let nextUrl: string | null = url;
 
   while (nextUrl) {
-    const res = await fetch(nextUrl, {
+    const res: Response = await fetch(nextUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) {
       console.error(`[whoop-sync] API error ${res.status} for ${nextUrl}`);
       break;
     }
-    const data = await res.json();
+    const data: any = await res.json();
     allRecords.push(...(data.records || []));
     nextUrl = data.next_token
       ? `${url}${url.includes("?") ? "&" : "?"}nextToken=${data.next_token}`

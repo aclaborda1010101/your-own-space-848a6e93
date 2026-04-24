@@ -3,6 +3,9 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { chat, ChatMessage } from "../_shared/ai-client.ts";
 import { trackAICost } from "../_shared/cost-tracker.ts";
 
+// @ts-ignore - EdgeRuntime is provided by Supabase Edge Runtime
+declare const EdgeRuntime: { waitUntil: (p: Promise<unknown>) => void };
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -81,7 +84,7 @@ async function verifyRagAccess(ragId: string, userId: string): Promise<boolean> 
 }
 
 /** Fetch RAG project verifying access (owner or shared) */
-async function fetchRagWithAccess(ragId: string, userId: string, selectFields = "*") {
+async function fetchRagWithAccess(ragId: string, userId: string, selectFields = "*"): Promise<any> {
   const hasAccess = await verifyRagAccess(ragId, userId);
   if (!hasAccess) return null;
   const { data } = await supabase
@@ -89,7 +92,7 @@ async function fetchRagWithAccess(ragId: string, userId: string, selectFields = 
     .select(selectFields)
     .eq("id", ragId)
     .single();
-  return data;
+  return data as any;
 }
 
 function cleanJson(text: string): string {

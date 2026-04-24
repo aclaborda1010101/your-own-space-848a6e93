@@ -106,7 +106,7 @@ Deno.test("F2: validateOpportunityDesign detecta IDs duplicados", () => {
     },
     warnings: [],
   });
-  assert(issues.some((i) => i.code === "DUPLICATE_OPPORTUNITY_ID"));
+  assert(issues.some((i) => i.code === "F2_DUPLICATE_OPPORTUNITY_ID"));
 });
 
 Deno.test("F2: clampOpportunityDesign trunca strings largos", () => {

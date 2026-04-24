@@ -75,7 +75,7 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
       "layer_candidate", "module_type_candidate", "phase_candidate",
     ],
     inputStepsAllowed: [1],
-    outputSchemaVersion: "v3.1",
+    outputSchemaVersion: "v3.2",
   },
 
   // ── Step 3: Documento de Alcance ──

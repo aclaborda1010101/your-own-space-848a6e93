@@ -65,7 +65,7 @@ Deno.test("F2: clampOpportunityDesign mapea enums inválidos a fallback razonabl
   });
   const c = out.opportunity_candidates[0];
   // Todos los enums deben quedar en valores conocidos (no los inventados).
-  assert(c.origin !== "INVENTADO");
+  assert((c.origin as string) !== "INVENTADO");
   assert(c.recommended_component_family !== "nope" as any);
   assert(c.recommended_layer !== "Z_unknown" as any);
   assert(c.priority !== "URGENTE" as any);

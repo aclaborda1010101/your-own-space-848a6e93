@@ -2829,7 +2829,7 @@ Si no hay contradicciones, devuelve {"contradictions": []}`,
         const chunkB = chunks[chunkBIdx];
         if (!chunkA || !chunkB) continue;
 
-        await supabase.from("rag_contradictions").insert({
+        await (supabase.from("rag_contradictions").insert({
           rag_id: ragId,
           chunk_a_id: chunkA.id,
           chunk_b_id: chunkB.id,
@@ -2837,7 +2837,7 @@ Si no hay contradicciones, devuelve {"contradictions": []}`,
           claim_b: (contra.claim_b as string) || "",
           severity: (contra.severity as string) || "medium",
           subdomain: subName,
-        }).then(() => {}).catch(() => {});
+        }) as unknown as Promise<unknown>).then(() => {}).catch(() => {});
       }
 
       if ((parsed.contradictions || []).length > 0) {
@@ -3277,14 +3277,14 @@ async function handleList(userId: string) {
 
     if (specificIds.length > 0) {
       queries.push(
-        supabase.from("rag_projects").select("*").in("id", specificIds)
-          .then(({ data }) => (data || []).filter(r => !ownedIds.has(r.id)))
+        (supabase.from("rag_projects").select("*").in("id", specificIds) as unknown as Promise<{ data: any[] | null }>)
+          .then(({ data }) => (data || []).filter((r: any) => !ownedIds.has(r.id)))
       );
     }
     if (wildcardOwners.length > 0) {
       queries.push(
-        supabase.from("rag_projects").select("*").in("user_id", wildcardOwners)
-          .then(({ data }) => (data || []).filter(r => !ownedIds.has(r.id)))
+        (supabase.from("rag_projects").select("*").in("user_id", wildcardOwners) as unknown as Promise<{ data: any[] | null }>)
+          .then(({ data }) => (data || []).filter((r: any) => !ownedIds.has(r.id)))
       );
     }
 
@@ -3436,12 +3436,12 @@ async function handleQuery(userId: string, body: Record<string, unknown>) {
   const allEmbeddings = [questionEmbedding, ...subEmbeddings];
 
   const searchPromises = allQueries.map((q, i) =>
-    supabase.rpc("search_rag_hybrid", {
+    (supabase.rpc("search_rag_hybrid", {
       query_embedding: `[${allEmbeddings[i].join(",")}]`,
       query_text: q,
       match_rag_id: ragId,
       match_count: 60, // 3× top_k for better re-ranking pool
-    }).then(({ data }) => data || []).catch(() => [])
+    }) as unknown as Promise<{ data: any }>).then(({ data }) => data || []).catch(() => [])
   );
   const searchResults = await Promise.all(searchPromises);
 

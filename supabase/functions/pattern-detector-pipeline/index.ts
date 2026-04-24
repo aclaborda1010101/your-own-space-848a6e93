@@ -23,7 +23,7 @@ async function updateRun(runId: string, updates: Record<string, unknown>) {
   if (error) console.error("updateRun error:", error);
 }
 
-async function getRunPhaseResults(runId: string): Promise<Record<string, unknown>> {
+async function getRunPhaseResults(runId: string): Promise<Record<string, any>> {
   const { data } = await supabase
     .from("pattern_detector_runs")
     .select("phase_results")

@@ -9,6 +9,7 @@ import type { ParallelProject } from "./parallel-projects.ts";
 import { runF0SignalPreservation, emptyF0Result, renderF0SignalsBlock } from "./f0-signal-preservation.ts";
 import type { SignalPreservationResult } from "./f0-signal-preservation.ts";
 import { ensureLegacyBriefShape, stripRegistryLeaks, appendExtractionWarning } from "./f1-legacy-shape.ts";
+import { prepareLongInputForExtract } from "./input-sampler.ts";
 import { checkNamingCollision } from "../_shared/component-registry-contract.ts";
 
 const corsHeaders = {

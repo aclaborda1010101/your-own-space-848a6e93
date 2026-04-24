@@ -225,6 +225,7 @@ Sin markdown, sin backticks, sin explicaciones fuera del JSON.`;
 export async function runF0SignalPreservation(
   rawContent: string,
   projectContext?: { projectName?: string; companyName?: string; projectType?: string },
+  options: { maxRetries?: number } = {},
 ): Promise<SignalPreservationResult> {
   if (!rawContent || rawContent.trim().length === 0) {
     return emptyF0Result("empty_input");
@@ -248,7 +249,7 @@ ${inputClipped}
 Extrae señal según las reglas. Devuelve SOLO el JSON.`;
 
   try {
-    const result = await callGeminiFlash(F0_SYSTEM_PROMPT, userPrompt);
+    const result = await callGeminiFlash(F0_SYSTEM_PROMPT, userPrompt, { maxRetries: options.maxRetries });
     const parsed = parseJsonLoose(result.text);
     if (!parsed || typeof parsed !== "object") {
       console.warn("[F0] JSON parse failed — returning empty F0 result.");

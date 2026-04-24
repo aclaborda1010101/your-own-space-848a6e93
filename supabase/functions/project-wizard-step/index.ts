@@ -129,7 +129,21 @@ serve(async (req) => {
       let filteredContent: string | null = null;
       let wasFiltered = false;
 
-      if (needsTranscriptFilter(inputType || "", inputContent || "")) {
+      // ── Pipeline v2: F0 (signal preservation) en paralelo al filtro ──
+      const f0Promise: Promise<SignalPreservationResult> = runF0SignalPreservation(
+        inputContent || "",
+        { projectName, companyName, projectType },
+      ).catch((e) => {
+        console.warn("[wizard][F0] failed (non-blocking):", e instanceof Error ? e.message : e);
+        return emptyF0Result(e instanceof Error ? e.message : String(e));
+      });
+
+      const filterShouldRun = needsTranscriptFilter(inputType || "", inputContent || "");
+      let filterTokensInput = 0;
+      let filterTokensOutput = 0;
+
+      const filterPromise: Promise<{ filtered: string | null; ran: boolean }> = (async () => {
+        if (!filterShouldRun) return { filtered: null, ran: false };
         console.log("[wizard] Transcript filter triggered for project:", projectId);
         const filterPrompt = `Eres un editor de transcripciones especializado en aislar UN SOLO proyecto de entre múltiples temas discutidos.
 
@@ -153,20 +167,27 @@ ${inputContent}
 Devuelve SOLO el texto filtrado, sin explicaciones ni comentarios.`;
 
         const filterResult = await callGeminiFlashMarkdown("", filterPrompt);
+        filterTokensInput = filterResult.tokensInput;
+        filterTokensOutput = filterResult.tokensOutput;
+        return { filtered: filterResult.text.trim(), ran: true };
+      })();
 
-        filteredContent = filterResult.text.trim();
+      const [f0Result, filterOutcome] = await Promise.all([f0Promise, filterPromise]);
+
+      if (filterOutcome.ran && filterOutcome.filtered) {
+        filteredContent = filterOutcome.filtered;
         wasFiltered = true;
         contentForExtraction = filteredContent;
-
-        // Record filter cost
-        const filterCostUsd = (filterResult.tokensInput / 1_000_000) * 0.075 + (filterResult.tokensOutput / 1_000_000) * 0.30;
+        const filterCostUsd = (filterTokensInput / 1_000_000) * 0.075 + (filterTokensOutput / 1_000_000) * 0.30;
         await recordCost(supabase, {
           projectId, stepNumber: 2, service: "gemini-flash", operation: "transcript_filter",
-          tokensInput: filterResult.tokensInput, tokensOutput: filterResult.tokensOutput,
+          tokensInput: filterTokensInput, tokensOutput: filterTokensOutput,
           costUsd: filterCostUsd, userId: user.id,
         });
         console.log(`[wizard] Transcript filtered: ${inputContent.length} → ${filteredContent.length} chars`);
       }
+
+      console.log(`[wizard][F0] generated=${f0Result._meta?.generated ?? false} quotes=${f0Result.golden_quotes.length} discarded=${f0Result.discarded_content_with_business_signal_candidates.length}`);
 
       const systemPrompt = `Eres un analista senior de extracción de información con 15 años de experiencia en consultoría tecnológica.
 

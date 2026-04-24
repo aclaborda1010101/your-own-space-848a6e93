@@ -3207,7 +3207,7 @@ REGLAS:
       let modelUsed = model === "flash" ? "gemini-2.5-flash" : "gemini-3.1-pro-preview";
       let fallbackUsed = false;
 
-      if (model === "flash" || useJson && model === "flash") {
+      if ((model as string) === "flash") {
         result = await callGeminiFlash(systemPrompt, userPrompt);
       } else {
         try {

@@ -2469,13 +2469,13 @@ Máximo 20 nodos y 30 edges. Solo entidades importantes y bien documentadas.`,
         const tgtId = nodeMap.get(tgtLabel);
         if (!srcId || !tgtId || srcId === tgtId) continue;
 
-        await supabase.from("rag_knowledge_graph_edges").insert({
+        await (supabase.from("rag_knowledge_graph_edges").insert({
           rag_id: ragId,
           source_node: srcId,
           target_node: tgtId,
           edge_type: (edge.relation as string) || "related_to",
           weight: (edge.weight as number) || 0.5,
-        }).then(() => {}).catch((err) => {
+        }) as unknown as Promise<unknown>).then(() => {}).catch((err: unknown) => {
           console.error(`[KG Edge Insert Error] Failed edge ${srcLabel} -> ${tgtLabel}:`, err);
         });
       }
@@ -2599,13 +2599,13 @@ Máximo 20 nodos y 30 edges. Solo entidades importantes y bien documentadas.`,
     const tgtId = nodeMap.get(tgtLabel);
     if (!srcId || !tgtId || srcId === tgtId) continue;
 
-    await supabase.from("rag_knowledge_graph_edges").insert({
+    await (supabase.from("rag_knowledge_graph_edges").insert({
       rag_id: ragId,
       source_node: srcId,
       target_node: tgtId,
       edge_type: (edge.relation as string) || "related_to",
       weight: (edge.weight as number) || 0.5,
-    }).then(() => {}).catch((err) => {
+    }) as unknown as Promise<unknown>).then(() => {}).catch((err: unknown) => {
       console.error(`[KG Edge Insert Error] Failed edge ${srcLabel} -> ${tgtLabel}:`, err);
     });
   }
@@ -2690,12 +2690,12 @@ Devuelve JSON:
 
     // Insert taxonomy entries
     for (const taxEntry of (parsed.taxonomy || []) as Array<Record<string, unknown>>) {
-      await supabase.from("rag_taxonomy").insert({
+      await (supabase.from("rag_taxonomy").insert({
         rag_id: ragId,
         category: (taxEntry.category as string) || "uncategorized",
         parent_category: (taxEntry.parent as string) || null,
         description: (taxEntry.description as string) || "",
-      }).then(() => {}).catch(() => {});
+      }) as unknown as Promise<unknown>).then(() => {}).catch(() => {});
     }
 
     // Insert variables
@@ -2718,12 +2718,12 @@ Devuelve JSON:
     }
 
     for (const v of insertedVars) {
-      await supabase.from("rag_variables").insert({
+      await (supabase.from("rag_variables").insert({
         rag_id: ragId,
         name: (v.name as string) || "",
         variable_type: (v.type as string) || "qualitative",
         description: (v.description as string) || "",
-      }).then(() => {}).catch(() => {});
+      }) as unknown as Promise<unknown>).then(() => {}).catch(() => {});
     }
 
     // Always recount and persist total_variables
@@ -2744,12 +2744,12 @@ Devuelve JSON:
       if (criticalVars.length > 0) {
         console.log(`[Taxonomy] Error recovery: inserting ${criticalVars.length} variables from domain_map`);
         for (const cv of criticalVars) {
-          await supabase.from("rag_variables").insert({
+          await (supabase.from("rag_variables").insert({
             rag_id: ragId,
             name: (cv.name as string) || (cv.nombre as string) || "",
             variable_type: (cv.type as string) || (cv.tipo as string) || "qualitative",
             description: (cv.description as string) || (cv.descripcion as string) || "",
-          }).then(() => {}).catch(() => {});
+          }) as unknown as Promise<unknown>).then(() => {}).catch(() => {});
         }
         const { count } = await supabase
           .from("rag_variables")

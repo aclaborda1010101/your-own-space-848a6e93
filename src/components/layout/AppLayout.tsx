@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { BottomNavBar } from "./BottomNavBar";
+import { ForceRefreshButton } from "./ForceRefreshButton";
 import { SidebarNew } from "./SidebarNew";
 import { TopBar } from "./TopBar";
 import { useSidebarState } from "@/hooks/useSidebarState";
@@ -57,6 +58,8 @@ const AppLayout = ({ children, showBackButton = false }: AppLayoutProps) => {
       {!isLoginPage && !isWizardPage && (
         <BottomNavBar />
       )}
+
+      {!isLoginPage && !isWizardPage && <ForceRefreshButton />}
     </div>
   );
 };

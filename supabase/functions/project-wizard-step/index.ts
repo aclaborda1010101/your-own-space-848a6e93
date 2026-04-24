@@ -6,6 +6,10 @@ import { sanitizeClientOutput } from "./sanitizer.ts";
 import { callGeminiFlash, callGeminiFlashMarkdown, callClaudeSonnet, callGeminiPro, callGatewayRetry } from "./llm-helpers.ts";
 import { detectParallelProjects, injectParallelProjectExclusions, filterParallelProjectFindings } from "./parallel-projects.ts";
 import type { ParallelProject } from "./parallel-projects.ts";
+import { runF0SignalPreservation, emptyF0Result, renderF0SignalsBlock } from "./f0-signal-preservation.ts";
+import type { SignalPreservationResult } from "./f0-signal-preservation.ts";
+import { ensureLegacyBriefShape, stripRegistryLeaks, appendExtractionWarning } from "./f1-legacy-shape.ts";
+import { checkNamingCollision } from "../_shared/component-registry-contract.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

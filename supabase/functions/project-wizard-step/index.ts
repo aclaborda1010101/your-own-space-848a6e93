@@ -490,7 +490,27 @@ GENERA UN BRIEF ESTRUCTURADO CON ESTA ESTRUCTURA EXACTA (JSON):
       "type": "parallel_project|ambiguous_scope|missing_evidence|premature_formalization|duplicate_domain",
       "description": "", "affected_items": [], "recommendation": ""
     }
-  ]
+  ],
+  "business_extraction_v2": {
+    "project_title": "",
+    "business_model_summary": { "title": "", "context": "", "primary_goal": "", "complexity_level": "medium", "urgency_level": "medium" },
+    "observed_facts": [],
+    "business_catalysts": [{ "id": "CAT-001", "title": "", "description": "", "evidence": "" }],
+    "underutilized_data_assets": [{ "id": "ASSET-001", "title": "", "description": "", "evidence": "", "convertible_to_layer": "A" }],
+    "quantified_economic_pains": [{ "id": "PAIN-001", "title": "", "description": "", "magnitude": "", "evidence": "" }],
+    "decision_points": [{ "id": "DECISION-001", "title": "", "description": "" }],
+    "stakeholder_map": [{ "id": "STAKE-001", "name": "", "role": "", "influence": "low|medium|high" }],
+    "client_requested_items": [{ "id": "REQ-001", "title": "", "description": "", "evidence": "" }],
+    "inferred_needs": [],
+    "ai_native_opportunity_signals": [{ "id": "SIGNAL-001", "title": "", "description": "", "layer_candidate": "A|B|C|D|E", "rationale": "" }],
+    "external_data_sources_mentioned": [{ "id": "EXT-001", "name": "", "kind": "" }],
+    "architecture_signals": [],
+    "initial_compliance_flags": [{ "flag": "PII|HEALTH|MINORS|BIOMETRIC|FINANCIAL|OTHER", "evidence": "" }],
+    "constraints_and_risks": [],
+    "open_questions": [],
+    "client_naming_check": { "client_company_name": "", "proposed_product_name": null }
+  },
+  "legacy_compatibility": { "mapped_to_old_brief_fields": true }
 }
 
 REGLAS PARA deep_patterns:

@@ -10,7 +10,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY");
 
-function getAdmin() {
+function getAdmin(): any {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 }
 
@@ -38,7 +38,7 @@ async function callGemini(prompt: string): Promise<string> {
 }
 
 // ── Action: analyze_entry ──────────────────────────────────────────────
-async function analyzeEntry(admin: ReturnType<typeof createClient>, entryId: string, projectId: string) {
+async function analyzeEntry(admin: any, entryId: string, projectId: string) {
   // Fetch the entry
   const { data: entry, error: eErr } = await admin
     .from("business_project_timeline")

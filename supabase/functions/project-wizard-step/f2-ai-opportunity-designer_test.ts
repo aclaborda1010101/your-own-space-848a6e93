@@ -20,7 +20,8 @@ Deno.test("F2: emptyOpportunityDesign devuelve shape válido sin candidatos", ()
   const empty = emptyOpportunityDesign("test_reason");
   assertEquals(empty.version, "1.0.0");
   assertEquals(empty.opportunity_candidates.length, 0);
-  assert(empty.warnings.some((w) => w.code === "F2_EMPTY"));
+  assertEquals(empty._meta?.generated, false);
+  assertEquals(empty._meta?.error, "test_reason");
 });
 
 Deno.test("F2: clampOpportunityDesign fuerza version 1.0.0 aunque venga otra", () => {

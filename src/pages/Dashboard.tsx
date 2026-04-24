@@ -173,6 +173,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     const handleFocusRefresh = () => {
+      if (document.visibilityState === "hidden") return;
       void refreshDashboardData();
     };
 

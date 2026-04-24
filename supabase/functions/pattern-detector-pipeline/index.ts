@@ -2982,7 +2982,7 @@ Responde con JSON:
           const { data: relevantDatasets } = await supabase
             .from("pattern_detector_datasets")
             .select("file_name, classification, relevance_reason, extracted_text")
-            .eq("run_id", runId)
+            .eq("run_id", run.id)
             .eq("status", "relevant")
             .order("relevance_score", { ascending: false });
 

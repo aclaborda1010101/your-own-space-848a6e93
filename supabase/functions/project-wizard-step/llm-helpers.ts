@@ -47,7 +47,7 @@ async function callGateway(
   }
 ): Promise<LLMResult> {
   const apiKey = getApiKey();
-  const maxRetries = typeof opts.maxRetries === "number" ? opts.maxRetries : DEFAULT_maxRetries;
+  const maxRetries = typeof opts.maxRetries === "number" ? opts.maxRetries : DEFAULT_MAX_RETRIES;
 
   let lastError: unknown = null;
 

@@ -140,6 +140,7 @@ export const useCheckIn = () => {
     draftCheckIn,
     setCheckIn: updateDraft,
     registerCheckIn,
+    refetch: fetchTodayCheckIn,
     loading,
     saving,
     isRegistered,

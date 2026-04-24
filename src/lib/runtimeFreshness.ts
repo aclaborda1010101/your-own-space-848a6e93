@@ -140,6 +140,12 @@ function installSleepDetector(): void {
 
   let lastTick = Date.now();
 
+  window.addEventListener("pageshow", (event) => {
+    if ((event as PageTransitionEvent).persisted) {
+      navigateToFreshUrl();
+    }
+  });
+
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") {
       const gap = Date.now() - lastTick;

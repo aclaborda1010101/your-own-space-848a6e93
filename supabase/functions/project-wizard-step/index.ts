@@ -9,6 +9,7 @@ import type { ParallelProject } from "./parallel-projects.ts";
 import { runF0SignalPreservation, emptyF0Result, renderF0SignalsBlock } from "./f0-signal-preservation.ts";
 import type { SignalPreservationResult } from "./f0-signal-preservation.ts";
 import { ensureLegacyBriefShape, stripRegistryLeaks, appendExtractionWarning } from "./f1-legacy-shape.ts";
+import { prepareLongInputForExtract } from "./input-sampler.ts";
 import { checkNamingCollision } from "../_shared/component-registry-contract.ts";
 
 const corsHeaders = {
@@ -125,20 +126,32 @@ serve(async (req) => {
         return false;
       }
 
-      let contentForExtraction = inputContent;
+      // ── Smart sampler (preserves raw, prevents 504 on long inputs) ──
+      // Raw `inputContent` is NEVER mutated. We derive a sampled version that
+      // is what F0 / transcript filter / F1 actually consume.
+      const prepared = prepareLongInputForExtract(inputContent || "");
+      if (prepared.wasSampled) {
+        console.log(
+          `[wizard][sampler] long input sampled: ${prepared.originalChars} → ${prepared.sampledChars} chars, ` +
+          `windows=${prepared.preservedWindows.length}, keywords=${prepared.preservedWindows.map((w) => w.keyword).join(",")}`,
+        );
+      }
+      const extractInputContent = prepared.content;
+
+      let contentForExtraction = extractInputContent;
       let filteredContent: string | null = null;
       let wasFiltered = false;
 
       // ── Pipeline v2: F0 (signal preservation) en paralelo al filtro ──
       const f0Promise: Promise<SignalPreservationResult> = runF0SignalPreservation(
-        inputContent || "",
+        extractInputContent,
         { projectName, companyName, projectType },
       ).catch((e) => {
         console.warn("[wizard][F0] failed (non-blocking):", e instanceof Error ? e.message : e);
         return emptyF0Result(e instanceof Error ? e.message : String(e));
       });
 
-      const filterShouldRun = needsTranscriptFilter(inputType || "", inputContent || "");
+      const filterShouldRun = needsTranscriptFilter(inputType || "", extractInputContent);
       let filterTokensInput = 0;
       let filterTokensOutput = 0;
 
@@ -162,11 +175,12 @@ REGLAS ESTRICTAS:
 - Mantén las citas textuales importantes del proyecto objetivo
 
 TRANSCRIPCIÓN/MATERIAL ORIGINAL:
-${inputContent}
+${extractInputContent}
 
 Devuelve SOLO el texto filtrado, sin explicaciones ni comentarios.`;
 
-        const filterResult = await callGeminiFlashMarkdown("", filterPrompt);
+        // maxRetries=1 to keep wall time bounded under the 150s Edge Function idle timeout.
+        const filterResult = await callGeminiFlashMarkdown("", filterPrompt, { maxRetries: 1 });
         filterTokensInput = filterResult.tokensInput;
         filterTokensOutput = filterResult.tokensOutput;
         return { filtered: filterResult.text.trim(), ran: true };
@@ -184,7 +198,7 @@ Devuelve SOLO el texto filtrado, sin explicaciones ni comentarios.`;
           tokensInput: filterTokensInput, tokensOutput: filterTokensOutput,
           costUsd: filterCostUsd, userId: user.id,
         });
-        console.log(`[wizard] Transcript filtered: ${inputContent.length} → ${filteredContent.length} chars`);
+        console.log(`[wizard] Transcript filtered: ${extractInputContent.length} → ${filteredContent.length} chars`);
       }
 
       console.log(`[wizard][F0] generated=${f0Result._meta?.generated ?? false} quotes=${f0Result.golden_quotes.length} discarded=${f0Result.discarded_content_with_business_signal_candidates.length}`);
@@ -530,7 +544,8 @@ REGLAS PARA deep_patterns:
 - ia_component_link: Obligatorio para Capas 3-5. Para Capas 1-2: null si el patrón es puramente observacional.
 - titulo: Máximo 10 palabras, descriptivo y específico al proyecto. PROHIBIDO: títulos genéricos como "Problema de eficiencia" o "Oportunidad de mejora".`;
 
-      const result = await callGeminiFlash(systemPrompt, userPrompt);
+      // maxRetries=1 to keep total wall time bounded under 150s Edge Function idle timeout for the extract action.
+      const result = await callGeminiFlash(systemPrompt, userPrompt, { maxRetries: 1 });
       console.log(`[wizard] F2 finishReason=${result.finishReason}, outputTokens=${result.tokensOutput}`);
 
       // Parse JSON from response — robust cleaning with truncation repair
@@ -626,6 +641,18 @@ REGLAS PARA deep_patterns:
 
         // 5. Attach F0 signals (límites ya aplicados en runF0SignalPreservation)
         briefing._f0_signals = f0Result;
+
+        // 6. Sampler traceability — record that the LLM saw a sampled input.
+        if (prepared.wasSampled) {
+          appendExtractionWarning(briefing, {
+            type: "long_input_sampled",
+            message: "Input was sampled before LLM extraction to avoid Edge Function timeout.",
+            original_chars: prepared.originalChars,
+            sampled_chars: prepared.sampledChars,
+            strategy: prepared.strategy,
+            preserved_keywords: prepared.preservedWindows.map((w) => w.keyword),
+          });
+        }
       }
 
       // ── P0: Detect parallel projects in raw input ──

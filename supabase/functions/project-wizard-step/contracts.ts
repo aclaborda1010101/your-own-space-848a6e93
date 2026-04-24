@@ -211,6 +211,25 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
     inputStepsAllowed: [2, 5, 10, 11],
     outputSchemaVersion: "v1.0",
   },
+
+  // ── Step 25: Pipeline v2 — Registry Build (F2 + F3) ──
+  25: {
+    name: "Pipeline v2 — Registry Build",
+    allowedTopLevelKeys: [
+      "ai_opportunity_design_v1",
+      "component_registry",
+      "build_meta",
+      "_contract_validation",
+    ],
+    forbiddenKeys: [
+      "prd", "sql_schema", "edge_functions",
+      "monetization_models", "pricing", "budget", "monetization",
+      "approved_for_scope",
+    ],
+    forbiddenTerms: ["CREATE TABLE", "approved_for_scope"],
+    inputStepsAllowed: [2],
+    outputSchemaVersion: "v1.0",
+  },
 };
 
 /**

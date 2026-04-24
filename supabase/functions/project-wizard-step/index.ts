@@ -697,6 +697,114 @@ REGLAS PARA deep_patterns:
       });
     }
 
+    // ── Action: build_registry (Pipeline v2 — F2 + F3, slot step 25) ──────
+    if (action === "build_registry") {
+      const { runF2OpportunityDesigner } = await import("./f2-ai-opportunity-designer.ts");
+      const { buildRegistryFromDesign } = await import("./f3-registry-builder.ts");
+
+      // 1. Load briefing from step 2
+      const { data: step2Row } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 2)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+
+      const briefing = step2Row?.output_data;
+      if (!briefing || typeof briefing !== "object") {
+        return new Response(JSON.stringify({ error: "No Step 2 briefing found. Run extract first." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // 2. Project context
+      const { data: projectRow } = await supabase
+        .from("business_projects")
+        .select("name, company")
+        .eq("id", projectId)
+        .single();
+
+      const ctx = {
+        projectName: stepData?.projectName ?? projectRow?.name ?? undefined,
+        companyName: stepData?.companyName ?? projectRow?.company ?? "Cliente",
+        projectType: stepData?.projectType ?? undefined,
+      };
+
+      // 3. F2 — LLM
+      const t0 = Date.now();
+      const design = await runF2OpportunityDesigner(briefing, ctx);
+      const f2Ms = Date.now() - t0;
+
+      // 4. F3 — Determinista
+      const t1 = Date.now();
+      const f3 = buildRegistryFromDesign(design, {
+        projectId,
+        clientCompanyName: ctx.companyName,
+        productName: ctx.projectName,
+      });
+      const f3Ms = Date.now() - t1;
+
+      // 5. Build output (Step 25 contract)
+      const buildOutput: Record<string, unknown> = {
+        ai_opportunity_design_v1: design,
+        component_registry: f3.registry,
+        build_meta: {
+          generated_at: new Date().toISOString(),
+          f2_ms: f2Ms,
+          f3_ms: f3Ms,
+          warnings: f3.warnings,
+          merged_opportunities: f3.merged_opportunities,
+          source_brief_version: briefing.brief_version ?? null,
+        },
+      };
+
+      // 6. Contract validation (Step 25)
+      const validation25 = runAllValidators(25, buildOutput, JSON.stringify(buildOutput));
+      if (Object.keys(validation25.flags).length > 0) {
+        buildOutput._contract_validation = validation25.flags;
+      }
+
+      // 7. Persist as step 25 (does NOT touch step 2 / wizard UI)
+      const { data: existing25 } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 25)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const newVersion25 = existing25 ? existing25.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existing25?.id || undefined,
+        project_id: projectId,
+        step_number: 25,
+        step_name: "Pipeline v2 — Registry Build",
+        status: "review",
+        input_data: { source_step: 2, source_brief_version: briefing.brief_version ?? null },
+        output_data: buildOutput,
+        model_used: "gemini-2.5-flash",
+        version: newVersion25,
+        user_id: user.id,
+      });
+
+      return new Response(JSON.stringify({
+        ok: true,
+        version: newVersion25,
+        opportunity_count: design.opportunity_candidates.length,
+        component_count: f3.registry.components.length,
+        warnings_count: f3.warnings.length,
+        validation_issues_count: f3.validation_issues.length,
+        f2_ms: f2Ms,
+        f3_ms: f3Ms,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── Action: generate_scope (Step 3) ──────────────────────────────────
 
     if (action === "generate_scope") {

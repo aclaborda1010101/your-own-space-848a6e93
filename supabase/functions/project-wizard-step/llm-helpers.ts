@@ -26,7 +26,7 @@ interface LLMResult {
 }
 
 const TRANSIENT_STATUSES = new Set([500, 502, 503, 504]);
-const DEFAULT_MAX_RETRIES = 3;
+const DEFAULT_maxRetries = 3;
 const BASE_BACKOFF_MS = 1500;
 
 function sleep(ms: number) {
@@ -47,7 +47,7 @@ async function callGateway(
   }
 ): Promise<LLMResult> {
   const apiKey = getApiKey();
-  const maxRetries = typeof opts.maxRetries === "number" ? opts.maxRetries : DEFAULT_MAX_RETRIES;
+  const maxRetries = typeof opts.maxRetries === "number" ? opts.maxRetries : DEFAULT_maxRetries;
 
   let lastError: unknown = null;
 
@@ -88,10 +88,10 @@ async function callGateway(
         }
 
         // Retry transient upstream errors (502/503/504/500) — typically Cloudflare/Gemini hiccups.
-        if (TRANSIENT_STATUSES.has(response.status) && attempt < MAX_RETRIES) {
+        if (TRANSIENT_STATUSES.has(response.status) && attempt < maxRetries) {
           const wait = BASE_BACKOFF_MS * Math.pow(2, attempt);
           console.warn(
-            `[wizard] AI Gateway transient ${response.status} on ${opts.model} (attempt ${attempt + 1}/${MAX_RETRIES + 1}). Retrying in ${wait}ms...`,
+            `[wizard] AI Gateway transient ${response.status} on ${opts.model} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${wait}ms...`,
           );
           lastError = new Error(`AI Gateway error (${opts.model}): ${response.status} - ${err.slice(0, 200)}`);
           await sleep(wait);
@@ -120,10 +120,10 @@ async function callGateway(
       // Network errors / aborts → retry too (but not auth/payment/rate-limit, which were thrown above).
       const status = (e as any)?.status;
       const isHardError = status === 429 || status === 402;
-      if (!isHardError && attempt < MAX_RETRIES) {
+      if (!isHardError && attempt < maxRetries) {
         const wait = BASE_BACKOFF_MS * Math.pow(2, attempt);
         console.warn(
-          `[wizard] AI Gateway network/abort error on ${opts.model} (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${(e as Error).message}. Retrying in ${wait}ms...`,
+          `[wizard] AI Gateway network/abort error on ${opts.model} (attempt ${attempt + 1}/${maxRetries + 1}): ${(e as Error).message}. Retrying in ${wait}ms...`,
         );
         lastError = e;
         await sleep(wait);

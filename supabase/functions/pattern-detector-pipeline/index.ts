@@ -3837,7 +3837,7 @@ Responde con:
 
         let ragIdx = 1;
         for (const [srcName, sigs] of sourceGroups) {
-          const srcInfo = sourcesByName.get(srcName);
+          const srcInfo = sourcesByName.get(srcName) as any;
           ragsExternos.push({
             id: `RAG_EXT_${ragIdx}`,
             nombre: `RAG Externo: ${srcName}`,

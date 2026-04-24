@@ -544,7 +544,8 @@ REGLAS PARA deep_patterns:
 - ia_component_link: Obligatorio para Capas 3-5. Para Capas 1-2: null si el patrón es puramente observacional.
 - titulo: Máximo 10 palabras, descriptivo y específico al proyecto. PROHIBIDO: títulos genéricos como "Problema de eficiencia" o "Oportunidad de mejora".`;
 
-      const result = await callGeminiFlash(systemPrompt, userPrompt);
+      // maxRetries=1 to keep total wall time bounded under 150s Edge Function idle timeout for the extract action.
+      const result = await callGeminiFlash(systemPrompt, userPrompt, { maxRetries: 1 });
       console.log(`[wizard] F2 finishReason=${result.finishReason}, outputTokens=${result.tokensOutput}`);
 
       // Parse JSON from response — robust cleaning with truncation repair

@@ -146,6 +146,7 @@ serve(async (req) => {
       const f0Promise: Promise<SignalPreservationResult> = runF0SignalPreservation(
         extractInputContent,
         { projectName, companyName, projectType },
+        { maxRetries: 0 },
       ).catch((e) => {
         console.warn("[wizard][F0] failed (non-blocking):", e instanceof Error ? e.message : e);
         return emptyF0Result(e instanceof Error ? e.message : String(e));

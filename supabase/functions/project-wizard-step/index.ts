@@ -31,7 +31,7 @@ function truncateFull(s: string, max = 60000): string {
 }
 
 async function recordCost(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   params: {
     projectId: string;
     stepNumber: number;

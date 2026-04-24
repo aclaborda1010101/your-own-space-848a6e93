@@ -118,7 +118,7 @@ Responde SOLO con el JSON.`;
 }
 
 // ── Action: refresh_summary ──────────────────────────────────────────
-async function refreshSummary(admin: ReturnType<typeof createClient>, projectId: string) {
+async function refreshSummary(admin: any, projectId: string) {
   // Fetch recent timeline entries with analysis
   const { data: entries } = await admin
     .from("business_project_timeline")
@@ -223,7 +223,7 @@ Responde SOLO con el JSON.`;
 }
 
 // ── Action: get_summary ──────────────────────────────────────────────
-async function getSummary(admin: ReturnType<typeof createClient>, projectId: string) {
+async function getSummary(admin: any, projectId: string) {
   const { data, error } = await admin
     .from("business_project_live_summary")
     .select("*")
@@ -270,7 +270,7 @@ serve(async (req) => {
     });
   } catch (error) {
     console.error("Activity intelligence error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

@@ -641,6 +641,18 @@ REGLAS PARA deep_patterns:
 
         // 5. Attach F0 signals (límites ya aplicados en runF0SignalPreservation)
         briefing._f0_signals = f0Result;
+
+        // 6. Sampler traceability — record that the LLM saw a sampled input.
+        if (prepared.wasSampled) {
+          appendExtractionWarning(briefing, {
+            type: "long_input_sampled",
+            message: "Input was sampled before LLM extraction to avoid Edge Function timeout.",
+            original_chars: prepared.originalChars,
+            sampled_chars: prepared.sampledChars,
+            strategy: prepared.strategy,
+            preserved_keywords: prepared.preservedWindows.map((w) => w.keyword),
+          });
+        }
       }
 
       // ── P0: Detect parallel projects in raw input ──

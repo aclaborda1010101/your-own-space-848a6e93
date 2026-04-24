@@ -141,20 +141,36 @@ async function callGateway(
 }
 
 
-export async function callGeminiFlash(systemPrompt: string, userPrompt: string): Promise<LLMResult> {
+export interface LLMCallOptions {
+  /** Override for retry attempts. Use sparingly (e.g. extract action with
+   * very long inputs to keep wall time under Edge Function 150s timeout). */
+  maxRetries?: number;
+}
+
+export async function callGeminiFlash(
+  systemPrompt: string,
+  userPrompt: string,
+  options: LLMCallOptions = {},
+): Promise<LLMResult> {
   return callGateway(systemPrompt, userPrompt, {
     model: "google/gemini-2.5-flash",
     temperature: 0.2,
     maxTokens: 65536,
     jsonMode: true,
+    maxRetries: options.maxRetries,
   });
 }
 
-export async function callGeminiFlashMarkdown(systemPrompt: string, userPrompt: string): Promise<LLMResult> {
+export async function callGeminiFlashMarkdown(
+  systemPrompt: string,
+  userPrompt: string,
+  options: LLMCallOptions = {},
+): Promise<LLMResult> {
   return callGateway(systemPrompt, userPrompt, {
     model: "google/gemini-2.5-flash",
     temperature: 0.3,
     maxTokens: 16384,
+    maxRetries: options.maxRetries,
   });
 }
 

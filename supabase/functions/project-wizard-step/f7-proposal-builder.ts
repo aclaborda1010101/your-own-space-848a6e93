@@ -49,7 +49,10 @@ export interface ProposalScopeItem {
 export interface ClientProposalV1 {
   schema_version: "1.0.0";
   project_name: string;
+  /** Compatibilidad: nombre principal mostrado al cliente. Igual a client_company. */
   client_name: string;
+  client_company: string;
+  decision_maker_name?: string;
   generated_at: string;
   validity_days: number;
   source_step: { step_number: 28; version: number; row_id: string };

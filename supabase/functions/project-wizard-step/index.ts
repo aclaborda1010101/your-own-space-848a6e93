@@ -233,8 +233,9 @@ serve(async (req) => {
       let finalBriefing: any = normResult.briefing;
 
       // Build clean brief.
+      const { cleanupSpanishMarkdown } = await import("./brief-normalizer.ts");
       const cleanBrief = buildCleanBrief(finalBriefing, { projectName });
-      finalBriefing._clean_brief_md = cleanBrief.markdown;
+      finalBriefing._clean_brief_md = cleanupSpanishMarkdown(cleanBrief.markdown);
       finalBriefing._clean_brief_sections = cleanBrief.sections;
 
       // Anti-leak + legacy.
@@ -428,8 +429,9 @@ serve(async (req) => {
       }
 
       // Build clean brief (deterministic markdown)
+      const { cleanupSpanishMarkdown: _cleanupMd } = await import("./brief-normalizer.ts");
       const cleanBrief = buildCleanBrief(finalBriefing, { projectName });
-      finalBriefing._clean_brief_md = cleanBrief.markdown;
+      finalBriefing._clean_brief_md = _cleanupMd(cleanBrief.markdown);
       finalBriefing._clean_brief_sections = cleanBrief.sections;
 
       // Anti-leak + legacy

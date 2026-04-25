@@ -466,23 +466,23 @@ const CANONICAL_GROUPS: Array<{ canonical: string; matchTokens: string[] }> = [
   },
 ];
 
-function tryAssignCanonical(item: any): string | null {
+function tryAssignCanonical(item: any, groups: CanonicalComponent[]): string | null {
   const text = `${item.title || ""} ${item.description || ""}`.toLowerCase();
-  for (const group of CANONICAL_GROUPS) {
-    const hits = group.matchTokens.filter((t) => text.includes(t)).length;
+  for (const group of groups) {
+    const hits = group.matchTokens.filter((t) => text.includes(t.toLowerCase())).length;
     if (hits >= 2) return group.canonical;
   }
   return null;
 }
 
-function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: string): any[] {
+function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: string, groups: CanonicalComponent[]): any[] {
   if (!Array.isArray(arr)) return arr;
 
   // 1. Group by canonical mapping first.
   const canonicalBuckets = new Map<string, any[]>();
   const remaining: any[] = [];
   for (const item of arr) {
-    const canon = tryAssignCanonical(item);
+    const canon = tryAssignCanonical(item, groups);
     if (canon) {
       const bucket = canonicalBuckets.get(canon) || [];
       bucket.push(item);
@@ -496,7 +496,22 @@ function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: 
   const merged: any[] = [];
   for (const [canonical, bucket] of canonicalBuckets.entries()) {
     if (bucket.length === 1) {
-      merged.push(bucket[0]);
+      // Single item still gets its title rewritten to the canonical form so
+      // the brief shows the project's own taxonomy rather than the LLM's
+      // arbitrary phrasing.
+      const renamed = { ...bucket[0] };
+      const before = renamed.title;
+      if (before !== canonical) {
+        renamed.title = canonical;
+        changes.push({
+          type: "candidate_rename_canonical",
+          field: fieldName,
+          before,
+          after: canonical,
+          reason: "Asignado nombre canónico del proyecto.",
+        });
+      }
+      merged.push(renamed);
       continue;
     }
     const first = { ...bucket[0] };
@@ -553,12 +568,16 @@ function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: 
   return merged;
 }
 
-function applySemanticDedup(briefing: any, changes: NormalizationChange[]) {
+function applySemanticDedup(briefing: any, changes: NormalizationChange[], ctx: NormalizationContext) {
   const v2 = briefing?.business_extraction_v2;
   if (!v2) return;
+  // Use override if provided, otherwise the generic defaults.
+  const groups = (Array.isArray(ctx.canonicalComponents) && ctx.canonicalComponents.length > 0)
+    ? ctx.canonicalComponents
+    : CANONICAL_GROUPS;
   for (const field of ["ai_native_opportunity_signals", "client_requested_items", "inferred_needs"] as const) {
     const before = Array.isArray(v2[field]) ? v2[field].length : 0;
-    v2[field] = dedupCandidates(v2[field], changes, field);
+    v2[field] = dedupCandidates(v2[field], changes, field, groups);
     const after = Array.isArray(v2[field]) ? v2[field].length : 0;
     if (before !== after) {
       changes.push({
@@ -569,6 +588,38 @@ function applySemanticDedup(briefing: any, changes: NormalizationChange[]) {
         reason: `Reducción ${before} → ${after}.`,
       });
     }
+  }
+}
+
+function applyManualReviewAlerts(briefing: any, ctx: NormalizationContext, changes: NormalizationChange[]) {
+  const v2 = briefing?.business_extraction_v2;
+  if (!v2) return;
+  const alerts = ctx.manualReviewAlerts || [];
+  if (alerts.length === 0) return;
+
+  if (!Array.isArray(v2.open_questions)) v2.open_questions = [];
+  const existing = new Set(
+    v2.open_questions
+      .map((q: any) => (typeof q === "string" ? q : (q?.question || q?.title || "")).toLowerCase().trim())
+      .filter(Boolean),
+  );
+
+  for (const alert of alerts) {
+    const key = (alert.question || "").toLowerCase().trim();
+    if (!key || existing.has(key)) continue;
+    v2.open_questions.push({
+      title: `Revisión manual: ${alert.signal}`,
+      question: alert.question,
+      _source: alert.source || "manual_review_alert",
+      _inferred_by: "normalizer_v1",
+    });
+    existing.add(key);
+    changes.push({
+      type: "manual_review_alert_added",
+      field: "open_questions",
+      after: alert.question,
+      reason: `Alerta de revisión manual: ${alert.signal}.`,
+    });
   }
 }
 

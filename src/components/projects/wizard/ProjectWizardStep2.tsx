@@ -638,7 +638,7 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
                         const isLongInput = typeof w === "object" && w?.type === "long_input_sampled";
                         const isChunkedInfo = typeof w === "object" && w?.type === "chunked_extraction_used";
                         const accent = isChunkedInfo ? "text-emerald-600" : "text-destructive";
-                        const Icon = isChunkedInfo ? CheckCircle : Info;
+                        const Icon = isChunkedInfo ? CheckCircle2 : Info;
                         return (
                           <div key={i} className={`flex flex-col gap-2 p-2 rounded-lg ${isChunkedInfo ? "bg-emerald-500/5 border border-emerald-500/20" : "bg-background/50"}`}>
                             <div className="flex items-start gap-2">

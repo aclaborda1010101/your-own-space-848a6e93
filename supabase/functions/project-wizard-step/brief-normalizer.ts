@@ -447,7 +447,7 @@ async function applyLanguageNormalization(
   if (items.length === 0) return { tokensInput: 0, tokensOutput: 0, called: false };
 
   // Cap to avoid massive prompts.
-  const capped = items.slice(0, 60);
+  const capped = items.slice(0, 120);
 
   const systemPrompt = `Eres traductor técnico ES↔EN. Recibes una lista JSON de strings en inglés (o mezcla) extraídas de un briefing de proyecto. Tradúcelas a ESPAÑOL NEUTRO TÉCNICO.
 

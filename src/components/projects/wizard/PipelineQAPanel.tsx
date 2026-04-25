@@ -6,15 +6,25 @@ import { Loader2, Play, Copy, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
-interface BuildRegistryPanelProps {
+interface PipelineQAPanelProps {
   projectId: string;
 }
+
+type WizardAction = "build_registry" | "audit_f4a_gaps" | "audit_f4b_feasibility";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
-export const BuildRegistryPanel = ({ projectId }: BuildRegistryPanelProps) => {
+const ACTION_META: Record<WizardAction, { label: string; step: string; hint: number; variant: "outline" | "holo" }> = {
+  build_registry: { label: "Build Registry", step: "Step 25", hint: 150, variant: "outline" },
+  audit_f4a_gaps: { label: "F4a · Gap Audit", step: "Step 26", hint: 180, variant: "holo" },
+  audit_f4b_feasibility: { label: "F4b · Feasibility", step: "Step 27", hint: 240, variant: "holo" },
+};
+
+export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
   const [loading, setLoading] = useState(false);
+  const [currentAction, setCurrentAction] = useState<WizardAction | null>(null);
+  const [lastAction, setLastAction] = useState<WizardAction | null>(null);
   const [status, setStatus] = useState<number | null>(null);
   const [raw, setRaw] = useState<string>("");
   const [parsed, setParsed] = useState<any | null>(null);
@@ -50,8 +60,10 @@ export const BuildRegistryPanel = ({ projectId }: BuildRegistryPanelProps) => {
     }
   };
 
-  const run = async () => {
+  const run = async (action: WizardAction) => {
     setLoading(true);
+    setCurrentAction(action);
+    setLastAction(action);
     setStatus(null);
     setRaw("");
     setParsed(null);
@@ -75,7 +87,7 @@ export const BuildRegistryPanel = ({ projectId }: BuildRegistryPanelProps) => {
           Authorization: `Bearer ${token}`,
           apikey: ANON_KEY,
         },
-        body: JSON.stringify({ action: "build_registry", projectId }),
+        body: JSON.stringify({ action, projectId }),
       });
 
       setStatus(res.status);
@@ -91,6 +103,7 @@ export const BuildRegistryPanel = ({ projectId }: BuildRegistryPanelProps) => {
     } finally {
       stopTicker();
       setLoading(false);
+      setCurrentAction(null);
     }
   };
 
@@ -113,58 +126,120 @@ export const BuildRegistryPanel = ({ projectId }: BuildRegistryPanelProps) => {
       ? "bg-accent/15 text-accent border-accent/30"
       : "bg-destructive/15 text-destructive border-destructive/30";
 
-  const summary =
-    parsed && typeof parsed === "object"
-      ? {
-          ok: parsed.ok,
-          opportunity_count: parsed.opportunity_count,
-          component_count: parsed.component_count,
-          warnings_count: parsed.warnings_count ?? parsed.warnings?.length,
-          validation_issues_count:
-            parsed.validation_issues_count ?? parsed.validation_issues?.length,
-          f2_ms: parsed.f2_ms,
-          f3_ms: parsed.f3_ms,
-        }
-      : null;
+  // Resumen adaptativo según la acción ejecutada
+  const summary = (() => {
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const audit = parsed.audit ?? {};
+
+    // Step 27 (F4b) — feasibility
+    if (
+      lastAction === "audit_f4b_feasibility" ||
+      audit.component_reviews ||
+      parsed.recommended_next_step
+    ) {
+      const reviews = audit.component_reviews ?? parsed.component_reviews ?? [];
+      const risks = audit.risks ?? parsed.risks ?? [];
+      return {
+        ok: parsed.ok,
+        components_reviewed: Array.isArray(reviews) ? reviews.length : reviews,
+        risks_count: Array.isArray(risks) ? risks.length : risks,
+        recommended_next_step:
+          audit.recommended_next_step ?? parsed.recommended_next_step,
+        warnings_count: parsed.warnings_count ?? parsed.warnings?.length,
+      };
+    }
+
+    // Step 26 (F4a) — gap audit
+    if (
+      lastAction === "audit_f4a_gaps" ||
+      audit.gaps ||
+      parsed.gaps_count !== undefined
+    ) {
+      const gaps = audit.gaps ?? parsed.gaps ?? [];
+      const gapsArr = Array.isArray(gaps) ? gaps : [];
+      return {
+        ok: parsed.ok,
+        gaps_count: parsed.gaps_count ?? gapsArr.length,
+        critical_count:
+          parsed.critical_count ??
+          gapsArr.filter((g: any) => g?.severity === "critical").length,
+        coverage_summary:
+          audit.coverage_summary ?? parsed.coverage_summary ?? undefined,
+        warnings_count: parsed.warnings_count ?? parsed.warnings?.length,
+      };
+    }
+
+    // Step 25 (Build Registry) — default
+    return {
+      ok: parsed.ok,
+      opportunity_count: parsed.opportunity_count,
+      component_count: parsed.component_count,
+      warnings_count: parsed.warnings_count ?? parsed.warnings?.length,
+      validation_issues_count:
+        parsed.validation_issues_count ?? parsed.validation_issues?.length,
+      f2_ms: parsed.f2_ms,
+      f3_ms: parsed.f3_ms,
+    };
+  })();
+
+  const renderActionButton = (action: WizardAction) => {
+    const meta = ACTION_META[action];
+    const isThisRunning = loading && currentAction === action;
+    return (
+      <Button
+        key={action}
+        onClick={() => run(action)}
+        disabled={loading}
+        variant={meta.variant}
+        size="sm"
+      >
+        {isThisRunning ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Ejecutando…
+          </>
+        ) : (
+          <>
+            <Play className="w-4 h-4" />
+            {meta.label} ({meta.step})
+          </>
+        )}
+      </Button>
+    );
+  };
 
   return (
     <Card className="border-accent/30">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <CardTitle className="text-base">QA · Pipeline v2 — Build Registry (Step 25)</CardTitle>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0 flex-1">
+            <CardTitle className="text-base">QA · Pipeline v2 — Steps 25 / 26 / 27</CardTitle>
             <CardDescription className="text-xs mt-1">
-              Ejecuta <code className="font-mono text-[11px]">action: build_registry</code> sin aprobar el briefing. Útil
-              para validar Step 25 end-to-end. Límite del Edge Function: 150 s.
+              Lanza acciones del wizard sin tocar consola. Tiempos típicos: Build Registry ~60–120s,
+              F4a ~60–180s (Flash), F4b ~120–240s (Pro).
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
-            {loading && (
-              <Badge variant="outline" className="text-[11px] font-mono">
-                {elapsed}s / 150s
-              </Badge>
-            )}
-            <Button onClick={run} disabled={loading} variant="holo" size="sm">
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Ejecutando…
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4" />
-                  Ejecutar build_registry
-                </>
-              )}
-            </Button>
-          </div>
+          {loading && currentAction && (
+            <Badge variant="outline" className="text-[11px] font-mono">
+              {ACTION_META[currentAction].label} · {elapsed}s / {ACTION_META[currentAction].hint}s
+            </Badge>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap pt-3">
+          {renderActionButton("build_registry")}
+          {renderActionButton("audit_f4a_gaps")}
+          {renderActionButton("audit_f4b_feasibility")}
         </div>
       </CardHeader>
 
       {(status !== null || error || raw) && (
         <CardContent className="pt-0 space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-muted-foreground">STATUS:</span>
+            <span className="text-xs text-muted-foreground">
+              {lastAction ? `${ACTION_META[lastAction].label} · STATUS:` : "STATUS:"}
+            </span>
             <Badge variant="outline" className={cn("font-mono text-xs", statusTone)}>
               {status ?? "—"}
             </Badge>
@@ -197,7 +272,9 @@ export const BuildRegistryPanel = ({ projectId }: BuildRegistryPanelProps) => {
                   v === undefined ? null : (
                     <div key={k} className="flex justify-between gap-2 border-b border-border/30 pb-1">
                       <span className="text-muted-foreground">{k}</span>
-                      <span className="text-foreground">{String(v)}</span>
+                      <span className="text-foreground break-all text-right">
+                        {typeof v === "object" ? JSON.stringify(v) : String(v)}
+                      </span>
                     </div>
                   ),
                 )}
@@ -232,4 +309,4 @@ export const BuildRegistryPanel = ({ projectId }: BuildRegistryPanelProps) => {
   );
 };
 
-export default BuildRegistryPanel;
+export default PipelineQAPanel;

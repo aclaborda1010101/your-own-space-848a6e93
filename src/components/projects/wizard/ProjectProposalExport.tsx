@@ -324,9 +324,9 @@ export const ProjectProposalExport = ({
   return (
     <CollapsibleCard
       id="proposal-export"
-      title="Propuesta para el Cliente"
+      title="Paso 5 · Propuesta cliente"
       icon={<FileText className="w-4 h-4 text-primary" />}
-      defaultOpen={false}
+      defaultOpen={true}
       badge={
         <Badge
           variant="outline"

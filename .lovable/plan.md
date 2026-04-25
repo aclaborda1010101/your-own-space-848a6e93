@@ -1,90 +1,173 @@
-## Diagnóstico (confirmado en BD)
+## Diagnóstico
 
-Consulté `project_wizard_steps` para el proyecto AFFLUX (`6ef807d1-…`) y esto es lo que hay realmente:
+Confirmé los 4 problemas con código y BBDD:
 
-| step | versión | estado | model | qué es |
-|------|---------|--------|-------|--------|
-| 3 v1 | review | gemini-3.1-pro-preview | **PRD legacy LOW-LEVEL**, empieza con `"Claro, aquí tienes las secciones 1 a 4..."` |
-| 5 v1 | review | gemini-3.1-pro-preview | Documento legacy |
-| 10, 11, 12 | review/generating | — | **Restos del chained legacy** (Lovable Build Blueprint, etc.) |
-| 25 v1 | review | gemini-2.5-flash | Registry v2 ✅ |
-| 26 v1 | review | gemini-2.5-flash | Gap audit v2 ✅ |
-| **27, 28, 29** | — | — | **NO EXISTEN** |
+1. **El proyecto AFFLUX (`6ef807d1…`) NO tiene Step 28 persistido** (solo 1, 2, 6 y 11). La auto-cadena de prerequisitos en `useProjectWizard.generateClientProposal` no está fallando ruidosamente — está silenciando el error y la propuesta acaba leyendo otra fuente. **Por eso el alcance "se reinventa": F7 no encuentra Step 28 y, o bien rompe, o se está sirviendo el PDF legacy del Step 11**. El primer fix es hacer la auto-cadena hard-fail y bloquear la generación si Step 28 no existe.
 
-Es decir: el botón "Descargar PDF" del Step 3 baja el `output_data.document` del Step 3 v1, que es el legacy `"Claro, aquí tienes…"`. Y el `generate-document` lo titula "Borrador de Alcance" porque su `STEP_TITLES[3] = "Borrador de Alcance"`. El `runPipelineV2PRD` arrancó hoy pero se cortó tras el Step 26 (Step 27/28/29 nunca llegaron a crearse), así que el espejo Step 29→Step 3 no se ejecutó y quedó el v1 legacy intacto.
+2. **Mismatch de schema entre `budgetToCommercialTermsV1` (frontend) y `CommercialTermsV1` (F7)**:
+   - El mapper produce `{pricing_model, selected_models:[{setup_fee, monthly_fee, …}], development_total_eur, recurring_monthly_eur, …}`.
+   - F7 lee `commercialTerms.setup_fee` y `commercialTerms.monthly_retainer` **al nivel raíz**, que no existen → por eso el PDF solo dice "Modalidad: setup_plus_monthly" sin importes.
+   - **Fix**: el mapper debe aplanar el modelo recomendado/visible a los campos planos que F7 espera (`setup_fee`, `monthly_retainer`, `phase_prices`, `ai_usage_cost_policy`, `taxes`, `payment_terms`, `optional_addons`).
 
-Por eso el PDF que estás abriendo:
-- Se titula "Borrador de Alcance".
-- Cita "Cliente: Alejandro Gordo" y mete fallecimientos como Fase 2.
-- Mete "Lovable Build Blueprint", scoring 120 variables, etc.
-- Tiene residuo `"Claro, aquí tienes…"` en la página 3.
+3. **Cliente mal identificado**: `business_projects.company = "Alejandro Gordo"` (decisor metido como empresa) y `name = "AFFLUX"`. La propuesta hace `clientName = companyName ?? company`, por lo que sale "Alejandro Gordo" como cliente.
+   - **Fix**: separar conceptualmente `client_company` (AFLU/AFFLUX) y `decision_maker` (Alejandro Gordo). Añadir campo opcional `decision_maker_name` en `business_projects` y propagarlo a F7. Cabecera y portada deben usar `client_company`; "Decisor" se muestra como dato secundario.
 
-No es un problema de prompt: es que estás bajando un Step 3 que nunca se regeneró desde Step 28 v2.
+4. **Formato/ES**: F7 emite `weeks_window.replace(/_/g, " ")` → "weeks 1 to 2". Y la numeración salta de 12 a 14 cuando no hay `support_terms`.
+
+5. **Validación**: F7 no bloquea si faltan importes. Hay que añadir guards.
 
 ---
 
-## Plan de corrección
+## Plan de implementación
 
-### 1. Botón "Descargar PDF" del Step 3 ya no debe servir contenido legacy
-En `src/components/projects/wizard/ProjectWizardGenericStep.tsx` (Step 3) y/o en `src/pages/ProjectWizard.tsx`:
-- Si `step3Data.outputData.source !== "pipeline_v2"` ⇒ ocultar/disable el botón de descarga y mostrar un aviso: *"Este PRD viene del pipeline legacy. Pulsa **Generar PRD Técnico (v2)** antes de descargarlo."*
-- Solo permitir descargar cuando `source === "pipeline_v2"` y exista `step_29_ref`.
+### A. `src/lib/budgetToCommercialTerms.ts` — aplanar para F7
 
-### 2. Retitular el PDF de Step 3 cuando es v2
-En `supabase/functions/generate-document/index.ts`:
-- Detectar en el body un flag `isPipelineV2` (o leer en BD el `output_data.source` cuando `stepNumber === 3`).
-- Si v2 ⇒ título = **"PRD Técnico para Construcción — {projectName}"** (no "Borrador de Alcance").
-- Cabecera del PDF con: cliente = `companyName` (AFLU/AFFLUX), decisor = `client_decision_maker` del Step 28, ref a Step 28/29.
-- Si NO v2 (legacy) ⇒ devolver `409 LEGACY_PRD_BLOCKED` con mensaje claro, salvo header `x-allow-legacy: true`.
+Cambiar `budgetToCommercialTermsV1()` para que devuelva (además del objeto interno) los campos planos que F7 espera. La forma:
 
-### 3. Saneamiento de datos legacy en este proyecto
-Una vez generado el PRD v2 correcto, marcar como obsoletos los pasos legacy en `project_wizard_steps`:
-- `step_number IN (10, 11, 12)` para este proyecto ⇒ `status = 'archived_legacy'`.
-- `step_number = 3 v1` ⇒ se sobrescribe por el espejo Step 29→Step 3 (newV3 = 2).
-- Eliminar la versión v1 legacy del Step 3 si interfiere con la UI (o filtrar por `version` máxima — ya se hace).
+```ts
+return {
+  // ── campos planos para F7 (Step 30) ──
+  pricing_model: "setup_plus_monthly" | "subscription" | "fixed_project" | "phased",
+  setup_fee: number | undefined,        // del modelo visible/recomendado
+  monthly_retainer: number | undefined, // del modelo visible/recomendado
+  phase_prices: undefined,
+  optional_addons: [...otros modelos visibles no recomendados con su precio],
+  ai_usage_cost_policy: "Costes de IA/API no incluidos por defecto…",
+  payment_terms: budget.pricing_notes || default,
+  taxes: "IVA no incluido. Se aplicará el tipo vigente.",
+  currency: "EUR",
+  validity_days: 30,
 
-### 4. Hacer el `runPipelineV2PRD` resiliente y observable
-En `src/hooks/useProjectWizard.ts → runPipelineV2PRD`:
-- Tras cada `callAction`, **verificar en BD** que el step esperado (25/26/27/28/29) existe con `version` mayor o igual al esperado, antes de pasar al siguiente. Hoy se confía en el `data.error` y por eso se cortó silenciosamente entre Step 26 y 27.
-- Si una llamada devuelve 4xx/5xx, parar y mostrar `toast.error` con el step exacto y el body de error (no genérico).
-- Botón "Reintentar desde el último paso completado".
+  // ── extras internos (para auditoría / no renderizado) ──
+  selected_models, recommended_model,
+  development_total_eur, recurring_monthly_eur,
+  notes, risk_factors,
+  source: "derived_from_budget_data",
+};
+```
 
-### 5. Garantizar que F5 (Step 28) NO degrade el scope
-Memoria de proyecto y feedback del usuario marcan estas reglas duras que `f5-scope-architect.ts` ya debería cumplir, pero hay que verificarlas con un test sobre el scope generado para AFFLUX:
-- `COMP-C01` fallecimientos/herencias ⇒ MVP + compliance blocker DPIA/HITL.
-- `COMP-C03` matching activo-inversor ⇒ MVP + dataset readiness blocker.
-- `COMP-D01` Soul Alejandro ⇒ data foundation.
-- `COMP-C04` Benatar ⇒ fast-follow F2.
-- Governance RGPD/DPIA en MVP.
-- Sin scoring/fórmula predictiva sin dataset readiness.
+Endurecer `validateBudgetForClientProposal`: el modelo visible al cliente **debe** tener al menos `setup_fee` o `monthly_fee` numérico tras `parseEuro` (no string vacío, no rango sin número).
 
-Si `runDeterministicPreWarm` o el LLM enrichment muta esos buckets ⇒ rechazar y loguear `traceable_violations`.
+### B. `supabase/functions/project-wizard-step/f7-proposal-builder.ts`
 
-### 6. Bloqueo total del legacy en producción
-- En `supabase/functions/project-wizard-step/index.ts`: confirmar que `LEGACY_PRD_ALLOWED = false` por defecto, y que las acciones `generate_prd_chained`, `generate_scope`, `generate_audit`, `generate_final_doc` devuelven 410 sin `x-allow-legacy: true`. (Ya parece estar — verificar en runtime.)
-- En `src/hooks/useProjectWizard.ts`: marcar `runChainedPRD` como deprecated y no exponerlo en UI (solo desde el panel debug interno).
+1. **Guard de presupuesto** al inicio de `buildClientProposal`:
+   ```ts
+   const hasBudget =
+     typeof commercialTerms.setup_fee === "number" ||
+     typeof commercialTerms.monthly_retainer === "number" ||
+     (commercialTerms.phase_prices?.length ?? 0) > 0;
+   if (!hasBudget) throw new Error("MISSING_BUDGET_AMOUNTS");
+   ```
 
-### 7. Renombrado UX para que no haya confusión nunca más
-- "Borrador de Alcance" ⇒ **"PRD Técnico para Construcción"** en el Step 3 y en el PDF.
-- "Documento de Alcance" del Step 5 ⇒ **"Propuesta Cliente"** (separado, viene del Step 30).
+2. **Cliente vs decisor** — extender `F7Input`:
+   ```ts
+   clientCompany: string;       // p.ej. "AFLU / AFFLUX"
+   decisionMakerName?: string;  // p.ej. "Alejandro Gordo"
+   ```
+   Renderizar:
+   ```
+   **Cliente / empresa:** AFLU / AFFLUX
+   **Decisor:** Alejandro Gordo
+   **Producto:** AFFLUX
+   ```
+   Cabecera: `CONFIDENCIAL — {clientCompany}`.
+
+3. **ES nativo del weeks_window** — pequeño map:
+   ```ts
+   const WEEKS_ES = {
+     weeks_1_to_2: "semanas 1 y 2",
+     weeks_1_to_4: "semanas 1 a 4",
+     // …
+   };
+   ```
+   Fallback: si no está en el map, traducir `weeks_X_to_Y` → `semanas X a Y`.
+
+4. **Numeración estable** del markdown: renumerar dinámicamente las secciones (no hardcoded `## 12`, `## 14`). Mantener un contador `n` y emitir `## ${n++}. Título`.
+
+5. **Renderizado de presupuesto siempre presente**: si hay `setup_fee`, mostrar línea; si hay `monthly_retainer`, mostrar línea; nunca quedarse solo con "Modalidad: …".
+
+### C. `supabase/functions/project-wizard-step/index.ts` — handler `generate_client_proposal`
+
+1. **Bloquear si no hay Step 28** (ya lo hace) → mantener pero con código de error explícito `NO_STEP_28`.
+
+2. **Bloquear si el scope de Step 28 está vacío o desalineado**: validar `mvp.length + data_foundation.length >= 1`. Si está vacío → error `EMPTY_SCOPE`.
+
+3. **Pasar `clientCompany` y `decisionMakerName`** al builder:
+   - `clientCompany`: leer de `stepData.clientCompany` o, fallback, `business_projects.client_company` (nuevo campo) o `business_projects.name`.
+   - `decisionMakerName`: leer de `stepData.decisionMakerName` o `business_projects.decision_maker_name` o `business_projects.company` legacy.
+
+4. **Devolver 422 con `MISSING_BUDGET_AMOUNTS`** si el throw del builder lo indica, para que el frontend pueda mostrar mensaje claro.
+
+### D. `src/hooks/useProjectWizard.ts`
+
+1. **Auto-cadena hard-fail**: tras cada prereq verificar en BBDD que el step se persistió antes de seguir. Si no → toast.error y abortar (ya estaba parcialmente, asegurar para los 4 prereqs).
+
+2. **Pasar `clientCompany` y `decisionMakerName`** al body del invoke:
+   ```ts
+   stepData: {
+     commercial_terms_v1,
+     projectName: project.name,                      // "AFFLUX"
+     clientCompany: project.client_company || project.name,  // "AFLU / AFFLUX"
+     decisionMakerName: project.decision_maker_name || project.company,  // "Alejandro Gordo"
+   }
+   ```
+
+### E. Migración BBDD
+
+Añadir a `business_projects`:
+- `client_company TEXT` (empresa cliente; AFLU/AFFLUX para este proyecto)
+- `decision_maker_name TEXT` (decisor; Alejandro Gordo para este proyecto)
+
+Backfill solo del proyecto AFFLUX:
+```sql
+UPDATE business_projects
+SET client_company = 'AFLU / AFFLUX',
+    decision_maker_name = 'Alejandro Gordo'
+WHERE id = '6ef807d1-9c3b-4a9d-b88a-71530c3d7aaf';
+```
+
+### F. UI — exposición mínima
+
+En `ProjectBudgetPanel` o `ProjectProposalExport` (sin rediseñar): permitir editar dos inputs "Empresa cliente" y "Decisor" si están vacíos antes de generar la propuesta. No bloqueante en otras pantallas.
+
+### G. Tests Deno
+
+Actualizar `f7-proposal-builder_test.ts`:
+- Test nuevo: `buildClientProposal` lanza `MISSING_BUDGET_AMOUNTS` si no hay setup/monthly/phase prices.
+- Test nuevo: el markdown renderizado usa `clientCompany` en cabecera y muestra `Decisor:` aparte.
+- Test nuevo: `weeks_1_to_2` se traduce a `semanas 1 y 2`.
+- Test nuevo: la numeración nunca salta (regex `## (\d+)\.` → secuencia 1..N consecutiva).
+- Test nuevo: scope con `data_foundation:1, mvp:9, fast_follow:2, roadmap:0` → `mvp_scope.length === 10` (1+9), `later_phases.fast_follow.length === 2`, `later_phases.roadmap.length === 0` y la sección "Roadmap posterior" se omite (no "_No aplica._").
+
+### H. Roadmap vacío
+
+Cambio menor en el renderer: si `roadmap.length === 0`, **no** emitir la subsección "Roadmap posterior" en absoluto (en vez de `_No aplica._`). Igual para "Qué queda fuera" si está vacío.
 
 ---
 
-## Acciones concretas (cuando apruebes el plan)
+## Criterio de aceptación (para AFFLUX)
 
-1. **Migración SQL**: marcar Steps 10/11/12 del proyecto AFFLUX como archivados y borrar Step 3 v1 legacy para que la UI muestre solo lo que venga del v2.
-2. **Edit `useProjectWizard.ts`**: hacer `runPipelineV2PRD` con verificación en BD entre pasos + toasts específicos por step.
-3. **Edit `generate-document/index.ts`**: leer `source` del Step 3 en BD y aplicar título "PRD Técnico para Construcción" + cabecera con cliente correcto. Bloquear con 409 si `source !== 'pipeline_v2'`.
-4. **Edit `ProjectWizardGenericStep.tsx`** (Step 3 path): ocultar el botón Download cuando el contenido no es v2; mostrar banner de aviso.
-5. **Re-ejecutar pipeline v2** sobre AFFLUX desde la UI tras el saneamiento, y validar Step 28 contra las reglas duras (COMP-C01, C03, D01, C04, governance).
-6. **Test deno** que verifique sobre un fixture AFFLUX que `buildTechnicalPrd` mantiene la asignación correcta de buckets (regression test).
+1. Al pulsar "Generar propuesta cliente" sin Step 28 → toast claro y NO se persiste Step 30.
+2. Tras correr la auto-cadena (build_registry → architect_scope), Step 28 v2 existe con buckets `data_foundation:1, mvp:9, fast_follow:2, roadmap:0`.
+3. La propuesta:
+   - Cabecera: `CONFIDENCIAL — AFLU / AFFLUX`.
+   - Datos: `Cliente / empresa: AFLU / AFFLUX`, `Decisor: Alejandro Gordo`, `Producto: AFFLUX`.
+   - Alcance MVP: 10 ítems (Soul + 9 MVP).
+   - Fases posteriores: 2 (revista emocional, Benatar).
+   - Sin sección Roadmap.
+   - Presupuesto con `Cuota inicial` y `Mensualidad` numéricas reales del modelo recomendado.
+   - "semanas 1 y 2" en lugar de "weeks 1 to 2".
+   - Numeración consecutiva 1..N.
+4. Tests Deno verdes.
 
 ---
 
-## Resultado esperado
+## Ficheros a tocar
 
-- Pulsar **"Generar PRD Técnico (v2)"** ejecuta los 5 steps; si falla uno, el toast lo dice claramente.
-- El Step 3 mostrado en UI siempre proviene de Step 29 (espejo).
-- El PDF se titula **"PRD Técnico para Construcción — AFFLUX"**, cliente = AFLU/AFFLUX, decisor = Alejandro Gordo, fases = exactamente las del Step 28.
-- Sin `"Claro, aquí tienes…"`, sin "Lovable Build Blueprint" antiguo, sin scoring 120 variables.
-- Bajar el PDF de un proyecto que solo tenga Step 3 legacy queda **bloqueado** con un mensaje claro hasta regenerar.
+- `src/lib/budgetToCommercialTerms.ts` (aplanar + validación estricta)
+- `supabase/functions/project-wizard-step/f7-proposal-builder.ts` (guard, cliente/decisor, weeks_es, numeración, roadmap-vacío)
+- `supabase/functions/project-wizard-step/f7-proposal-builder_test.ts` (5 tests nuevos)
+- `supabase/functions/project-wizard-step/index.ts` (pasar clientCompany/decisionMaker, error codes)
+- `src/hooks/useProjectWizard.ts` (propagar campos, hard-fail prereqs)
+- Nueva migración: añadir `client_company` y `decision_maker_name` a `business_projects` + backfill AFFLUX.
+- (Opcional menor) UI para editar empresa cliente / decisor antes de generar propuesta.

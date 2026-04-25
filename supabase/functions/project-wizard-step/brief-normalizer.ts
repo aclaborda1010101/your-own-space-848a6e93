@@ -369,15 +369,23 @@ const EN_HINT_WORDS = new Set([
   "recorded", "calls", "lost", "opportunities", "qualification", "prioritization",
   "graph", "historical", "record", "building", "deal", "owner", "owners",
   "lead", "leads", "automated", "categorization", "profiling", "estate",
-  "real", "off-market", "specific", "what", "which", "should",
+  "real", "off-market", "specific", "what", "which", "should", "collected",
+  "contain", "valuable", "information", "categorize", "interactions", "acknowledges",
+  "expresses", "desire", "wants", "current", "increase", "find", "understand",
+  "people", "buying", "crossing", "goal", "raise", "level", "team", "better",
+  "closing", "deals", "depends", "need", "standardize", "follow-up", "develop",
+  "listen", "boring", "repetitive", "efficiency", "resources", "preparatory",
 ]);
+
+const EN_PHRASE_RE = /\b(AI can|Develop an AI|The client acknowledges|Carlos expresses|Aflu has collected|CRM data|Call recordings|Recorded Calls|Lost opportunities|Knowledge graph|Automated lead|What are the specific|The current process|There is a desire|The goal is|The effectiveness of|The client wants|Carlos wants)\b/i;
 
 function isLikelyEnglish(s: string): boolean {
   if (!s || typeof s !== "string") return false;
+  if (EN_PHRASE_RE.test(s)) return true;
   const words = s.toLowerCase().match(/[a-záéíóúñ]+/gi) || [];
   if (words.length < 3) return false;
   const enHits = words.filter((w) => EN_HINT_WORDS.has(w)).length;
-  return enHits / words.length > 0.25;
+  return enHits / words.length > 0.18;
 }
 
 interface TranslateItem {
@@ -399,10 +407,26 @@ function collectTranslatableStrings(briefing: any): TranslateItem[] {
   ];
   const STRING_KEYS = ["title", "description", "signal", "question", "name_or_role", "evidence", "purpose", "name"];
 
+  if (typeof v2.executive_summary === "string" && isLikelyEnglish(v2.executive_summary)) {
+    items.push({ id: `__v2|executive_summary|value`, text: v2.executive_summary });
+  }
+  if (v2.business_model_summary && typeof v2.business_model_summary === "object") {
+    for (const key of ["title", "context", "primary_goal"] as const) {
+      const val = v2.business_model_summary[key];
+      if (typeof val === "string" && isLikelyEnglish(val)) {
+        items.push({ id: `__bms|${key}|value`, text: val });
+      }
+    }
+  }
+
   for (const field of FIELDS_TO_SCAN) {
     const arr = v2[field];
     if (!Array.isArray(arr)) continue;
     arr.forEach((item: any, idx: number) => {
+      if (typeof item === "string") {
+        if (isLikelyEnglish(item)) items.push({ id: `${field}|${idx}|__self`, text: item });
+        return;
+      }
       if (!item || typeof item !== "object") return;
       for (const key of STRING_KEYS) {
         const val = item[key];

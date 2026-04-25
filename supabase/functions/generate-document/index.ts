@@ -2646,6 +2646,17 @@ Devuelve SOLO el JSON.`;
 
       htmlContent = parts.join("\n");
     }
+    // ── Step 2: Brief Limpio renderer (global, todos los proyectos) ──
+    // Prioriza _clean_brief_md (markdown normalizado, 3-7 páginas).
+    // Si no existe, NO vuelca el JSON crudo (61 páginas): muestra fallback degradado.
+    else if (stepNumber === 2 && typeof processedContent === "object" && processedContent !== null) {
+      const cleanMd = (processedContent as any)._clean_brief_md;
+      if (typeof cleanMd === "string" && cleanMd.trim().length > 200) {
+        htmlContent = markdownToHtml(cleanMd);
+      } else {
+        htmlContent = markdownToHtml(buildMinimalBriefFallback(processedContent, projectName || ""));
+      }
+    }
     // Convert content to HTML (non-budget steps)
     else if (contentType === "markdown" || typeof processedContent === "string") {
       htmlContent = markdownToHtml(typeof processedContent === "string" ? processedContent : JSON.stringify(processedContent, null, 2));

@@ -5046,7 +5046,13 @@ Si no hay contradicciones, devuelve: {"contradicciones": []}`;
         .from("project_wizard_steps")
         .update(updatePayload)
         .eq("id", latestRow.id);
-      if (updErr) console.error(`[approve_step] update failed:`, updErr);
+      if (updErr) {
+        console.error(`[approve_step] update failed:`, updErr);
+        return new Response(
+          JSON.stringify({ error: `No se pudo aprobar el paso ${stepNumber}: ${updErr.message}` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
 
       // Sync current_step but never go backwards (avoid breaking later phases).
       const { data: bp } = await supabase

@@ -872,7 +872,8 @@ export const useProjectWizard = (projectId?: string) => {
         }
       }
 
-      const { error } = await supabase.functions.invoke("project-wizard-step", {
+      console.info(`[approveStep] invoking project-wizard-step approve_step for step ${stepNumber}…`);
+      const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
           action: "approve_step",
           projectId,
@@ -880,7 +881,16 @@ export const useProjectWizard = (projectId?: string) => {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error(`[approveStep] invoke error:`, error);
+        throw error;
+      }
+      if (data?.error) {
+        console.error(`[approveStep] backend error:`, data.error);
+        toast.error(`No se pudo aprobar el paso ${stepNumber}: ${data.error}`);
+        return;
+      }
+      console.info(`[approveStep] step ${stepNumber} approved OK`);
       toast.success(`Paso ${stepNumber} aprobado`);
 
       // Auto-log timeline entry

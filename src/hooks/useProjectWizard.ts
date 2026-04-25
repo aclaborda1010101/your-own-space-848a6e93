@@ -350,7 +350,8 @@ export const useProjectWizard = (projectId?: string) => {
             inputType: project.inputType,
             skipSampler: options?.skipSampler === true,
             forceRefresh: options?.forceRefresh === true,
-            chunkedExtraction: options?.chunkedExtraction === true,
+            // Auto-promote a chunked si el input es largo (>90k), aunque el caller no lo pida
+            chunkedExtraction: isChunked,
           },
         },
       });

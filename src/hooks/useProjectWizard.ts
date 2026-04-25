@@ -363,6 +363,56 @@ export const useProjectWizard = (projectId?: string) => {
           ? "Briefing extraído por bloques (extracción completa)"
           : "Briefing extraído correctamente",
       );
+
+      // ── Auto-pipeline: retry_failed_chunks (si procede) → normalize_brief ──
+      // Garantiza que el output siempre tenga _clean_brief_md y naming corregido.
+      try {
+        const briefing = (data as any)?.briefing || {};
+        const meta = briefing?._chunked_extraction_meta;
+        const failedCount = Array.isArray(meta?.failed_chunks) ? meta.failed_chunks.length : 0;
+
+        if (failedCount > 0) {
+          const tId = toast.loading(`Recuperando ${failedCount} bloque(s) fallido(s)…`);
+          const { error: retryErr } = await supabase.functions.invoke("project-wizard-step", {
+            body: {
+              action: "retry_failed_chunks",
+              stepData: {
+                projectId,
+                inputContent,
+                projectName: project.name,
+                companyName: project.company,
+                projectType: project.projectType,
+                clientNeed: project.clientNeed,
+              },
+            },
+          });
+          toast.dismiss(tId);
+          if (retryErr) console.warn("[auto-pipeline] retry failed (non-blocking):", retryErr);
+        }
+
+        // Normalize siempre (genera _clean_brief_md, corrige naming, dedup, EN→ES)
+        const tId2 = toast.loading("Generando Brief Limpio normalizado…");
+        const { error: normErr } = await supabase.functions.invoke("project-wizard-step", {
+          body: {
+            action: "normalize_brief",
+            stepData: {
+              projectId,
+              projectName: project.name,
+              companyName: project.company,
+            },
+          },
+        });
+        toast.dismiss(tId2);
+        if (normErr) {
+          console.warn("[auto-pipeline] normalize failed (non-blocking):", normErr);
+          toast.warning("Brief extraído pero la normalización falló. Pulsa 'Limpiar y normalizar' manualmente.");
+        } else {
+          toast.success("Brief Limpio generado y listo para exportar");
+        }
+      } catch (autoErr) {
+        console.warn("[auto-pipeline] non-blocking error:", autoErr);
+      }
+
       await loadProject();
       return data;
     } catch (e: any) {

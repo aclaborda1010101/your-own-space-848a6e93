@@ -294,7 +294,7 @@ const ProjectWizardEdit = () => {
               inputContent={project.inputContent}
               briefing={step2Data?.outputData || null}
               generating={generating}
-              onExtract={() => runExtraction()}
+              onExtract={() => runExtraction(undefined, { forceRefresh: true })}
               onForceFullExtract={() => runExtraction(undefined, { skipSampler: true, forceRefresh: true })}
               onChunkedReExtract={() => runExtraction(undefined, { chunkedExtraction: true, forceRefresh: true })}
               onApprove={async (editedBriefing) => {

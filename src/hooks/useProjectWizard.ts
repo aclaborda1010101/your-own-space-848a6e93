@@ -824,11 +824,40 @@ export const useProjectWizard = (projectId?: string) => {
   const approveStep = async (stepNumber: number, outputData?: any, options?: { autoChain?: boolean }) => {
     if (!projectId) return;
     try {
+      // ── Pre-approval safety: Step 2 must have a clean brief ──
+      // If the user is approving Step 2 but normalization never ran, do it now.
+      // This prevents approving a raw briefing and blocking PDF/PRD downstream.
+      let payloadOutput = outputData;
+      if (stepNumber === 2) {
+        const candidate = outputData || steps.find((s) => s.stepNumber === 2)?.outputData;
+        const hasCleanBrief =
+          typeof candidate?._clean_brief_md === "string" &&
+          candidate._clean_brief_md.trim().length > 200;
+        if (!hasCleanBrief) {
+          const repair = await normalizeBrief();
+          if (!repair?.success) {
+            toast.error("No se pudo generar el Brief Limpio. Revisa los logs antes de aprobar.");
+            return;
+          }
+          // After normalizeBrief() loadProject() updated `steps`, but we read
+          // outputData from the freshly persisted version via Supabase to be safe.
+          const { data: latest } = await supabase
+            .from("project_wizard_steps")
+            .select("output_data")
+            .eq("project_id", projectId)
+            .eq("step_number", 2)
+            .order("version", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          payloadOutput = (latest?.output_data as any) || candidate;
+        }
+      }
+
       const { error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
           action: "approve_step",
           projectId,
-          stepData: { stepNumber, outputData },
+          stepData: { stepNumber, outputData: payloadOutput },
         },
       });
 

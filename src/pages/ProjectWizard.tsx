@@ -24,6 +24,7 @@ import { ChainedPRDProgress } from "@/components/projects/wizard/ChainedPRDProgr
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { PublishToForgeDialog } from "@/components/projects/wizard/PublishToForgeDialog";
 import { ManifestViewer } from "@/components/projects/wizard/ManifestViewer";
+import { BuildRegistryPanel } from "@/components/projects/wizard/BuildRegistryPanel";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
 

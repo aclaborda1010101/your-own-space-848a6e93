@@ -1174,7 +1174,14 @@ Diseña las oportunidades IA-nativas siguiendo las REGLAS DURAS y enums permitid
     if (briefing.brief_version && !clamped.source_brief_version) {
       clamped.source_brief_version = String(briefing.brief_version);
     }
-    return clamped;
+    // Guard determinista: garantizar Soul + Matching cuando proceda.
+    const backfilled = backfillMandatoryOpportunities(clamped, {
+      briefing,
+      f0Signals: f0,
+      companyName: ctx?.companyName,
+      projectName: ctx?.projectName,
+    });
+    return backfilled;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`[F2] LLM error: ${msg}`);

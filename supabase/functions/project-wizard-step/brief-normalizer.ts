@@ -524,13 +524,36 @@ const CANONICAL_GROUPS: Array<{ canonical: string; matchTokens: string[] }> = [
   },
 ];
 
+/**
+ * Pick the canonical group with the HIGHEST score (≥2 hits). When there is
+ * a tie between distinct canonical names, return null so the candidate is
+ * NOT force-merged into an arbitrary bucket.
+ */
 function tryAssignCanonical(item: any, groups: CanonicalComponent[]): string | null {
   const text = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+  let bestScore = 0;
+  let bestCanonical: string | null = null;
+  let tied = false;
   for (const group of groups) {
     const hits = group.matchTokens.filter((t) => text.includes(t.toLowerCase())).length;
-    if (hits >= 2) return group.canonical;
+    if (hits < 2) continue;
+    if (hits > bestScore) {
+      bestScore = hits;
+      bestCanonical = group.canonical;
+      tied = false;
+    } else if (hits === bestScore && group.canonical !== bestCanonical) {
+      tied = true;
+    }
   }
-  return null;
+  return tied ? null : bestCanonical;
+}
+
+function isMutexBlocked(a: string, b: string, mutex: Array<[string, string]> | undefined): boolean {
+  if (!mutex || mutex.length === 0) return false;
+  for (const [x, y] of mutex) {
+    if ((a === x && b === y) || (a === y && b === x)) return true;
+  }
+  return false;
 }
 
 function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: string, groups: CanonicalComponent[]): any[] {

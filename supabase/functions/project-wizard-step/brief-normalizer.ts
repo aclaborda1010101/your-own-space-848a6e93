@@ -20,12 +20,41 @@ import { checkNamingCollision } from "../_shared/component-registry-contract.ts"
 
 // ── Types ────────────────────────────────────────────────────────────
 
+export interface CanonicalComponent {
+  canonical: string;
+  matchTokens: string[];
+}
+
+export interface ManualReviewAlert {
+  signal: string;
+  question: string;
+  source?: string;
+}
+
 export interface NormalizationContext {
   projectName: string;
   companyName: string;
   founderName?: string;
+  productName?: string;
   sectorHint?: string;
   language?: "es" | "en";
+  /**
+   * Optional canonical component list. When provided, REPLACES the default
+   * generic groups so the dedup step uses the project-specific taxonomy
+   * (e.g. AFFLUX uses AFFLUX-specific component names).
+   */
+  canonicalComponents?: CanonicalComponent[];
+  /**
+   * Optional list of topic regexes whose mentions should be stripped from
+   * the brief because they belong to other domains (e.g. "weather", "pollen"
+   * for a real estate project).
+   */
+  forbiddenTopics?: RegExp[];
+  /**
+   * Optional manual review alerts to attach (e.g. ambiguous numeric signals
+   * the LLM may have conflated).
+   */
+  manualReviewAlerts?: ManualReviewAlert[];
 }
 
 export interface NormalizationChange {

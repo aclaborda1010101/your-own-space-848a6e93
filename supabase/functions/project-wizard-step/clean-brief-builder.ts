@@ -121,7 +121,7 @@ export function buildCleanBrief(briefing: any, ctx: { projectName: string }): Cl
   // 7. Riesgos y compliance
   const risks = listSection(v2.constraints_and_risks);
   const flags = Array.isArray(v2.initial_compliance_flags) && v2.initial_compliance_flags.length > 0
-    ? v2.initial_compliance_flags.map((f: any) => bullet(`**${clean(f.flag)}**${f.evidence ? ` — ${clean(f.evidence)}` : ""}${f._inferred_by ? " *(inferido)*" : ""}`)).join("\n")
+    ? v2.initial_compliance_flags.map((f: any) => bullet(`**${clean(f.flag)}**${f.evidence ? ` — ${stripDebugPhrases(clean(f.evidence))}` : ""}`)).join("\n")
     : "_Sin compliance flags._";
   sections.push({
     id: "riesgos",

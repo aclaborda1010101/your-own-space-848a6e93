@@ -1265,12 +1265,18 @@ export async function normalizeBrief(
   // 2b. Off-topic / forbidden topics filter (whole-item removal).
   applyForbiddenTopicsFilter(briefing, ctx, changes);
 
-  // 3. Language normalization (single LLM call, non-blocking)
+  // 3a. Deterministic cleanup BEFORE the LLM, so the model sees fewer
+  // already-translated fragments and focuses on the rest.
+  applyDeterministicSpanishCleanup(briefing, changes);
+
+  // 3b. Language normalization (single LLM call, non-blocking)
   const langResult = await applyLanguageNormalization(briefing, changes);
 
-  // 3b. Deterministic cleanup for recurrent English fragments that must not
-  // survive in the clean brief even if the LLM skips or misses them.
+  // 3c. Deterministic cleanup AGAIN to catch any new English the LLM left.
   applyDeterministicSpanishCleanup(briefing, changes);
+
+  // 3d. Last-resort word-level swap for residual English bridge tokens.
+  applyResidualWordSwap(briefing, changes);
 
   // 4. Semantic dedup (uses canonical override from ctx if provided)
   applySemanticDedup(briefing, changes, ctx);

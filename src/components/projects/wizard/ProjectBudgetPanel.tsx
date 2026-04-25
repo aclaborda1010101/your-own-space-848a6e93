@@ -454,7 +454,8 @@ export const ProjectBudgetPanel = ({
                       </div>
                     ))}
 
-                    {/* Hourly rate */}
+                    {/* Hourly rate — internal only */}
+                    {!isClientView && (
                     <div className="border-t border-border/50 pt-2 flex items-center justify-between text-xs text-muted-foreground">
                       <span>Tarifa por hora</span>
                       {editing ? (
@@ -473,12 +474,13 @@ export const ProjectBudgetPanel = ({
                         <span>€{displayData.development.hourly_rate_eur ?? 0}/h · {displayData.development.total_hours ?? 0}h totales</span>
                       )}
                     </div>
+                    )}
 
                     <div className="border-t border-border/50 pt-2 flex justify-between text-sm font-semibold">
                       <span>Total desarrollo</span>
                       <span className="text-primary">€{(displayData.development.total_development_eur ?? 0).toLocaleString()}</span>
                     </div>
-                    {displayData.development.your_cost_eur != null && (
+                    {!isClientView && displayData.development.your_cost_eur != null && (
                       <div className="flex justify-between text-xs text-muted-foreground">
                         <span>Tu coste real</span>
                         <span>€{displayData.development.your_cost_eur.toLocaleString()} ({displayData.development.margin_pct ?? 0}% margen)</span>
@@ -661,7 +663,7 @@ export const ProjectBudgetPanel = ({
                                 )}
                               </div>
                             )}
-                            {(model.your_margin_pct != null || editing) && (
+                            {!isClientView && (model.your_margin_pct != null || editing) && (
                               <div className="flex items-center gap-1">
                                 <span className="text-muted-foreground">Margen:</span>
                                 {editing ? (

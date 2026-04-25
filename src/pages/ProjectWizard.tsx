@@ -442,18 +442,6 @@ const ProjectWizardEdit = () => {
         />
       )}
 
-      {/* Launch panel — after proposal */}
-      <ProjectLaunchPanel
-        projectId={id!}
-        projectName={project.name}
-        company={project.company || ""}
-        steps={steps.map(s => ({
-          stepNumber: s.stepNumber,
-          outputData: s.outputData,
-          status: s.status,
-          version: s.version || 1,
-        }))}
-      />
 
       {/* Documents panel */}
       <ProjectDocumentsPanel

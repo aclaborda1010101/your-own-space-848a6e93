@@ -117,7 +117,12 @@ serve(async (req) => {
     // ── Action: extract (Step 2) ─────────────────────────────────────────
 
     if (action === "extract") {
-      const { projectName, companyName, projectType, clientNeed, inputContent, inputType, skipSampler } = stepData;
+      const {
+        projectName, companyName, projectType, clientNeed, inputContent, inputType,
+        skipSampler,
+        forceRefresh,         // NEW: bypass cache to always re-run extraction
+        chunkedExtraction,    // NEW: opt-in chunked map-reduce mode
+      } = stepData;
 
       const { data: latestStep2 } = await supabase
         .from("project_wizard_steps")
@@ -128,7 +133,9 @@ serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-      if (latestStep2 && isValidStep2Briefing(latestStep2.output_data)) {
+      // Reuse cached Step 2 ONLY when no override flag is set.
+      const userOverride = forceRefresh === true || skipSampler === true || chunkedExtraction === true;
+      if (latestStep2 && isValidStep2Briefing(latestStep2.output_data) && !userOverride) {
         console.log(`[wizard][extract] reusing existing Step 2 v${latestStep2.version} for ${projectId}`);
         return new Response(JSON.stringify({
           briefing: latestStep2.output_data,
@@ -138,7 +145,176 @@ serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      if (userOverride && latestStep2) {
+        console.log(`[wizard][extract] forcing re-extraction (forceRefresh=${forceRefresh} skipSampler=${skipSampler} chunked=${chunkedExtraction}) for ${projectId}`);
+      }
 
+      // ── CHUNKED EXTRACTION MODE (map-reduce, full input, no sampling) ──
+      // Triggered when:
+      //   - client passes `chunkedExtraction: true` explicitly, OR
+      //   - input is > 90k chars AND `skipSampler` is not set (auto-promote
+      //     for long inputs because chunked is safer than the lossy sampler).
+      const inputLen = (inputContent || "").length;
+      const useChunked = chunkedExtraction === true
+        || (skipSampler !== true && inputLen > 90_000 && chunkedExtraction !== false);
+
+      if (useChunked) {
+        const { splitInputIntoChunks, runChunkedExtraction, mergeChunkBriefs } =
+          await import("./chunked-extractor.ts");
+
+        const chunks = splitInputIntoChunks(inputContent || "");
+        console.log(`[wizard][chunked] split ${inputLen} chars into ${chunks.length} chunks`);
+
+        // F0 runs in parallel on the head of the input (40k cap covers head+tail typical signal).
+        const f0HeadInput = (inputContent || "").slice(0, 40_000);
+        const f0Promise: Promise<SignalPreservationResult> = runF0SignalPreservation(
+          f0HeadInput,
+          { projectName, companyName, projectType },
+          { maxRetries: 0 },
+        ).catch((e) => {
+          console.warn("[wizard][chunked][F0] failed (non-blocking):", e instanceof Error ? e.message : e);
+          return emptyF0Result(e instanceof Error ? e.message : String(e));
+        });
+
+        const chunkResults = await runChunkedExtraction(
+          chunks,
+          { projectName, companyName, projectType, clientNeed },
+          { concurrency: 3 },
+        );
+
+        const failedChunks = chunkResults.filter((r): r is { failed: true; chunk_id: string; error: string } => "failed" in r && r.failed === true);
+        const okChunks = chunkResults.filter((r): r is any => !("failed" in r));
+        console.log(`[wizard][chunked] extraction done: ${okChunks.length} ok, ${failedChunks.length} failed`);
+
+        if (chunks.length > 0 && failedChunks.length / chunks.length > 0.3) {
+          return new Response(JSON.stringify({
+            error: `Chunked extraction failed: ${failedChunks.length}/${chunks.length} chunks failed`,
+            failed_chunks: failedChunks.map((c) => ({ chunk_id: c.chunk_id, error: c.error })),
+          }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const mergeResult = await mergeChunkBriefs(okChunks, { projectName, companyName }, { synthesizeNarrative: true });
+        let briefing: any = mergeResult.briefing;
+
+        // Token totals for cost recording.
+        const totalTokensInput = okChunks.reduce((acc: number, c: any) => acc + (c.tokensInput || 0), 0) + mergeResult.mergeTokensInput;
+        const totalTokensOutput = okChunks.reduce((acc: number, c: any) => acc + (c.tokensOutput || 0), 0) + mergeResult.mergeTokensOutput;
+
+        // Attach F0 + metadata.
+        const f0Result = await f0Promise;
+        briefing._f0_signals = f0Result;
+        briefing._extraction_mode = "chunked";
+        briefing._chunked_extraction_meta = {
+          enabled: true,
+          original_chars: inputLen,
+          chunks_count: chunks.length,
+          chunks_succeeded: okChunks.map((c: any) => c.chunk_id),
+          failed_chunks: failedChunks.map((c) => ({ chunk_id: c.chunk_id, error: c.error })),
+          chunk_size_target: 35_000,
+          overlap_chars: 1_800,
+          extraction_strategy: "chunked_map_reduce",
+          merge_llm_called: mergeResult.mergeLlmCalled,
+        };
+
+        // Anti-leak + legacy shape.
+        const leak = stripRegistryLeaks(briefing);
+        briefing = leak.cleaned;
+        if (leak.leakDetected) {
+          appendExtractionWarning(briefing, {
+            type: "registry_leak_prevented",
+            message: "Chunked extraction attempted to emit registry/component data. It was removed.",
+            details: leak.leakDetails,
+          });
+        }
+        briefing = ensureLegacyBriefShape(briefing);
+        briefing.brief_version = "2.0.0";
+
+        // Naming collision check.
+        const v2c = briefing.business_extraction_v2;
+        if (v2c?.client_naming_check && typeof v2c.client_naming_check === "object") {
+          const cnc = v2c.client_naming_check;
+          const clientName = (typeof cnc.client_company_name === "string" && cnc.client_company_name.trim().length > 0)
+            ? cnc.client_company_name : (companyName || "");
+          const productName = typeof cnc.proposed_product_name === "string" ? cnc.proposed_product_name : null;
+          if (clientName && productName && productName.trim().length > 0) {
+            const collision = checkNamingCollision(clientName, productName);
+            cnc.collision_detected = collision.detected;
+            if (collision.reason) cnc.collision_reason = collision.reason;
+          } else {
+            cnc.collision_detected = false;
+          }
+        }
+
+        // Informational warning.
+        appendExtractionWarning(briefing, {
+          type: "chunked_extraction_used",
+          message: `Material largo (${inputLen.toLocaleString("es-ES")} caracteres) procesado en ${chunks.length} bloques con extracción completa por map-reduce. ${failedChunks.length > 0 ? `${failedChunks.length} bloque(s) fallaron — algunas señales pueden faltar.` : "Todos los bloques procesados correctamente."}`,
+          chunks_count: chunks.length,
+          failed_chunks_count: failedChunks.length,
+          original_chars: inputLen,
+          extraction_strategy: "chunked_map_reduce",
+        });
+
+        // Parallel projects detection on raw input.
+        const parallelProjects = detectParallelProjects(inputContent || "", briefing);
+        if (parallelProjects.length > 0) {
+          briefing.parallel_projects = parallelProjects;
+        }
+
+        // Cost.
+        const costUsd = (totalTokensInput / 1_000_000) * 0.075 + (totalTokensOutput / 1_000_000) * 0.30;
+        await recordCost(supabase, {
+          projectId, stepNumber: 2, service: "gemini-flash", operation: "extract_briefing_chunked",
+          tokensInput: totalTokensInput, tokensOutput: totalTokensOutput,
+          costUsd, userId: user.id,
+          metadata: { chunks_count: chunks.length, failed_chunks: failedChunks.length },
+        });
+
+        // Save step.
+        const { data: existingStep } = await supabase
+          .from("project_wizard_steps")
+          .select("id, version")
+          .eq("project_id", projectId)
+          .eq("step_number", 2)
+          .order("version", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const newVersion = existingStep ? existingStep.version + 1 : 1;
+
+        const validation2 = runAllValidators(2, briefing, JSON.stringify(briefing));
+        if (Object.keys(validation2.flags).length > 0) {
+          briefing._contract_validation = validation2.flags;
+        }
+
+        await supabase.from("project_wizard_steps").upsert({
+          id: existingStep?.id || undefined,
+          project_id: projectId,
+          step_number: 2,
+          step_name: "Extracción Inteligente (Chunked)",
+          status: "review",
+          input_data: {
+            projectName, companyName, projectType, clientNeed,
+            inputContent: (inputContent || "").substring(0, 500),
+            extraction_mode: "chunked",
+            chunks_count: chunks.length,
+          },
+          output_data: briefing,
+          model_used: "gemini-2.5-flash",
+          version: newVersion,
+          user_id: user.id,
+        });
+
+        await supabase.from("business_projects").update({ current_step: 2 }).eq("id", projectId);
+
+        return new Response(JSON.stringify({ briefing, cost: costUsd, version: newVersion, mode: "chunked" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // ── LEGACY MODE: single LLM call with smart sampler (≤90k chars typical) ──
       // ── Transcript filter (Step 1.5) ────────────────────────────────────
       function needsTranscriptFilter(iType: string, content: string): boolean {
         if (iType === "audio") return true;

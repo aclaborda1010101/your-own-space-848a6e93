@@ -205,3 +205,83 @@ Deno.test("F5 traceability validator: catches non-accepted gap references", () =
   const violations = validateScopeTraceability(scope, consumed_component_ids, acceptable_gap_ids);
   assert(violations.some((v) => v.source_ref === "GAP-003"));
 });
+
+// ─── v2 hard rules (Step 28 v2) ────────────────────────────────────────────
+
+Deno.test("F5 v2: COMP-C01 forced to MVP even if F4b sent it to roadmap_f3", () => {
+  const feasV2 = {
+    component_reviews: [
+      { component_id: "COMP-C01", feasibility_verdict: "defer", recommended_delivery_phase: "F3", reason: "Riesgo reputacional" },
+      { component_id: "COMP-D01", feasibility_verdict: "keep" },
+      { component_id: "COMP-B02", feasibility_verdict: "simplify" },
+      { component_id: "COMP-C03", feasibility_verdict: "requires_data_readiness" },
+      { component_id: "COMP-C04", feasibility_verdict: "defer", recommended_delivery_phase: "F2" },
+    ],
+    gap_reviews: [],
+  };
+  const { scope } = runDeterministicPreWarm(REGISTRY, feasV2, { gaps: [] });
+  const inMvp = scope.mvp.find((c) => c.source_ref === "COMP-C01");
+  const inRoadmap = scope.roadmap_f3.find((c) => c.source_ref === "COMP-C01");
+  assert(inMvp, "COMP-C01 must be forced into MVP");
+  assertEquals(inRoadmap, undefined, "COMP-C01 must not remain in roadmap_f3");
+  assertEquals(inMvp!.status, "approved_with_conditions");
+  const compliance = inMvp!.blockers.find((b) => b.type === "compliance");
+  assert(compliance, "COMP-C01 must have compliance blocker");
+  assert(compliance!.required_artifacts.includes("external_source_policy"));
+});
+
+Deno.test("F5 v2: COMP-C03 always receives data_readiness blocker", () => {
+  const feasNoReadiness = {
+    component_reviews: [
+      { component_id: "COMP-C01", feasibility_verdict: "requires_compliance_review" },
+      { component_id: "COMP-D01", feasibility_verdict: "keep" },
+      { component_id: "COMP-B02", feasibility_verdict: "simplify" },
+      { component_id: "COMP-C03", feasibility_verdict: "keep" },
+      { component_id: "COMP-C04", feasibility_verdict: "defer", recommended_delivery_phase: "F2" },
+    ],
+    gap_reviews: [],
+  };
+  const { scope } = runDeterministicPreWarm(REGISTRY, feasNoReadiness, { gaps: [] });
+  const c03 = scope.mvp.find((c) => c.source_ref === "COMP-C03");
+  assert(c03, "COMP-C03 must be in MVP");
+  assert(c03!.blockers.some((b) => b.type === "data_readiness"), "C03 must have data_readiness blocker even when F4b says 'keep'");
+});
+
+Deno.test("F5 v2: data_readiness_blockers root list matches internal blockers", () => {
+  const { scope } = runDeterministicPreWarm(REGISTRY, FEASIBILITY, GAPS);
+  const internal = [
+    ...scope.data_foundation, ...scope.mvp, ...scope.fast_follow_f2, ...scope.roadmap_f3,
+  ].flatMap((c) => c.blockers.filter((b) => b.type === "data_readiness"));
+  assertEquals(scope.data_readiness_blockers.length, internal.length);
+  const c03Entry = scope.data_readiness_blockers.find((b) => b.component_id === "COMP-C03");
+  assert(c03Entry);
+  assert(c03Entry!.dataset_required.toLowerCase().includes("histórico"));
+  assert(c03Entry!.unblocking_actions.length >= 5);
+  assertEquals(c03Entry!.min_readiness_for_mvp, 50);
+});
+
+Deno.test("F5 v2: client_deliverables is never null and lists MVP components", () => {
+  const { scope } = runDeterministicPreWarm(REGISTRY, FEASIBILITY, GAPS);
+  assert(scope.client_deliverables);
+  assert(scope.client_deliverables.mvp_demo_features.length > 0);
+  assert(scope.client_deliverables.documentation.includes("PRD técnico para construcción"));
+  assert(scope.client_deliverables.training_sessions.length >= 5);
+});
+
+Deno.test("F5 v2: compliance blockers all have owner and deadline_weeks", () => {
+  const { scope } = runDeterministicPreWarm(REGISTRY, FEASIBILITY, GAPS);
+  assert(scope.compliance_blockers.length > 0);
+  for (const b of scope.compliance_blockers) {
+    assertEquals(b.owner, "DPO / Responsable legal del cliente");
+    assertEquals(b.deadline_weeks, 4);
+  }
+});
+
+Deno.test("F5 v2: Benatar (COMP-C04) still in fast_follow_f2 and Soul plan intact", () => {
+  const { scope } = runDeterministicPreWarm(REGISTRY, FEASIBILITY, GAPS);
+  assert(scope.fast_follow_f2.find((c) => c.source_ref === "COMP-C04"));
+  assertEquals(scope.mvp.find((c) => c.source_ref === "COMP-C04"), undefined);
+  assertEquals(scope.soul_capture_plan.required, true);
+  assertEquals(scope.soul_capture_plan.sessions, 4);
+  assert(scope.soul_capture_plan.hard_dependencies.includes("COMP-D01"));
+});

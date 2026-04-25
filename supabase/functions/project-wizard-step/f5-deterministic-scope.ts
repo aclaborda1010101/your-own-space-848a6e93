@@ -97,6 +97,32 @@ export interface SoulCapturePlan {
   fallback: string;
 }
 
+export interface ComplianceBlockerEntry {
+  scope_id: string;
+  component_name: string;
+  required_artifacts: string[];
+  reason: string;
+  owner: string;
+  deadline_weeks: number;
+}
+
+export interface DatasetReadinessBlockerEntry {
+  scope_id: string;
+  component_id: string;
+  component_name: string;
+  dataset_required: string;
+  current_readiness_pct: number;
+  min_readiness_for_mvp: number;
+  unblocking_actions: string[];
+  reason: string;
+}
+
+export interface ClientDeliverables {
+  mvp_demo_features: string[];
+  documentation: string[];
+  training_sessions: string[];
+}
+
 export interface ScopeArchitectureV1 {
   schema_version: "1.0.0";
   data_foundation: ScopeComponent[];
@@ -104,24 +130,15 @@ export interface ScopeArchitectureV1 {
   fast_follow_f2: ScopeComponent[];
   roadmap_f3: ScopeComponent[];
   rejected_out_of_scope: ScopeComponent[];
-  compliance_blockers: Array<{
-    scope_id: string;
-    component_name: string;
-    required_artifacts: string[];
-    reason: string;
-  }>;
-  data_readiness_blockers: Array<{
-    scope_id: string;
-    component_name: string;
-    dataset_required: string;
-    reason: string;
-  }>;
+  compliance_blockers: ComplianceBlockerEntry[];
+  data_readiness_blockers: DatasetReadinessBlockerEntry[];
   human_decisions_applied: Array<{
     decision_id: string;
     label: string;
     applied_to: string[];
   }>;
   soul_capture_plan: SoulCapturePlan;
+  client_deliverables: ClientDeliverables;
   scope_decision_log: ScopeDecisionLogEntry[];
 }
 
@@ -528,35 +545,126 @@ export function runDeterministicPreWarm(
     });
   }
 
-  // ── 3. Compute aggregated blocker lists ──────────────────────────────────
+  // ── 3. Hard post-rules (Step 28 v2 human decisions) ─────────────────────
+  // Decision 1 v2 — COMP-C01 (Detector de fallecimientos/herencias) MUST be MVP,
+  // not roadmap_f3, with compliance blocker (DPIA + external_source_policy).
+  for (const phase of ["roadmap_f3", "fast_follow_f2"] as ScopeBucket[]) {
+    const idx = buckets[phase].findIndex((c) => c.source_ref === "COMP-C01");
+    if (idx !== -1) {
+      const moved = buckets[phase].splice(idx, 1)[0];
+      moved.bucket = "mvp";
+      if (moved.status !== "rejected") moved.status = "approved_with_conditions";
+      const hasCompliance = moved.blockers.some((b) => b.type === "compliance");
+      if (!hasCompliance) {
+        moved.blockers.push({
+          type: "compliance",
+          blocks_production: true,
+          blocks_design: false,
+          blocks_internal_testing: false,
+          required_artifacts: [...DPIA_REQUIRED_ARTIFACTS, "external_source_policy"],
+          reason:
+            "Catalizador #1 del negocio. Solo uso interno/controlado hasta validación DPO/DPIA. No automatizar contacto ni priorización productiva sin revisión humana.",
+        });
+      } else {
+        // Ensure external_source_policy is in artifacts
+        for (const b of moved.blockers) {
+          if (b.type === "compliance" && !b.required_artifacts.includes("external_source_policy")) {
+            b.required_artifacts = [...b.required_artifacts, "external_source_policy"];
+          }
+        }
+      }
+      buckets.mvp.push(moved);
+      decisionLog.push({
+        source: "human_decision",
+        decision_id: "c01_force_mvp_with_dpia_v2",
+        applied_to: "COMP-C01",
+        action: `moved_from_${phase}_to_mvp`,
+        reason:
+          "Detector de fallecimientos/herencias es el catalizador #1 del negocio AFFLUX. Entra en MVP con condiciones DPIA + HITL.",
+      });
+    }
+  }
+
+  // Decision 2 v2 — COMP-C03 (Matching activo-inversor) MUST have data_readiness blocker.
+  for (const phase of ["mvp", "fast_follow_f2", "data_foundation"] as ScopeBucket[]) {
+    const c = buckets[phase].find((c) => c.source_ref === "COMP-C03");
+    if (c) {
+      const hasDataReadiness = c.blockers.some((b) => b.type === "data_readiness");
+      if (!hasDataReadiness) {
+        c.blockers.push({
+          type: "data_readiness",
+          blocks_production: true,
+          blocks_design: false,
+          blocks_internal_testing: true,
+          required_artifacts: ["dataset_audit", "data_quality_report", "data_volume_baseline"],
+          reason:
+            "El matching activo-inversor no puede producir recomendaciones fiables sin histórico mínimo y reglas de abstención.",
+        });
+        if (c.status === "approved_for_scope") c.status = "approved_with_conditions";
+        decisionLog.push({
+          source: "human_decision",
+          decision_id: "c03_data_readiness_required_v2",
+          applied_to: "COMP-C03",
+          action: "added_data_readiness_blocker",
+          reason: "Matching no puede recomendar sin dataset histórico mínimo.",
+        });
+      }
+    }
+  }
+
+  // ── 4. Compute aggregated blocker lists ──────────────────────────────────
   const allConsumed = [
     ...buckets.data_foundation,
     ...buckets.mvp,
     ...buckets.fast_follow_f2,
     ...buckets.roadmap_f3,
   ];
-  const compliance_blockers = allConsumed
-    .flatMap((c) =>
-      c.blockers
-        .filter((b) => b.type === "compliance")
-        .map((b) => ({
+
+  const compliance_blockers: ComplianceBlockerEntry[] = allConsumed.flatMap((c) =>
+    c.blockers
+      .filter((b) => b.type === "compliance")
+      .map((b) => ({
+        scope_id: c.scope_id,
+        component_name: c.name,
+        required_artifacts: b.required_artifacts,
+        reason: b.reason,
+        owner: "DPO / Responsable legal del cliente",
+        deadline_weeks: 4,
+      })),
+  );
+
+  // C03-specific dataset description for richer readiness entry
+  const C03_DATASET = {
+    dataset_required:
+      "Histórico de activos, inversores/compradores, visitas, ofertas, cierres, feedback comercial y preferencias de inversión.",
+    unblocking_actions: [
+      "Inventariar base de compradores/inversores",
+      "Normalizar histórico de activos y oportunidades",
+      "Etiquetar visitas/ofertas/cierres históricos",
+      "Capturar preferencias de inversión por comprador",
+      "Definir umbral de abstención cuando no haya evidencia suficiente",
+    ],
+  };
+
+  const data_readiness_blockers: DatasetReadinessBlockerEntry[] = allConsumed.flatMap((c) =>
+    c.blockers
+      .filter((b) => b.type === "data_readiness")
+      .map((b) => {
+        const isC03 = c.source_ref === "COMP-C03";
+        return {
           scope_id: c.scope_id,
+          component_id: c.source_ref,
           component_name: c.name,
-          required_artifacts: b.required_artifacts,
+          dataset_required: isC03 ? C03_DATASET.dataset_required : "Pendiente de auditoría de dataset.",
+          current_readiness_pct: 0,
+          min_readiness_for_mvp: 50,
+          unblocking_actions: isC03
+            ? C03_DATASET.unblocking_actions
+            : ["Realizar auditoría de dataset", "Reportar calidad y volumen", "Definir baseline de volumen mínimo"],
           reason: b.reason,
-        })),
-    );
-  const data_readiness_blockers = allConsumed
-    .flatMap((c) =>
-      c.blockers
-        .filter((b) => b.type === "data_readiness")
-        .map((b) => ({
-          scope_id: c.scope_id,
-          component_name: c.name,
-          dataset_required: "see_data_audit",
-          reason: b.reason,
-        })),
-    );
+        };
+      }),
+  );
 
   const human_decisions_applied = [
     {
@@ -580,7 +688,19 @@ export function runDeterministicPreWarm(
         .filter((c) => c.blockers.some((b) => b.type === "compliance"))
         .map((c) => c.source_ref),
     },
+    {
+      decision_id: "c01_force_mvp_with_dpia_v2",
+      label: "COMP-C01 (fallecimientos/herencias) forzado a MVP con condiciones DPIA + HITL",
+      applied_to: allConsumed.filter((c) => c.source_ref === "COMP-C01").map((c) => c.source_ref),
+    },
+    {
+      decision_id: "c03_data_readiness_required_v2",
+      label: "COMP-C03 (matching activo-inversor) requiere dataset_readiness blocker",
+      applied_to: allConsumed.filter((c) => c.source_ref === "COMP-C03").map((c) => c.source_ref),
+    },
   ];
+
+  const client_deliverables = buildDefaultClientDeliverables(allConsumed);
 
   const scope: ScopeArchitectureV1 = {
     schema_version: "1.0.0",
@@ -593,10 +713,45 @@ export function runDeterministicPreWarm(
     data_readiness_blockers,
     human_decisions_applied,
     soul_capture_plan: buildSoulCapturePlan(allConsumed),
+    client_deliverables,
     scope_decision_log: decisionLog,
   };
 
   return { scope, consumed_component_ids: consumedIds, acceptable_gap_ids: acceptableGapIds };
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Default client_deliverables builder
+// ───────────────────────────────────────────────────────────────────────────────
+
+export function buildDefaultClientDeliverables(consumed: ScopeComponent[]): ClientDeliverables {
+  const mvpFeatures = consumed
+    .filter((c) => c.bucket === "mvp" || c.bucket === "data_foundation")
+    .map((c) => c.name);
+  // de-dup preserving order
+  const seen = new Set<string>();
+  const mvp_demo_features = mvpFeatures.filter((n) => (seen.has(n) ? false : (seen.add(n), true)));
+
+  return {
+    mvp_demo_features: mvp_demo_features.length > 0
+      ? mvp_demo_features
+      : ["Dashboard inicial de oportunidades y componentes aprobados"],
+    documentation: [
+      "PRD técnico para construcción",
+      "Documento de alcance y propuesta cliente",
+      "Mapa de datos e integraciones",
+      "Plan de DPIA y compliance",
+      "Plan de captura del Soul",
+      "Criterios de aceptación MVP",
+    ],
+    training_sessions: [
+      "Sesión de kickoff y acceso a datos",
+      "Sesión de captura del Soul 1",
+      "Sesión de captura del Soul 2",
+      "Sesión de validación de roles y flujos comerciales",
+      "Sesión de entrega MVP y formación operativa",
+    ],
+  };
 }
 
 // ───────────────────────────────────────────────────────────────────────────────

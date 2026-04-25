@@ -483,7 +483,7 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
 const BANNED_PHRASES = [
   /\bstep\s*2[5-9]\b/i,
   /\bstep\s*3[0-1]\b/i,
-  /\bF[0-7]\b/, // F0..F7 phase tags
+  /\bF[0-9]\b/, // F0..F9 phase tags (e.g., F4b, F5)
   /\bregistry_gap_audit\b/i,
   /\bregistry_feasibility_audit\b/i,
   /\bscope_architecture_v1\b/i,
@@ -491,7 +491,6 @@ const BANNED_PHRASES = [
   /\bedge function\b/i,
   /\bRLS\b/,
   /\bSQL\b/,
-  /\bDPIA\b/, // we use "cumplimiento normativo" in client copy
 ];
 
 export function detectInternalJargon(markdown: string): string[] {

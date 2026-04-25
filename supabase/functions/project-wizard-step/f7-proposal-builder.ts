@@ -140,15 +140,67 @@ export interface F7Input {
   scope: ScopeArchitectureV1;
   source_step: { step_number: 28; version: number; row_id: string };
   projectName: string;
-  clientName: string;
+  /** Backwards-compat: si no se pasa clientCompany, se usa clientName. */
+  clientName?: string;
+  /** Empresa cliente (cabecera/portada). p.ej. "AFLU / AFFLUX". */
+  clientCompany?: string;
+  /** Persona física que decide. p.ej. "Alejandro Gordo". */
+  decisionMakerName?: string;
   briefSummary?: string;
   problemsDetected?: string[];
   commercialTerms: CommercialTermsV1;
 }
 
+// ───────────────────────────────────────────────────────────────────────────────
+// Internal: weeks_window → ES nativo
+// ───────────────────────────────────────────────────────────────────────────────
+
+const WEEKS_WINDOW_ES: Record<string, string> = {
+  weeks_1_to_2: "semanas 1 y 2",
+  weeks_1_to_3: "semanas 1 a 3",
+  weeks_1_to_4: "semanas 1 a 4",
+  weeks_2_to_4: "semanas 2 a 4",
+  weeks_2_to_6: "semanas 2 a 6",
+};
+
+function weeksWindowEs(raw: string | undefined | null): string {
+  if (!raw) return "primeras semanas";
+  if (WEEKS_WINDOW_ES[raw]) return WEEKS_WINDOW_ES[raw];
+  // Fallback genérico: weeks_X_to_Y → "semanas X a Y"
+  const m = raw.match(/^weeks?_(\d+)_to_(\d+)$/i);
+  if (m) {
+    const a = m[1], b = m[2];
+    return Number(b) - Number(a) === 1 ? `semanas ${a} y ${b}` : `semanas ${a} a ${b}`;
+  }
+  // Último fallback: limpiar guiones bajos.
+  return raw.replace(/_/g, " ");
+}
+
 export function buildClientProposal(input: F7Input): F7Output {
   const t0 = Date.now();
   const { scope, commercialTerms } = input;
+
+  // ── Guard: presupuesto debe traer importes reales ──
+  const hasBudget =
+    typeof commercialTerms.setup_fee === "number" ||
+    typeof commercialTerms.monthly_retainer === "number" ||
+    (commercialTerms.phase_prices?.length ?? 0) > 0;
+  if (!hasBudget) {
+    throw new Error("MISSING_BUDGET_AMOUNTS: la propuesta no puede generarse sin importes (setup_fee, monthly_retainer o phase_prices).");
+  }
+
+  // ── Guard: el scope de Step 28 debe tener al menos 1 componente productivo ──
+  const totalScope =
+    (scope.data_foundation?.length ?? 0) +
+    (scope.mvp?.length ?? 0) +
+    (scope.fast_follow_f2?.length ?? 0) +
+    (scope.roadmap_f3?.length ?? 0);
+  if (totalScope === 0) {
+    throw new Error("EMPTY_SCOPE: el alcance aprobado en Step 28 está vacío.");
+  }
+
+  const clientCompany = (input.clientCompany ?? input.clientName ?? "Cliente").trim();
+  const decisionMakerName = input.decisionMakerName?.trim() || undefined;
 
   const currency = commercialTerms.currency ?? "EUR";
   const validityDays = commercialTerms.validity_days ?? 30;

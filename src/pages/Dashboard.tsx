@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -62,7 +62,7 @@ const Dashboard = () => {
     refetch: refetchTasks,
     toggleComplete, 
   } = useTasks();
-  const { events, fetchEvents } = useCalendar();
+  const { events } = useCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
   const { notifications } = useSmartNotifications();
   const { challenges, loading: challengesLoading, refetch: refetchChallenges, toggleGoalCompletion, createChallenge, updateChallenge } = useJarvisChallenge();
@@ -155,38 +155,6 @@ const Dashboard = () => {
   };
 
   const pendingTaskCount = tasks.filter(t => !t.completed).length;
-
-  const refreshDashboardData = useCallback(async () => {
-    await Promise.allSettled([
-      Promise.resolve(refetchCheckIn()),
-      Promise.resolve(refetchTasks()),
-      Promise.resolve(fetchEvents()),
-      Promise.resolve(refetchChallenges()),
-      Promise.resolve(refetchWhoopData()),
-      Promise.resolve(refetchWhoopHistory()),
-    ]);
-  }, [refetchCheckIn, refetchTasks, fetchEvents, refetchChallenges, refetchWhoopData, refetchWhoopHistory]);
-
-  useEffect(() => {
-    void refreshDashboardData();
-  }, [refreshDashboardData]);
-
-  useEffect(() => {
-    const handleFocusRefresh = () => {
-      if (document.visibilityState === "hidden") return;
-      void refreshDashboardData();
-    };
-
-    window.addEventListener("focus", handleFocusRefresh);
-    document.addEventListener("visibilitychange", handleFocusRefresh);
-    window.addEventListener("pageshow", handleFocusRefresh);
-
-    return () => {
-      window.removeEventListener("focus", handleFocusRefresh);
-      document.removeEventListener("visibilitychange", handleFocusRefresh);
-      window.removeEventListener("pageshow", handleFocusRefresh);
-    };
-  }, [refreshDashboardData]);
 
   const renderCard = (id: DashboardCardId) => {
     const settings = layout.cardSettings[id];

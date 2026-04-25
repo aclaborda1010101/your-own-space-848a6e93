@@ -1061,8 +1061,8 @@ export const useProjectWizard = (projectId?: string) => {
         if (stepNumber === 2) {
           setCurrentStep(3);
           setTimeout(() => {
-            runChainedPRD('none').catch((err) => {
-              console.error("Auto-chained PRD failed:", err);
+            runPipelineV2PRD('none').catch((err) => {
+              console.error("Auto pipeline-v2 PRD failed:", err);
             });
           }, 500);
         } else if (stepNumber === 3) {
@@ -1418,6 +1418,7 @@ export const useProjectWizard = (projectId?: string) => {
     loadCosts,
     runGenericStep,
     runChainedPRD,
+    runPipelineV2PRD,
     updateStepOutputData,
     updateInputContent,
     budgetData,

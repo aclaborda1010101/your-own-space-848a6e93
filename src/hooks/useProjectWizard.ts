@@ -392,6 +392,8 @@ export const useProjectWizard = (projectId?: string) => {
         }
 
         // Normalize siempre (genera _clean_brief_md, corrige naming, dedup, EN→ES)
+        const { getNormalizationOverrides } = await import("@/lib/normalization-overrides");
+        const overrides = getNormalizationOverrides(project.name || "", project.company || "");
         const tId2 = toast.loading("Generando Brief Limpio normalizado…");
         const { error: normErr } = await supabase.functions.invoke("project-wizard-step", {
           body: {
@@ -400,6 +402,13 @@ export const useProjectWizard = (projectId?: string) => {
               projectId,
               projectName: project.name,
               companyName: project.company,
+              productName: overrides.productName,
+              companyNameOverride: overrides.companyNameOverride,
+              canonicalComponents: overrides.canonicalComponents,
+              canonicalCatalysts: overrides.canonicalCatalysts,
+              mutexGroups: overrides.mutexGroups,
+              forbiddenTopics: overrides.forbiddenTopics,
+              manualReviewAlerts: overrides.manualReviewAlerts,
             },
           },
         });
@@ -459,11 +468,7 @@ export const useProjectWizard = (projectId?: string) => {
   };
 
   // ── Normalize / repair brief (clean naming, dedup, language, retry chunks) ──
-  // Uses the global `repair_step2_brief` action which:
-  //   1. Retries failed chunks if input is available
-  //   2. Runs full normalization
-  //   3. Builds the clean brief markdown
-  //   4. Persists a NEW Step 2 version with status=review
+  // Uses `normalize_brief`: no re-extraction, no chunk retry, only final editorial normalization.
   const normalizeBrief = async (): Promise<{ success: boolean; cleanLength: number; version: number } | null> => {
     if (!project || !projectId) return null;
     setNormalizing(true);
@@ -477,7 +482,7 @@ export const useProjectWizard = (projectId?: string) => {
 
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
-          action: "repair_step2_brief",
+          action: "normalize_brief",
           stepData: {
             projectId,
             projectName: project.name,

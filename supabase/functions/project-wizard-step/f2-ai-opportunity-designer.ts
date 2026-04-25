@@ -544,9 +544,10 @@ export function clampOpportunityDesign(raw: any): AiOpportunityDesignV1 {
   const sliced = rawCandidates.slice(0, LIMITS.opportunities);
   const candidates: OpportunityCandidate[] = [];
   const usedIds = new Set<string>();
+  const derivedNameWarnings: Array<{ code: string; message: string; severity: "info" | "warning" | "error"; opportunity_id?: string }> = [];
 
   for (let i = 0; i < sliced.length; i++) {
-    const c = clampCandidate(sliced[i], i);
+    const { candidate: c, nameDerived } = clampCandidate(sliced[i], i);
     // Dedup IDs
     let id = c.opportunity_id;
     if (usedIds.has(id)) {
@@ -560,10 +561,19 @@ export function clampOpportunityDesign(raw: any): AiOpportunityDesignV1 {
     delete cleaned.component_id;
     delete cleaned.components;
     candidates.push(cleaned);
+
+    if (nameDerived) {
+      derivedNameWarnings.push({
+        code: "F2_NAME_DERIVED",
+        severity: "warning",
+        message: `Opportunity name was missing and was derived from description/business_job/family fallback.`,
+        opportunity_id: id,
+      });
+    }
   }
 
   const coverage = (raw?.coverage_analysis && typeof raw.coverage_analysis === "object") ? raw.coverage_analysis : {};
-  const warnings = asArray<any>(raw?.warnings)
+  const llmWarnings = asArray<any>(raw?.warnings)
     .slice(0, LIMITS.warnings)
     .map((w) => ({
       code: truncate(w?.code ?? "WARNING", 80),
@@ -575,6 +585,7 @@ export function clampOpportunityDesign(raw: any): AiOpportunityDesignV1 {
       ),
     }))
     .filter((w) => w.message.length > 0);
+  const warnings = [...llmWarnings, ...derivedNameWarnings].slice(0, LIMITS.warnings);
 
   return {
     version: "1.0.0",

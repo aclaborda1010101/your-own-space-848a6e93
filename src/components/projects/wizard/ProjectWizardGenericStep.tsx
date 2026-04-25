@@ -147,6 +147,8 @@ interface Props {
   exportMode?: "client" | "internal";
   onExportModeChange?: (mode: "client" | "internal") => void;
   status?: string;
+  /** Cuando false, deshabilita la descarga PDF del Step 3 (PRD legacy). */
+  isPipelineV2?: boolean;
 }
 
 const ServicesDecisionPanel = ({ outputData, onUpdateOutputData }: { outputData: any; onUpdateOutputData?: (d: any) => void }) => {

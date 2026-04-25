@@ -446,9 +446,34 @@ function applyTranslations(briefing: any, translations: Record<string, string>, 
 
   for (const [id, translated] of Object.entries(translations)) {
     const [field, idxStr, key] = id.split("|");
+    if (field === "__v2" && idxStr === "executive_summary") {
+      const before = v2.executive_summary;
+      if (typeof before === "string" && before !== translated) {
+        v2.executive_summary = translated;
+        changes.push({ type: "language_normalization", field: "executive_summary", before, after: translated, reason: "Traducido EN → ES" });
+      }
+      continue;
+    }
+    if (field === "__bms") {
+      const before = v2.business_model_summary?.[idxStr];
+      if (typeof before === "string" && before !== translated) {
+        v2.business_model_summary[idxStr] = translated;
+        changes.push({ type: "language_normalization", field: `business_model_summary.${idxStr}`, before, after: translated, reason: "Traducido EN → ES" });
+      }
+      continue;
+    }
     const idx = parseInt(idxStr, 10);
     const arr = v2[field];
-    if (!Array.isArray(arr) || !arr[idx] || typeof arr[idx] !== "object") continue;
+    if (!Array.isArray(arr) || arr[idx] === undefined) continue;
+    if (key === "__self" && typeof arr[idx] === "string") {
+      const before = arr[idx];
+      if (before !== translated) {
+        arr[idx] = translated;
+        changes.push({ type: "language_normalization", field: `${field}[${idx}]`, before, after: translated, reason: "Traducido EN → ES" });
+      }
+      continue;
+    }
+    if (!arr[idx] || typeof arr[idx] !== "object") continue;
     const before = arr[idx][key];
     if (typeof before === "string" && before !== translated) {
       arr[idx][key] = translated;

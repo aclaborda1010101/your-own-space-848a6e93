@@ -1,456 +1,232 @@
-# Plan — Chunked Extraction (Map-Reduce) para Step 2
+# Plan: Brief AFFLUX v4 — retry parcial + normalización + brief limpio
 
-## Diagnóstico de la situación actual
+Tu diagnóstico es correcto. El brief v3 es bueno como **extracción cruda completa** (8/10) pero malo como **briefing presentable** (4/10). En vez de re-extraer todo, vamos a añadir tres capas que faltan y que son baratas de ejecutar (no requieren tirar el v3):
 
-El flujo actual en `supabase/functions/project-wizard-step/index.ts` (acción `extract`) hace:
+1. **Retry quirúrgico** del único chunk fallido.
+2. **Normalizador post-merge** (idioma, sector, dedup, naming, compliance).
+3. **Brief Limpio resumido** generado a partir del brief crudo, separado del raw para debug.
 
-1. Carga `inputContent` raw.
-2. **Sampler agresivo** (`prepareLongInputForExtract`) — si > 90k chars, recorta a ~42k preservando cabeza, cola y ventanas ±800 chars alrededor de keywords. **Lossy: pierde el medio del documento si las keywords se concentran en pocas zonas** (es lo que pasó en AFFLUX: 34 ventanas, todas gastadas en "muerte" + "llamada").
-3. F0 (signal preservation) + filtro de transcripción en paralelo, ambos sobre el contenido **ya sampleado**.
-4. **1 sola llamada LLM (F1/F2)** que devuelve el briefing completo en un único JSON.
-
-Además detecté un bug en línea 131: si ya existe un Step 2 válido, devuelve la versión vieja **sin re-extraer**, lo que explica por qué a veces "no se regeneraba". Hay que añadir un bypass.
-
-## Objetivo
-
-Procesar el input completo (los 189k chars de AFFLUX) sin perder señal del medio y sin riesgo de 504, vía **map-reduce**: dividir en chunks → extraer señales por chunk en paralelo → fusionar en un briefing global → continuar pipeline normal.
+No tocamos F2/F3/F5/PRD/propuesta. No tiramos el Step 2 actual.
 
 ---
 
-## Arquitectura propuesta
-
-### Nuevo modo: `chunkedExtraction`
-
-Cuando `inputContent.length > 90_000` (o cuando el cliente pasa `chunkedExtraction: true`):
-
-```
-inputContent (raw, sin samplear)
-   │
-   ▼
-splitIntoChunks() → [chunk_001, chunk_002, ..., chunk_N]
-   │
-   ▼  (concurrencia = 3, retry por chunk)
-extractSignalsFromChunk(chunk) → MiniBrief por chunk (sin componentes, sin IDs COMP-XXX)
-   │
-   ▼
-mergeChunkBriefs(miniBriefs) → BusinessExtractionBriefV2 global + campos legacy
-   │
-   ▼
-post-parse hardening (igual que ahora: ensureLegacyBriefShape, F0 attach, validation)
-   │
-   ▼
-guardar como Step 2 v(N+1)
-```
-
-El sampler **se queda como fallback** para cuando `chunkedExtraction === false` explícito o cuando el input es < 90k.
+## Lo que NO vamos a hacer
+- ❌ Re-extraer todo (la extracción ya está hecha y costó tokens).
+- ❌ Cambiar el flujo de F0/F1/F2.
+- ❌ Tocar el sampler legacy ni la UI principal del wizard.
+- ❌ Borrar el Step 2 actual: el v3 se conserva como `previous_version` para auditoría.
 
 ---
 
-## Archivos a crear
+## Cambios — archivos
 
-### 1. `supabase/functions/project-wizard-step/chunked-extractor.ts` (NUEVO)
+### A) `supabase/functions/project-wizard-step/chunked-extractor.ts` (modificar)
 
-Núcleo del map-reduce. Contiene:
-
-#### a) `splitInputIntoChunks(raw: string, opts?: SplitOpts): Chunk[]`
+Añadir función pública:
 
 ```ts
-interface SplitOpts {
-  targetSize?: number;   // default 35_000 chars
-  overlap?: number;      // default 1_800 chars
-  maxChunks?: number;    // default 8 (cap de seguridad)
-}
-
-interface Chunk {
-  chunk_id: string;       // "CHUNK-001", "CHUNK-002", ...
-  char_start: number;
-  char_end: number;
-  text: string;
-  overlap_before: number;
-  overlap_after: number;
-}
+export async function retryFailedChunks(
+  failedChunkIds: string[],
+  rawInput: string,
+  ctx: ChunkExtractionContext,
+): Promise<{ recovered: ChunkBriefPartial[]; stillFailed: ChunkFailure[] }>
 ```
 
-Reglas:
-- Tamaño objetivo: 35k chars por chunk (queda margen para prompt + output dentro de 150s).
-- Overlap: 1.800 chars para no cortar ideas a mitad.
-- **Corte por límites naturales preferido** (en orden):
-  1. Marcadores de documento adjunto: `--- nombre.pdf ---` (extractor de Step 1 los añade).
-  2. Speaker changes: `Speaker N`, `[hh:mm]`.
-  3. Saltos de párrafo dobles (`\n\n`).
-  4. Caída a corte por carácter si nada coincide en ±2k chars del objetivo.
-- Cap de seguridad: max 8 chunks. Si el input es > 280k chars, se trunca el resto y se añade un warning.
-- 189k chars de AFFLUX → ~5-6 chunks.
+- Reconstruye SOLO los chunks listados (mismo `splitInputIntoChunks` para que `char_start/char_end` sean idénticos a los del run original).
+- Filtra a los IDs solicitados.
+- Ejecuta `extractSignalsFromChunk` con 2 reintentos secuenciales (en lugar de 1) y `maxTokens: 12_288` (más holgura para chunks que reventaron por longitud).
+- Devuelve recuperados + los que siguen fallando.
 
-#### b) `extractSignalsFromChunk(chunk, ctx): Promise<ChunkBrief>`
+### B) `supabase/functions/project-wizard-step/brief-normalizer.ts` (nuevo, ~250 líneas)
 
-Llamada LLM a `callGeminiFlash` (Gemini 3 Flash) con prompt **acotado a extracción de señales**, sin componentes ni PRD.
-
-Prompt resumido:
-```
-Eres analista senior. Estás analizando UN BLOQUE PARCIAL ({chunk_id}, chars {start}-{end}) 
-de una transcripción/material más largo del proyecto "{projectName}" de "{companyName}".
-
-REGLAS:
-- Extrae SOLO señales presentes en ESTE bloque. No inventes, no especules sobre otros bloques.
-- NO generes ComponentRegistryItem ni IDs COMP-XXX.
-- NO generes PRD ni propuesta.
-- Conserva citas literales relevantes.
-- Devuelve JSON ESTRICTO con esta estructura...
-
-{
-  "chunk_id": "...",
-  "observed_facts": [...],
-  "business_catalysts": [...],
-  "underutilized_data_assets": [...],
-  "quantified_economic_pains": [...],
-  "decision_points": [...],
-  "stakeholder_signals": [...],
-  "client_requested_items": [...],
-  "inferred_needs": [...],
-  "ai_native_opportunity_signals": [...],
-  "external_data_sources_mentioned": [...],
-  "founder_commitment_signals": [...],
-  "initial_compliance_flags": [...],
-  "constraints_and_risks": [...],
-  "open_questions": [...],
-  "source_quotes": [...]
-}
-
-CONTENIDO DEL BLOQUE:
-{chunk.text}
-```
-
-- `maxTokens: 8192` por chunk (suficiente para mini-brief, generación rápida ~30s).
-- `maxRetries: 1`.
-- Cada item devuelto se etiqueta server-side con `_source_chunks: [chunk_id]` antes de devolverlo.
-
-#### c) `mergeChunkBriefs(briefs: ChunkBrief[], ctx): BusinessExtractionBriefV2`
-
-Fusión **determinista primero, LLM solo si hace falta**:
-
-1. **Deduplicación por similitud**:
-   - Para listas con `description` (observed_facts, inferred_needs, etc.): hash normalizado de las primeras ~80 chars en lowercase + dedupe.
-   - Si dos items quedan deduplicados, fusionar `_source_chunks` y subir `_evidence_count`.
-2. **Citas literales**: dedupe por hash exacto.
-3. **Conteo de evidencia**: items que aparecen en ≥2 chunks suben prioridad (`certainty: high`).
-4. **Generación del business_extraction_v2 final**:
-   - Bloques que requieren narrativa global (project_summary, client_naming_check) se generan con **una segunda llamada LLM ligera** que recibe SOLO los topes de cada lista (resumen estructurado) — NO los chunks crudos. Output objetivo: ~3k tokens.
-5. **Campos legacy** (project_summary, observed_facts, inferred_needs, solution_candidates, constraints_and_risks, open_questions, architecture_signals, deep_patterns, extraction_warnings) — se construyen mappeando desde el v2 igual que hace `ensureLegacyBriefShape` ahora.
-6. **Metadata**:
-   ```ts
-   briefing._chunked_extraction_meta = {
-     enabled: true,
-     original_chars,
-     chunks_count,
-     chunks_succeeded: [...],
-     failed_chunks: [...],
-     chunk_size_target: 35_000,
-     overlap_chars: 1_800,
-     extraction_strategy: "chunked_map_reduce",
-     merge_llm_called: true | false,
-   }
-   ```
-
-#### d) Concurrencia + retry
+Módulo determinista + 1 sola llamada LLM ligera. Exporta:
 
 ```ts
-async function runChunkedExtraction(chunks, ctx) {
-  const concurrency = 3;
-  const results: (ChunkBrief | { failed: true; chunk_id: string; error: string })[] = [];
-  // Ejecutar en lotes de 3
-  for (let i = 0; i < chunks.length; i += concurrency) {
-    const batch = chunks.slice(i, i + concurrency);
-    const batchResults = await Promise.all(batch.map(async (c) => {
-      try {
-        return await extractSignalsFromChunk(c, ctx);
-      } catch (e) {
-        // Reintento único
-        try { return await extractSignalsFromChunk(c, ctx); }
-        catch (e2) { return { failed: true, chunk_id: c.chunk_id, error: String(e2) }; }
-      }
-    }));
-    results.push(...batchResults);
-  }
-  return results;
+export interface NormalizationContext {
+  projectName: string;        // "AFFLUX"
+  companyName: string;        // "AFLU" (o lo que el usuario haya puesto)
+  founderName?: string;       // "Alejandro Gordo"
+  sectorHint?: string;        // "real_estate_off_market"
+  language: "es" | "en";      // default "es"
+}
+
+export interface NormalizationResult {
+  briefing: any;              // briefing normalizado (mismo shape v2.0.0)
+  changes: NormalizationChange[];
+}
+
+export async function normalizeBrief(
+  briefing: any,
+  ctx: NormalizationContext,
+): Promise<NormalizationResult>
+```
+
+Pasos internos (en orden):
+
+1. **Naming split** — `business_extraction_v2.client_naming_check`:
+   - Si `client_company_name` parece nombre de persona (heurística: ≤3 palabras, mayúsculas iniciales, sin "S.L.", "S.A.", "Ltd"), moverlo a `founder_or_decision_maker` y rellenar `client_company_name = ctx.companyName`.
+   - `proposed_product_name = ctx.projectName` si está vacío.
+   - Re-ejecutar `checkNamingCollision(...)`.
+   - Registrar cambio con `before/after`.
+
+2. **Sector cleanup** — sustituir tokens contaminantes en TODOS los strings recursivamente:
+   - `retail` → `real estate off-market`
+   - `comercio minorista` → `inversión inmobiliaria`
+   - `retail data` → `real estate data`
+   - Solo cuando aparece como token aislado (`\b...\b`), no en URLs ni IDs. Diff loggeado.
+
+3. **Language normalization** (la única llamada LLM, 1 sola, Gemini Flash, ~3k tokens output):
+   - Recolectar todos los `title`, `description`, `signal`, `flag`, `question` que detecten >40% palabras inglesas (heurística por wordlist `en-stopwords` y palabras técnicas).
+   - Mandar lote único en JSON al LLM con prompt: *"Traduce SOLO los strings marcados a español neutro técnico. Conserva nombres propios, herramientas (HubSpot, Drive, BORME), y términos como 'RAG'. Devuelve JSON con la misma estructura."*
+   - Aplicar traducciones in-place. Si LLM falla → no bloqueante, solo warning.
+
+4. **Semantic dedup de candidatos** (determinista + similitud léxica):
+   - Sobre `ai_native_opportunity_signals` y `client_requested_items` + `inferred_needs`:
+   - Agrupar por `dedupKey` extendido: añadir tokens raíz (stem ES básico: quitar plural, sufijos `-ción`, `-ado`, `-ar`).
+   - Si dos items comparten ≥60% tokens raíz, fusionar título al más descriptivo y unir `_source_chunks`, `evidence_snippets`.
+   - Mapeo manual hardcodeado para casos típicos:
+     - `copywriting`, `magazine generation`, `marketing content`, `revista emocional` → **"Generador de revista emocional y contenido por rol"**
+     - `call analysis`, `negotiation guidance`, `coaching`, `assistant for agents` → **"Asistente pre/post llamada y coaching comercial"**
+     - `unified AI platform`, `custom knowledge base` → **"RAG de conocimiento AFFLUX"**
+
+5. **Compliance flags expansion** — añadir flags faltantes con evidencia derivada:
+   - Si `external_data_sources_mentioned` contiene BORME / esquelas / Registro Civil → añadir `external_data_enrichment` y `scraping_public_sources`.
+   - Si `ai_native_opportunity_signals` contiene "matching" / "priorización" / "scoring" → añadir `commercial_prioritization` y `gdpr_article_22_risk`.
+   - Si `personal_data_processing` ya está → añadir `legal_basis_required`, `data_retention_required`, `human_in_the_loop_required`.
+   - Cada flag añadido lleva `_inferred_by: "normalizer_v1"` y la evidencia que lo activó.
+
+6. **Quote validator** — para señales numéricas críticas (regex `\b\d{1,3}\s*(visitas|llamadas|propietarios|meses|%)\b`):
+   - Buscar en `source_quotes` que la cifra existe textualmente.
+   - Si no está → marcar el item con `_unverified_number: true` (NO borrar, solo señalar).
+   - Esto resuelve tu punto 7 ("71 visitas vs 71%"): el normalizador no decide, pero etiqueta para revisión manual.
+
+Cada paso devuelve un `NormalizationChange { type, field, before, after, reason }` que se acumula en `briefing._normalization_log`.
+
+### C) `supabase/functions/project-wizard-step/clean-brief-builder.ts` (nuevo, ~150 líneas)
+
+Genera el "Brief Limpio" de 3-5 páginas a partir del briefing normalizado. **Determinista, sin LLM**. Exporta:
+
+```ts
+export function buildCleanBrief(briefing: any, ctx: { projectName: string }): {
+  markdown: string;       // brief limpio en markdown listo para mostrar/descargar
+  sections: CleanSection[]; // mismas secciones para render UI
 }
 ```
 
-- Si falla > 30% de chunks → abortar y devolver error explícito (no hacemos un brief con la mitad faltante).
-- Si fallan 1-2 chunks → continuar, registrar en `failed_chunks`, añadir `extraction_warnings` con el detalle.
+Estructura fija (las 9 secciones que listaste):
+1. Resumen del negocio (de `business_model_summary`)
+2. Datos y activos existentes (de `underutilized_data_assets`)
+3. Problemas detectados (de `quantified_economic_pains`)
+4. Catalizadores de negocio (de `business_catalysts`)
+5. Necesidades explícitas (de `client_requested_items`)
+6. Oportunidades IA detectadas (de `ai_native_opportunity_signals`, ya deduplicado)
+7. Riesgos y compliance (de `constraints_and_risks` + `initial_compliance_flags`)
+8. Preguntas abiertas (de `open_questions`)
+9. Componentes candidatos normalizados (lista corta de los 10-12 fusionados)
 
----
+Cada item: 1-2 líneas. Sin `_source_chunks`, sin `_evidence_count`, sin JSON crudo. Solo lo presentable.
 
-### 2. `supabase/functions/project-wizard-step/chunked-extractor_test.ts` (NUEVO)
+### D) `supabase/functions/project-wizard-step/index.ts` (modificar)
 
-Tests Deno mínimos:
-- `splitInputIntoChunks` con input < 90k devuelve 1 chunk.
-- `splitInputIntoChunks` con 200k chars devuelve N chunks con overlap correcto.
-- `splitInputIntoChunks` corta por `--- archivo.pdf ---` cuando está cerca del objetivo.
-- `mergeChunkBriefs` deduplica items idénticos y suma `_source_chunks`.
-- `mergeChunkBriefs` con 0 chunks válidos lanza error.
+Dos acciones nuevas:
 
----
+**1) `action: "retry_failed_chunks"`** — repara el Step 2 sin re-extraer todo:
+- Lee `latestStep2.output_data._chunked_extraction_meta.failed_chunks`.
+- Llama `retryFailedChunks(...)` con el `inputContent` original (lo recuperamos de `input_data` o, si está truncado a 500 chars, lo pedimos al frontend).
+- Re-ejecuta `mergeChunkBriefs` con `[okChunks ya guardados] + recovered`.
+- Llama `normalizeBrief(...)` automáticamente al final.
+- Llama `buildCleanBrief(...)` y guarda `briefing._clean_brief_md`.
+- Bumpea version, guarda v4.
 
-## Archivos a modificar
+**2) `action: "normalize_brief"`** — solo normaliza + brief limpio (sin retry, útil cuando no hay chunks fallidos):
+- Carga brief actual.
+- Aplica `normalizeBrief(...)`.
+- Aplica `buildCleanBrief(...)`.
+- Bumpea version.
 
-### 3. `supabase/functions/project-wizard-step/index.ts` (acción `extract`)
+Ambas guardan `previous_version_snapshot: <briefing v3>` en `input_data` para rollback si el normalizer hace algo raro.
 
-#### Cambio 1: Bypass del cache cuando se fuerza re-extracción
-Línea 120 — añadir `forceRefresh` y `chunkedExtraction` al destructuring:
+**Importante**: el `inputContent` original ahora se trunca a 500 chars en `input_data`. Para el retry necesitamos el original. Dos opciones:
+- (a) Aumentar a 250k chars en `input_data` (más seguro, ~250KB por proyecto).
+- (b) Pedirle al frontend que reenvíe `inputContent` en el payload del retry (más limpio).
+
+Recomiendo **(b)**: el frontend ya tiene el inputContent en Step 1, lo reenvía en `retry_failed_chunks`.
+
+### E) `src/hooks/useProjectWizard.ts` (modificar)
+
+Añadir dos métodos al hook:
+
 ```ts
-const {
-  projectName, companyName, projectType, clientNeed,
-  inputContent, inputType,
-  skipSampler,         // ya existe
-  forceRefresh,        // NUEVO
-  chunkedExtraction,   // NUEVO
-} = stepData;
+retryFailedChunks: (inputContent: string) => Promise<void>
+normalizeBrief: () => Promise<void>
 ```
 
-Línea 131 — solo reusar si NO se pidió refresh:
-```ts
-if (latestStep2 && isValidStep2Briefing(latestStep2.output_data) 
-    && !forceRefresh && !chunkedExtraction && !skipSampler) {
-  // ... return reused
-}
-```
+Ambos invocan la edge function con la action correspondiente y refrescan el briefing.
 
-#### Cambio 2: Branching del modo de extracción
+### F) `src/components/projects/wizard/ProjectWizardStep2.tsx` (modificar)
 
-Reemplazar el bloque actual del sampler + F0 + filter + 1 llamada LLM (líneas ~159-650) por:
+En la sección "Alertas de Integridad" (línea 629-700):
 
-```ts
-const useChunked = chunkedExtraction === true 
-  || (skipSampler !== true && (inputContent || "").length > 90_000);
+- Si `briefing._chunked_extraction_meta?.failed_chunks?.length > 0`:
+  - Mostrar alerta **amarilla** (no bloqueante): *"X bloque(s) fallaron en la extracción inicial"*.
+  - Botón: **"🔁 Reintentar bloques fallidos"** → llama `retryFailedChunks(originalInputContent)`.
 
-let briefing: any;
-let extractionMode: "single" | "sampled" | "chunked" = "single";
-let chunkedMeta: any = null;
-let totalTokensInput = 0, totalTokensOutput = 0;
+- Botón nuevo siempre visible cuando es chunked: **"✨ Limpiar y normalizar brief"** → llama `normalizeBrief()`.
+  - Tooltip: *"Aplica deduplicación, traducción a español, corrección de naming/sector y compliance."*
 
-if (useChunked) {
-  // ── Modo chunked map-reduce ──
-  extractionMode = "chunked";
-  const { runChunkedExtraction, splitInputIntoChunks, mergeChunkBriefs } 
-    = await import("./chunked-extractor.ts");
-  
-  const chunks = splitInputIntoChunks(inputContent || "");
-  console.log(`[wizard][chunked] split ${inputContent.length} chars into ${chunks.length} chunks`);
-  
-  // F0 sigue corriendo en paralelo, pero sobre HEAD del input (primeros 40k) — F0 ya tiene su propio cap
-  const f0Promise = runF0SignalPreservation(
-    (inputContent || "").slice(0, 40_000),
-    { projectName, companyName, projectType },
-    { maxRetries: 0 },
-  ).catch(...);
-  
-  const chunkResults = await runChunkedExtraction(chunks, { projectName, companyName, projectType, clientNeed });
-  const failedChunks = chunkResults.filter(r => "failed" in r);
-  const okChunks = chunkResults.filter(r => !("failed" in r));
-  
-  if (failedChunks.length / chunks.length > 0.3) {
-    return new Response(JSON.stringify({
-      error: `Chunked extraction failed: ${failedChunks.length}/${chunks.length} chunks failed`,
-      failed_chunks: failedChunks,
-    }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  }
-  
-  const mergeResult = await mergeChunkBriefs(okChunks, { projectName, companyName });
-  briefing = mergeResult.briefing;
-  totalTokensInput = chunkResults.reduce((a, r) => a + ((r as any).tokensInput || 0), 0) + mergeResult.mergeTokensInput;
-  totalTokensOutput = chunkResults.reduce((a, r) => a + ((r as any).tokensOutput || 0), 0) + mergeResult.mergeTokensOutput;
-  
-  chunkedMeta = {
-    enabled: true,
-    original_chars: (inputContent || "").length,
-    chunks_count: chunks.length,
-    chunks_succeeded: okChunks.map((c: any) => c.chunk_id),
-    failed_chunks: failedChunks.map((c: any) => ({ chunk_id: c.chunk_id, error: c.error })),
-    chunk_size_target: 35_000,
-    overlap_chars: 1_800,
-    extraction_strategy: "chunked_map_reduce",
-    merge_llm_called: mergeResult.mergeLlmCalled,
-  };
-  
-  const f0Result = await f0Promise;
-  briefing._f0_signals = f0Result;
-  briefing._chunked_extraction_meta = chunkedMeta;
-  
-  // Añadir warning informativo
-  appendExtractionWarning(briefing, {
-    type: "chunked_extraction_used",
-    message: `Material largo (${inputContent.length.toLocaleString("es-ES")} chars) procesado en ${chunks.length} bloques con extracción completa. ${failedChunks.length} bloques fallaron.`,
-    chunks_count: chunks.length,
-    failed_chunks_count: failedChunks.length,
-  });
-  
-} else {
-  // ── Modo actual (single LLM call con sampler) — SIN CAMBIOS ──
-  // ... todo el bloque actual del sampler + F0 + filter + 1 llamada LLM
-  extractionMode = prepared.wasSampled ? "sampled" : "single";
-}
+- Nueva pestaña/acordeón **"Brief Limpio"** que renderiza `briefing._clean_brief_md` con `react-markdown`.
+  - Si no existe (v3 antiguo), mostrar CTA *"Generar brief limpio"* que llama `normalizeBrief()`.
 
-// post-parse hardening (común a los dos modos)
-briefing = ensureLegacyBriefShape(briefing);
-// ... resto igual
-```
+### G) Tests `chunked-extractor_test.ts` y `brief-normalizer_test.ts` (nuevo)
 
-#### Cambio 3: Persistir `extraction_mode` en el step
-Línea 758 — añadir en `output_data` o en metadata:
-```ts
-briefing._extraction_mode = extractionMode;
-```
+- `retryFailedChunks: reconstruye chunks por ID y devuelve recuperados`.
+- `normalizeBrief: separa founder de company name`.
+- `normalizeBrief: reemplaza "retail" por "real estate off-market"`.
+- `normalizeBrief: añade compliance flags inferidos cuando hay BORME en sources`.
+- `normalizeBrief: marca _unverified_number cuando la cifra no está en quotes`.
+- `dedup: fusiona "AI agent for copywriting" + "Magazine generation" en un solo candidato`.
+- `buildCleanBrief: genera 9 secciones deterministas sin _source_chunks visibles`.
 
 ---
 
-### 4. `src/hooks/useProjectWizard.ts`
+## Flujo de uso (para AFFLUX, este briefing v3)
 
-Añadir parámetros opcionales a `runExtraction`:
-```ts
-const runExtraction = async (
-  overrideInput?: string,
-  opts?: { skipSampler?: boolean; forceRefresh?: boolean; chunkedExtraction?: boolean },
-) => {
-  // ...
-  const stepData = {
-    projectName, companyName, projectType, clientNeed,
-    inputContent,
-    inputType: project.inputType,
-    skipSampler: opts?.skipSampler === true,
-    forceRefresh: opts?.forceRefresh === true,
-    chunkedExtraction: opts?.chunkedExtraction === true,
-  };
-  // ...
-};
-```
-
-Aumentar el polling timeout del frontend de 600s a **900s** (15min) — porque chunked con 6 chunks × ~30s + merge ~30s + overhead = ~3-4 min en el peor caso, pero queremos margen.
+1. Usuario abre Step 2 → ve alerta **"1 bloque falló"** (amarilla).
+2. Click **"🔁 Reintentar bloques fallidos"** → frontend reenvía `inputContent` original → backend ejecuta retry del CHUNK fallido (~30s) → merge + normalize + clean brief → guarda v4.
+3. Si sólo quiere normalizar sin retry: **"✨ Limpiar y normalizar brief"** (~10-20s).
+4. Pestaña **"Brief Limpio"** muestra las 9 secciones deterministas legibles.
+5. Pestaña **"Brief Crudo (debug)"** mantiene el JSON con `_source_chunks`, `_evidence_count`, etc. para auditoría.
+6. F2/F3 siguen consumiendo el `business_extraction_v2` (ahora normalizado), no el clean brief markdown.
 
 ---
 
-### 5. `src/components/projects/wizard/ProjectWizardStep2.tsx` (donde se renderizan las alertas)
+## Riesgos y mitigaciones
 
-Buscar el componente que pinta `extraction_warnings` y añadir:
-
-- Si la alerta es `long_input_sampled` → mostrar **2 botones**:
-  1. "Re-extraer con extracción completa por bloques" → `runExtraction(undefined, { chunkedExtraction: true, forceRefresh: true })` ← **opción recomendada**.
-  2. "Forzar contenido completo (1 sola llamada — riesgo de timeout)" → `runExtraction(undefined, { skipSampler: true, forceRefresh: true })` ← opción avanzada.
-
-- Si la alerta es `chunked_extraction_used` → mostrar tarjeta informativa con:
-  - Chunks procesados / fallados
-  - Tamaño original vs estrategia
-  - Si hay fallos: botón "Reintentar bloques fallidos" (futuro, no en este sprint).
+| Riesgo | Mitigación |
+|---|---|
+| Normalizer rompe semántica al traducir | LLM call es no bloqueante; si falla → warning, brief crudo intacto |
+| Mapeo de naming heurístico falsifica founder | UI muestra el cambio en `_normalization_log` y permite revertir desde un botón |
+| Sector replacement reemplaza algo válido | Solo aplica `\b retail \b` (token aislado), no en URLs/IDs |
+| Snapshot v3 ocupa espacio | Solo en `input_data.previous_version_snapshot`, ~50KB por proyecto |
+| Retry usa el input que el usuario ya editó | `inputContent` viene del frontend, garantiza coherencia con Step 1 actual |
 
 ---
 
-## Cómo se mantiene compatibilidad con el resto del pipeline
+## Criterios de aceptación AFFLUX v4
 
-**Nada del pipeline F2 → F8 cambia.**
-
-- `business_extraction_v2` se construye con la misma estructura.
-- `solution_candidates` siguen en estado `inferred`/`hypothesis` (nunca `confirmed` desde la brief layer).
-- Campos legacy (`project_summary`, `observed_facts`, etc.) se mapean igual.
-- F2 (build_registry) lee `business_extraction_v2` y opera sin saber si vino de chunked o single.
-
-El único campo nuevo es `_chunked_extraction_meta` que es metadata informativa, ignorada por F2-F8.
-
----
-
-## Cómo se evita el timeout
-
-Cálculo para AFFLUX (189k chars):
-- 6 chunks de ~35k chars.
-- Concurrencia 3 → 2 lotes de 3.
-- Cada chunk: ~30s (input pequeño, output ~5k tokens).
-- Lote 1: 30s. Lote 2: 30s. Total chunks: ~60s.
-- Merge LLM (sobre estructuras resumidas, no chunks crudos): ~25s.
-- F0 paralelo: ya cubierto.
-- **Total wall time: ~90-100s** ← cómodo dentro de 150s.
-
-Si AFFLUX creciera a 280k chars (8 chunks):
-- 3 lotes de 3 + 1 lote suelto = 4 lotes × 30s = 120s + merge 25s = **145s** ← justo en el límite.
-- Cap de seguridad: 8 chunks máx. Si > 280k chars, truncar y warning.
-
----
-
-## Validación AFFLUX (criterios de aceptación)
-
-Re-ejecutar `extract` con `chunkedExtraction: true` sobre AFFLUX (`6ef807d1-9c3b-4a9d-b88a-71530c3d7aaf`).
-
-El nuevo Step 2 v2 debe contener obligatoriamente, marcado con su `_source_chunks`:
-- ✅ Fallecimientos / herencias
-- ✅ 3.000 llamadas grabadas (centralita / Whisper)
-- ✅ 71 visitas en 9 meses sin cierre
-- ✅ Catalogación de propietarios en 7 roles
-- ✅ Compradores institucionales tipo Benatar
-- ✅ Matching activo-inversor / "vender antes de comprar"
-- ✅ Revista emocional por rol
-- ✅ Soul de Alejandro / riesgo de seguimiento
-- ✅ HubSpot / Gmail / Drive
-- ✅ BrainsRE
-- ✅ BORME / CNAE / licencias / BOE / ayuntamiento (si aparecen)
-- ✅ Compliance flags: personal_data_processing, profiling, commercial_prioritization, external_data_enrichment
-
-Si falta alguna señal que sí está en la transcripción, el log debe permitir identificar **en qué chunk falló** vía el campo `_source_chunks` y la trazabilidad `chunk_id → char_start/end`.
-
----
-
-## Lo que NO se toca
-
-- `input-sampler.ts` (sigue como fallback para inputs medianos o cuando se desactiva chunked).
-- F0 / F1 prompts internos (`f0-signal-preservation.ts`, `f1-legacy-shape.ts`).
-- F2 / F3 / F4 / F5 / F6 / F7 / F8 (toda la cadena de generación posterior).
-- Schema de DB (no se necesitan tablas nuevas; `_chunked_extraction_meta` va dentro de `output_data` JSON).
-- PRD / presupuesto / propuesta cliente.
-- UI fuera de la alerta de Step 2.
-
----
-
-## Riesgos y mitigación
-
-| Riesgo | Probabilidad | Mitigación |
-|--------|--------------|------------|
-| Merge LLM produce JSON inválido | Media | Reuse del parser robusto + truncation repair que ya existe (líneas 600-651). |
-| Concurrencia 3 dispara rate limits del Gemini Gateway | Baja | Backoff exponencial ya incluido en `callGeminiFlash`. Si pasa, bajar a concurrencia 2. |
-| Fallo silencioso de un chunk con info crítica | Media | `failed_chunks` se loguea y se muestra en UI. Botón futuro de reintento por chunk. |
-| Coste se duplica (6 llamadas + 1 merge vs 1 llamada) | Cierta | Real: ~6× input tokens + 1× output. Estimado AFFLUX: ~$0.20 vs $0.05 actual. Aceptable para análisis serio. |
-| Frontend timeout 600s insuficiente | Baja | Subir a 900s en `useProjectWizard.ts`. |
+Después de retry + normalize:
+- ✅ `failed_chunks_count == 0` (o documentado por qué no se pudo).
+- ✅ `client_naming_check.client_company_name == "AFLU"` y `founder_or_decision_maker == "Alejandro Gordo"`.
+- ✅ `proposed_product_name == "AFFLUX"`.
+- ✅ Cero apariciones de "retail" / "comercio minorista" en strings.
+- ✅ Cero strings con >40% palabras inglesas (excepto nombres propios).
+- ✅ `initial_compliance_flags` incluye al menos 5 de los 7 que mencionas.
+- ✅ `ai_native_opportunity_signals` ≤ 14 candidatos (vs los ~25 duplicados actuales).
+- ✅ Existe `briefing._clean_brief_md` con las 9 secciones renderizables.
+- ✅ Items con cifras tipo "71 visitas" tienen `_unverified_number: true` si la cifra no está en `source_quotes`.
 
 ---
 
 ## Rollback
 
-Si algo se rompe:
-1. Revertir `index.ts` al branching anterior (un solo modo single+sampler).
-2. Borrar `chunked-extractor.ts` y su test.
-3. Revertir `useProjectWizard.ts` (parámetros opcionales son backward-compatible, no hace falta tocar nada en el frontend si solo quitamos el botón).
-4. La UI seguiría funcionando con el modo single+sampler como hasta ahora.
-
-Cambios localizados, sin migraciones de DB, sin cambios en F2-F8.
-
----
-
-## Tests
-
-1. **Unit (Deno)**:
-   - `chunked-extractor_test.ts`: split, merge, dedup.
-2. **End-to-end manual**:
-   - Re-extraer AFFLUX con `chunkedExtraction: true` y verificar señales del checklist arriba.
-   - Verificar logs: `[wizard][chunked] split 189988 chars into 6 chunks`, `chunks_succeeded: 6`, `failed_chunks: 0`.
-   - Verificar en UI que aparece la nueva alerta `chunked_extraction_used` con cifras reales.
-3. **Regresión**:
-   - Crear proyecto con input < 90k chars → debe usar modo single (sin chunked, sin sampler) y funcionar igual que antes.
-   - Crear proyecto con input ~120k chars y `skipSampler: true` (botón "forzar 1 sola llamada") → debe seguir funcionando como override.
-
----
-
-## Criterios de aceptación
-
-1. ✅ Re-extraer AFFLUX sin sampler ni truncado (todos los 189k chars analizados).
-2. ✅ Briefing resultante contiene las 12 señales del checklist con `_source_chunks`.
-3. ✅ Wall time < 150s (probablemente ~90-100s).
-4. ✅ Si un chunk falla, los demás siguen y se reporta el fallo.
-5. ✅ El usuario tiene 2 botones en la alerta: "extracción por bloques" (recomendado) y "1 sola llamada" (avanzado).
-6. ✅ No se rompe ningún proyecto con input < 90k chars (regresión).
-7. ✅ El pipeline F2 → F8 no necesita cambios.
+Si algo va mal: el botón "Reintentar/Normalizar" guarda el v3 en `input_data.previous_version_snapshot`. Añado un botón menor "Restaurar versión anterior" que copia ese snapshot al `output_data` y bumpea version.

@@ -369,15 +369,23 @@ const EN_HINT_WORDS = new Set([
   "recorded", "calls", "lost", "opportunities", "qualification", "prioritization",
   "graph", "historical", "record", "building", "deal", "owner", "owners",
   "lead", "leads", "automated", "categorization", "profiling", "estate",
-  "real", "off-market", "specific", "what", "which", "should",
+  "real", "off-market", "specific", "what", "which", "should", "collected",
+  "contain", "valuable", "information", "categorize", "interactions", "acknowledges",
+  "expresses", "desire", "wants", "current", "increase", "find", "understand",
+  "people", "buying", "crossing", "goal", "raise", "level", "team", "better",
+  "closing", "deals", "depends", "need", "standardize", "follow-up", "develop",
+  "listen", "boring", "repetitive", "efficiency", "resources", "preparatory",
 ]);
+
+const EN_PHRASE_RE = /\b(AI can|Develop an AI|The client acknowledges|Carlos expresses|Aflu has collected|CRM data|Call recordings|Recorded Calls|Lost opportunities|Knowledge graph|Automated lead|What are the specific|The current process|There is a desire|The goal is|The effectiveness of|The client wants|Carlos wants)\b/i;
 
 function isLikelyEnglish(s: string): boolean {
   if (!s || typeof s !== "string") return false;
+  if (EN_PHRASE_RE.test(s)) return true;
   const words = s.toLowerCase().match(/[a-záéíóúñ]+/gi) || [];
   if (words.length < 3) return false;
   const enHits = words.filter((w) => EN_HINT_WORDS.has(w)).length;
-  return enHits / words.length > 0.25;
+  return enHits / words.length > 0.18;
 }
 
 interface TranslateItem {
@@ -399,10 +407,26 @@ function collectTranslatableStrings(briefing: any): TranslateItem[] {
   ];
   const STRING_KEYS = ["title", "description", "signal", "question", "name_or_role", "evidence", "purpose", "name"];
 
+  if (typeof v2.executive_summary === "string" && isLikelyEnglish(v2.executive_summary)) {
+    items.push({ id: `__v2|executive_summary|value`, text: v2.executive_summary });
+  }
+  if (v2.business_model_summary && typeof v2.business_model_summary === "object") {
+    for (const key of ["title", "context", "primary_goal"] as const) {
+      const val = v2.business_model_summary[key];
+      if (typeof val === "string" && isLikelyEnglish(val)) {
+        items.push({ id: `__bms|${key}|value`, text: val });
+      }
+    }
+  }
+
   for (const field of FIELDS_TO_SCAN) {
     const arr = v2[field];
     if (!Array.isArray(arr)) continue;
     arr.forEach((item: any, idx: number) => {
+      if (typeof item === "string") {
+        if (isLikelyEnglish(item)) items.push({ id: `${field}|${idx}|__self`, text: item });
+        return;
+      }
       if (!item || typeof item !== "object") return;
       for (const key of STRING_KEYS) {
         const val = item[key];
@@ -422,9 +446,34 @@ function applyTranslations(briefing: any, translations: Record<string, string>, 
 
   for (const [id, translated] of Object.entries(translations)) {
     const [field, idxStr, key] = id.split("|");
+    if (field === "__v2" && idxStr === "executive_summary") {
+      const before = v2.executive_summary;
+      if (typeof before === "string" && before !== translated) {
+        v2.executive_summary = translated;
+        changes.push({ type: "language_normalization", field: "executive_summary", before, after: translated, reason: "Traducido EN → ES" });
+      }
+      continue;
+    }
+    if (field === "__bms") {
+      const before = v2.business_model_summary?.[idxStr];
+      if (typeof before === "string" && before !== translated) {
+        v2.business_model_summary[idxStr] = translated;
+        changes.push({ type: "language_normalization", field: `business_model_summary.${idxStr}`, before, after: translated, reason: "Traducido EN → ES" });
+      }
+      continue;
+    }
     const idx = parseInt(idxStr, 10);
     const arr = v2[field];
-    if (!Array.isArray(arr) || !arr[idx] || typeof arr[idx] !== "object") continue;
+    if (!Array.isArray(arr) || arr[idx] === undefined) continue;
+    if (key === "__self" && typeof arr[idx] === "string") {
+      const before = arr[idx];
+      if (before !== translated) {
+        arr[idx] = translated;
+        changes.push({ type: "language_normalization", field: `${field}[${idx}]`, before, after: translated, reason: "Traducido EN → ES" });
+      }
+      continue;
+    }
+    if (!arr[idx] || typeof arr[idx] !== "object") continue;
     const before = arr[idx][key];
     if (typeof before === "string" && before !== translated) {
       arr[idx][key] = translated;
@@ -485,6 +534,55 @@ ${JSON.stringify({ items: capped }, null, 2)}`;
       reason: e instanceof Error ? e.message : String(e),
     });
     return { tokensInput: 0, tokensOutput: 0, called: false };
+  }
+}
+
+function applyDeterministicSpanishCleanup(briefing: any, changes: NormalizationChange[]) {
+  const replacements: Array<[RegExp, string]> = [
+    [/\bAflu has collected\b/gi, "AFLU ha recopilado"],
+    [/\bCRM data\b/gi, "Datos del CRM"],
+    [/\bCall recordings\b/gi, "Grabaciones de llamadas"],
+    [/\bRecorded Calls\b/gi, "Grabaciones de llamadas"],
+    [/\bLost opportunities\b/gi, "Oportunidades perdidas"],
+    [/\bKnowledge graph\b/gi, "Grafo de conocimiento"],
+    [/\bAutomated lead qualification and prioritization\b/gi, "Calificación y priorización automatizada de oportunidades"],
+    [/\bThe client acknowledges\b/gi, "El cliente reconoce"],
+    [/\bCarlos expresses\b/gi, "Carlos expresa"],
+    [/\bCarlos wants\b/gi, "Carlos quiere"],
+    [/\bThe client wants\b/gi, "El cliente quiere"],
+    [/\bDevelop an AI\b/gi, "Desarrollar una IA"],
+    [/\bAI can listen\b/gi, "La IA puede escuchar"],
+    [/\bThe current process\b/gi, "El proceso actual"],
+    [/\bThere is a desire\b/gi, "Existe el objetivo"],
+    [/\bThe goal is\b/gi, "El objetivo es"],
+    [/\bThe effectiveness of\b/gi, "La eficacia de"],
+    [/\bDesire to automate repetitive tasks\b/gi, "Necesidad de automatizar tareas repetitivas"],
+    [/\bImprove efficiency of 'zona' team\b/gi, "Mejorar la eficiencia del equipo de zona"],
+    [/\bIncrease originación of assets in buildings\b/gi, "Aumentar la originación de activos en edificios"],
+    [/\bImprove commercial team's effectiveness\b/gi, "Mejorar la efectividad del equipo comercial"],
+    [/\bImprove Team Efficiency and Reduce Manual Effort\b/gi, "Mejorar la eficiencia del equipo y reducir el esfuerzo manual"],
+  ];
+
+  function walk(node: any, path: string): any {
+    if (typeof node === "string") {
+      let out = node;
+      for (const [from, to] of replacements) out = out.replace(from, to);
+      if (out !== node) {
+        changes.push({ type: "deterministic_spanish_cleanup", field: path, before: node, after: out, reason: "Frase explicativa inglesa reescrita en español." });
+      }
+      return out;
+    }
+    if (Array.isArray(node)) return node.map((item, i) => walk(item, `${path}[${i}]`));
+    if (node && typeof node === "object") {
+      const out: Record<string, any> = {};
+      for (const [k, v] of Object.entries(node)) out[k] = k.startsWith("_") ? v : walk(v, path ? `${path}.${k}` : k);
+      return out;
+    }
+    return node;
+  }
+
+  if (briefing.business_extraction_v2) {
+    briefing.business_extraction_v2 = walk(briefing.business_extraction_v2, "business_extraction_v2");
   }
 }
 
@@ -786,31 +884,32 @@ function ensureCanonicalComponentsPresent(briefing: any, ctx: NormalizationConte
   if (!v2) return;
   const components = ctx.canonicalComponents || [];
   if (components.length === 0) return;
-  if (!Array.isArray(v2.ai_native_opportunity_signals)) v2.ai_native_opportunity_signals = [];
 
-  const presentNames = new Set(
-    v2.ai_native_opportunity_signals
-      .map((s: any) => (typeof s === "string" ? s : (s?.title || "")).toLowerCase().trim())
-      .filter(Boolean),
-  );
-
-  for (const comp of components) {
-    const lc = comp.canonical.toLowerCase().trim();
-    if (presentNames.has(lc)) continue;
-    v2.ai_native_opportunity_signals.push({
-      title: comp.canonical,
-      description: comp.description || `${comp.canonical} (componente canónico inyectado por normalizer; revisar evidencia en F2/roadmap).`,
-      _inferred_by: "normalizer_required_component_v1",
-      _evidence_count: 0,
-    });
-    presentNames.add(lc);
-    changes.push({
-      type: "canonical_component_injected",
-      field: "ai_native_opportunity_signals",
-      after: comp.canonical,
-      reason: "Componente canónico ausente tras dedup; inyectado como candidato F2/roadmap.",
-    });
+  const previous = Array.isArray(v2.ai_native_opportunity_signals) ? v2.ai_native_opportunity_signals : [];
+  const evidenceByCanonical = new Map<string, any>();
+  for (const item of previous) {
+    if (!item || typeof item !== "object") continue;
+    const title = (item.title || "").toLowerCase().trim();
+    if (title) evidenceByCanonical.set(title, item);
   }
+
+  v2.ai_native_opportunity_signals = components.map((comp) => {
+    const prior = evidenceByCanonical.get(comp.canonical.toLowerCase().trim());
+    return {
+      title: comp.canonical,
+      description: comp.description || prior?.description || "Componente canónico principal para el roadmap AFFLUX.",
+      ...(prior?._source_chunks ? { _source_chunks: prior._source_chunks } : {}),
+      _evidence_count: prior?._evidence_count || 0,
+      _inferred_by: "normalizer_canonical_component_v1",
+    };
+  });
+  changes.push({
+    type: "canonical_component_list_replaced",
+    field: "ai_native_opportunity_signals",
+    before: previous.map((p: any) => typeof p === "string" ? p : p?.title).filter(Boolean),
+    after: components.map((c) => c.canonical),
+    reason: "Sección 9 sustituida por la taxonomía canónica estricta del proyecto.",
+  });
 }
 
 // ── 5. Compliance flag expansion ─────────────────────────────────────
@@ -964,6 +1063,10 @@ export async function normalizeBrief(
 
   // 3. Language normalization (single LLM call, non-blocking)
   const langResult = await applyLanguageNormalization(briefing, changes);
+
+  // 3b. Deterministic cleanup for recurrent English fragments that must not
+  // survive in the clean brief even if the LLM skips or misses them.
+  applyDeterministicSpanishCleanup(briefing, changes);
 
   // 4. Semantic dedup (uses canonical override from ctx if provided)
   applySemanticDedup(briefing, changes, ctx);

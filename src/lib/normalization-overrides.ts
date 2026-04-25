@@ -95,7 +95,7 @@ const AFFLUX_OVERRIDES: NormalizationOverrides = {
   manualReviewAlerts: [
     {
       signal: "Señal '71'",
-      question: "Se detecta la señal 71 como tasa de no respuesta. Confirmar si también existe en la transcripción la señal '71 visitas en 9 meses sin cierre'.",
+      question: "Se detecta la señal 71 como tasa de no respuesta. Confirmar si también existe en la transcripción la señal 71 visitas en 9 meses sin cierre.",
       source: "afflux_v6_review",
     },
   ],

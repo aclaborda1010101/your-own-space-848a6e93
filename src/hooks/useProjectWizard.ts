@@ -1138,6 +1138,8 @@ export const useProjectWizard = (projectId?: string) => {
     stepNames: STEP_NAMES,
     createWizardProject,
     runExtraction,
+    retryFailedChunks,
+    normalizeBrief,
     generateScope,
     approveStep,
     saveStepData,

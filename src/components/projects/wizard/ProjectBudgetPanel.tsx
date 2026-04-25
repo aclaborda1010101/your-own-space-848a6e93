@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { Calculator, Loader2, TrendingUp, Server, Package, Star, AlertTriangle, Pencil, Save, X, Download, FileText, Users, Lock, Eye, EyeOff } from "lucide-react";
+import { Calculator, Loader2, TrendingUp, Server, Package, Star, AlertTriangle, Pencil, Save, X, Download, FileText, Users, Lock, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { budgetToCommercialTermsV1 } from "@/lib/budgetToCommercialTerms";
@@ -74,8 +74,10 @@ interface ProjectBudgetPanelProps {
   company?: string;
   budgetData: BudgetData | null;
   generating: boolean;
+  budgetStatus?: "pending" | "generated" | "editing" | "approved";
   onGenerate: (selectedModels: string[]) => Promise<void>;
   onBudgetUpdate?: (data: BudgetData) => void;
+  onApprove?: () => Promise<void> | void;
 }
 
 export const ProjectBudgetPanel = ({
@@ -84,8 +86,10 @@ export const ProjectBudgetPanel = ({
   company = "",
   budgetData,
   generating,
+  budgetStatus = "pending",
   onGenerate,
   onBudgetUpdate,
+  onApprove,
 }: ProjectBudgetPanelProps) => {
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
@@ -93,6 +97,7 @@ export const ProjectBudgetPanel = ({
   const [selectedExportModels, setSelectedExportModels] = useState<number[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [budgetExportMode, setBudgetExportMode] = useState<'internal' | 'client'>('client');
+  const [approving, setApproving] = useState(false);
   // Vista global del panel: cliente oculta márgenes, costes internos, horas
   const [viewMode, setViewMode] = useState<'internal' | 'client'>('internal');
   const isClientView = viewMode === 'client';
@@ -289,9 +294,26 @@ export const ProjectBudgetPanel = ({
       icon={<Calculator className="w-4 h-4 text-primary" />}
       defaultOpen={true}
       badge={
-        <Badge variant="outline" className="text-[10px] px-2 py-0 border-primary/30 text-primary bg-primary/5">
-          {isClientView ? "VISTA CLIENTE" : "VISTA INTERNA"}
-        </Badge>
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline" className="text-[10px] px-2 py-0 border-primary/30 text-primary bg-primary/5">
+            {isClientView ? "VISTA CLIENTE" : "VISTA INTERNA"}
+          </Badge>
+          {budgetStatus === "approved" && (
+            <Badge variant="outline" className="text-[10px] px-2 py-0 border-emerald-500/40 text-emerald-600 bg-emerald-500/5">
+              APROBADO
+            </Badge>
+          )}
+          {budgetStatus === "editing" && (
+            <Badge variant="outline" className="text-[10px] px-2 py-0 border-amber-500/40 text-amber-600 bg-amber-500/5">
+              EDITADO
+            </Badge>
+          )}
+          {budgetStatus === "generated" && (
+            <Badge variant="outline" className="text-[10px] px-2 py-0 border-muted-foreground/30 text-muted-foreground bg-muted/30">
+              GENERADO
+            </Badge>
+          )}
+        </div>
       }
     >
       <div className="p-4 space-y-4">
@@ -385,22 +407,47 @@ export const ProjectBudgetPanel = ({
 
         {displayData && !generating && (
           <div className="space-y-5">
-            {/* Edit toggle */}
-            <div className="flex justify-end gap-2">
-              {!editing ? (
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setEditing(true)}>
-                  <Pencil className="w-3.5 h-3.5" /> Editar presupuesto
-                </Button>
-              ) : (
-                <>
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleCancel}>
-                    <X className="w-3.5 h-3.5" /> Cancelar
-                  </Button>
-                  <Button size="sm" className="gap-1.5 text-xs" onClick={handleSave}>
-                    <Save className="w-3.5 h-3.5" /> Guardar cambios
-                  </Button>
-                </>
-              )}
+            {/* Edit + Approve toggles */}
+            <div className="flex flex-wrap justify-between items-center gap-2">
+              <div className="text-xs text-muted-foreground">
+                {budgetStatus === "approved"
+                  ? "Presupuesto aprobado. Ya puedes generar la propuesta cliente."
+                  : budgetStatus === "editing"
+                  ? "Has editado el presupuesto. Apruébalo de nuevo para habilitar la propuesta."
+                  : "Revisa, edita y aprueba el presupuesto para generar la propuesta cliente."}
+              </div>
+              <div className="flex gap-2">
+                {!editing ? (
+                  <>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setEditing(true)}>
+                      <Pencil className="w-3.5 h-3.5" /> Editar presupuesto
+                    </Button>
+                    {onApprove && budgetStatus !== "approved" && (
+                      <Button
+                        size="sm"
+                        className="gap-1.5 text-xs"
+                        disabled={approving}
+                        onClick={async () => {
+                          setApproving(true);
+                          try { await onApprove(); } finally { setApproving(false); }
+                        }}
+                      >
+                        {approving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                        Aprobar presupuesto
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleCancel}>
+                      <X className="w-3.5 h-3.5" /> Cancelar
+                    </Button>
+                    <Button size="sm" className="gap-1.5 text-xs" onClick={handleSave}>
+                      <Save className="w-3.5 h-3.5" /> Guardar cambios
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Development costs */}

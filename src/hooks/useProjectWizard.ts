@@ -692,20 +692,20 @@ export const useProjectWizard = (projectId?: string) => {
       await loadProject();
 
       // ── Auto-chain pipeline ────────────────────────────────────────
-      // After approving Brief (step 2): jump to step 3 and auto-launch chained PRD
-      // After approving PRD (step 3): auto-launch budget estimate (no models = empty cart)
+      // After approving Brief (step 2): jump to step 3 and auto-launch chained PRD.
+      // After approving PRD (step 3): auto-launch budget estimate (sugerido).
+      // IMPORTANT: la propuesta cliente NO se dispara aquí. Se genera SOLO
+      // tras "Aprobar presupuesto" desde ProjectBudgetPanel (approveBudget).
       const autoChain = options?.autoChain !== false; // default ON
       if (autoChain) {
         if (stepNumber === 2) {
           setCurrentStep(3);
-          // Fire-and-forget chained PRD generation
           setTimeout(() => {
             runChainedPRD('none').catch((err) => {
               console.error("Auto-chained PRD failed:", err);
             });
           }, 500);
         } else if (stepNumber === 3) {
-          // Auto-launch budget estimation in background (user can refine models later)
           setTimeout(() => {
             generateBudgetEstimate([]).catch((err) => {
               console.error("Auto budget estimate failed:", err);
@@ -812,14 +812,18 @@ export const useProjectWizard = (projectId?: string) => {
 
   const [budgetData, setBudgetData] = useState<any>(null);
   const [budgetGenerating, setBudgetGenerating] = useState(false);
+  // Estados del presupuesto: pending → generated → editing → approved
+  const [budgetStatus, setBudgetStatus] = useState<"pending" | "generated" | "editing" | "approved">("pending");
 
   const updateBudgetData = async (data: any) => {
     if (!projectId) return;
     setBudgetData(data);
+    // Cualquier edición devuelve a estado "editing" (rompe aprobación)
+    setBudgetStatus("editing");
     try {
       await supabase
         .from("project_wizard_steps")
-        .update({ output_data: data })
+        .update({ output_data: data, status: "editing" })
         .eq("project_id", projectId)
         .eq("step_number", 6);
       toast.success("Presupuesto actualizado");
@@ -828,19 +832,23 @@ export const useProjectWizard = (projectId?: string) => {
     }
   };
 
-  // Load budget data from step 6 if exists
+  // Load budget data + status from step 6 if exists
   useEffect(() => {
     if (!projectId) return;
     (async () => {
       const { data } = await supabase
         .from("project_wizard_steps")
-        .select("output_data")
+        .select("output_data, status")
         .eq("project_id", projectId)
         .eq("step_number", 6)
         .order("version", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (data?.output_data) setBudgetData(data.output_data);
+      if (data?.status === "approved") setBudgetStatus("approved");
+      else if (data?.status === "editing") setBudgetStatus("editing");
+      else if (data?.output_data) setBudgetStatus("generated");
+      else setBudgetStatus("pending");
     })();
   }, [projectId, steps]);
 
@@ -864,7 +872,10 @@ export const useProjectWizard = (projectId?: string) => {
         },
       });
       if (error) throw error;
-      if (data?.budget) setBudgetData(data.budget);
+      if (data?.budget) {
+        setBudgetData(data.budget);
+        setBudgetStatus("generated");
+      }
       toast.success("Estimación de presupuesto generada");
       await loadCosts();
     } catch (e: any) {
@@ -872,6 +883,136 @@ export const useProjectWizard = (projectId?: string) => {
       toast.error(e.message || "Error generando estimación");
     } finally {
       setBudgetGenerating(false);
+    }
+  };
+
+  // ── Approve budget ──────────────────────────────────────────────────
+  // Marca el presupuesto como aprobado y, si autoChain, genera la propuesta
+  // cliente (F7) automáticamente. Si autoChain OFF, solo habilita el botón.
+  const approveBudget = async (options?: { autoChain?: boolean }) => {
+    if (!projectId || !budgetData) {
+      toast.error("Genera el presupuesto antes de aprobarlo");
+      return;
+    }
+    try {
+      await supabase
+        .from("project_wizard_steps")
+        .update({ status: "approved", approved_at: new Date().toISOString() })
+        .eq("project_id", projectId)
+        .eq("step_number", 6);
+      setBudgetStatus("approved");
+      toast.success("Presupuesto aprobado");
+
+      const autoChain = options?.autoChain !== false;
+      if (autoChain) {
+        setTimeout(() => {
+          generateClientProposal().catch((err) => {
+            console.error("Auto client proposal failed:", err);
+          });
+        }, 300);
+      }
+    } catch (e: any) {
+      console.error("Approve budget error:", e);
+      toast.error("Error aprobando presupuesto");
+    }
+  };
+
+  // ── Client proposal (Step 30 — F7) ─────────────────────────────────
+  const [proposalData, setProposalData] = useState<{
+    proposalMarkdown?: string;
+    client_proposal_v1?: any;
+    proposal_meta?: any;
+    version?: number;
+  } | null>(null);
+  const [proposalGenerating, setProposalGenerating] = useState(false);
+
+  // Load latest proposal from Step 30
+  useEffect(() => {
+    if (!projectId) return;
+    (async () => {
+      const { data } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 30)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data?.output_data) {
+        const od = data.output_data as any;
+        setProposalData({
+          proposalMarkdown: od.proposal_markdown,
+          client_proposal_v1: od.client_proposal_v1,
+          proposal_meta: od.proposal_meta,
+          version: data.version,
+        });
+      }
+    })();
+  }, [projectId, budgetStatus]);
+
+  const generateClientProposal = async () => {
+    if (!projectId || !project) return;
+    if (!budgetData) {
+      toast.error("Genera y aprueba el presupuesto antes de generar la propuesta");
+      return;
+    }
+    if (budgetStatus !== "approved") {
+      toast.error("Aprueba el presupuesto antes de generar la propuesta cliente");
+      return;
+    }
+    setProposalGenerating(true);
+    try {
+      const { budgetToCommercialTermsV1, validateBudgetForClientProposal } = await import("@/lib/budgetToCommercialTerms");
+      const validationError = validateBudgetForClientProposal(budgetData);
+      if (validationError) {
+        toast.error(validationError);
+        return;
+      }
+      const commercial_terms_v1 = budgetToCommercialTermsV1(budgetData);
+      if (!commercial_terms_v1) {
+        toast.error("No se pudieron derivar las condiciones comerciales del presupuesto");
+        return;
+      }
+      const { data, error } = await supabase.functions.invoke("project-wizard-step", {
+        body: {
+          action: "generate_client_proposal",
+          projectId,
+          stepData: {
+            commercial_terms_v1,
+            projectName: project.name,
+            companyName: project.company,
+          },
+        },
+      });
+      if (error) throw error;
+      // Reload proposal from Step 30
+      const { data: row } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 30)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (row?.output_data) {
+        const od = row.output_data as any;
+        setProposalData({
+          proposalMarkdown: od.proposal_markdown,
+          client_proposal_v1: od.client_proposal_v1,
+          proposal_meta: od.proposal_meta,
+          version: row.version,
+        });
+      }
+      toast.success("Propuesta cliente generada");
+      if (data?.internal_jargon_warnings?.length > 0) {
+        console.warn("[F7] Internal jargon warnings:", data.internal_jargon_warnings);
+      }
+      return data;
+    } catch (e: any) {
+      console.error("Generate client proposal error:", e);
+      toast.error(e.message || "Error generando propuesta cliente");
+    } finally {
+      setProposalGenerating(false);
     }
   };
 
@@ -918,8 +1059,13 @@ export const useProjectWizard = (projectId?: string) => {
     updateInputContent,
     budgetData,
     budgetGenerating,
+    budgetStatus,
+    approveBudget,
     generateBudgetEstimate,
     updateBudgetData,
+    proposalData,
+    proposalGenerating,
+    generateClientProposal,
     updateProjectName,
   };
 };

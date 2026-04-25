@@ -533,6 +533,14 @@ export function runAllValidators(
     allViolations.push(...approvalResult.violations);
   }
 
+  // 8. F4a/F4b audit-only guard (steps 26 & 27) — hard-block approved_for_scope
+  //    in any nested field and forbid registry mutation payloads.
+  if ((stepNumber === 26 || stepNumber === 27) && outputData) {
+    const auditResult = validateAuditNoApproval(stepNumber, outputData);
+    Object.assign(allFlags, auditResult.flags);
+    allViolations.push(...auditResult.violations);
+  }
+
   // Add validation metadata
   if (allViolations.length > 0) {
     allFlags.validation_ran = true;

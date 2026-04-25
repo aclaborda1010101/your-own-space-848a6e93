@@ -74,7 +74,7 @@ const ProjectWizardEdit = () => {
   const {
     project, steps, costs, totalCost, currentStep,
     loading, generating, normalizing, chainedPhase, prdSubProgress, internalStepStatuses,
-    runExtraction, retryFailedChunks, normalizeBrief, approveStep, navigateToStep, runGenericStep, runChainedPRD, updateStepOutputData,
+    runExtraction, retryFailedChunks, normalizeBrief, approveStep, navigateToStep, runGenericStep, runChainedPRD, runPipelineV2PRD, updateStepOutputData,
     updateInputContent, updateProjectName,
     budgetData, budgetGenerating, budgetStatus, generateBudgetEstimate, updateBudgetData, approveBudget,
     proposalData, proposalGenerating, generateClientProposal,
@@ -328,24 +328,24 @@ const ProjectWizardEdit = () => {
                   />
                   <ProjectWizardGenericStep
                     stepNumber={3}
-                    stepName="PRD Técnico"
-                    description="Genera internamente Alcance + Auditoría IA + PRD Técnico en una sola operación."
+                    stepName="PRD Técnico (Lovable)"
+                    description="PRD técnico determinista generado desde Step 28 (scope_architecture_v1). Pipeline v2: registro → gaps → viabilidad → arquitectura → PRD. Sin LLM, sin SQL inventado."
                     outputData={step3Data?.outputData || null}
                     generating={generating && (chainedPhase === "idle" || chainedPhase === "done")}
                     onGenerate={async () => {
-                      await runChainedPRD(pricingMode);
+                      await runPipelineV2PRD(pricingMode);
                     }}
                     onApprove={async () => {
                       await approveStep(3, undefined, { autoChain: autoChainEnabled });
                     }}
-                    generateLabel="Generar PRD Técnico"
+                    generateLabel="Generar PRD Técnico (v2)"
                     isMarkdown={true}
                     projectId={id}
                     projectName={project.name}
                     company={project.company}
                     version={step3Data?.version || 1}
                     onUpdateOutputData={(newData) => updateStepOutputData(3, newData)}
-                    exportMode={exportMode}
+                    exportMode="internal"
                     onExportModeChange={setExportMode}
                     status={step3Data?.status}
                   />

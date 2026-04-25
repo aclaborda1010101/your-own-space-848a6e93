@@ -326,6 +326,29 @@ const ProjectWizardEdit = () => {
                     onChange={setPricingMode}
                     disabled={generating}
                   />
+
+                  {/* Aviso si el contenido actual NO viene del pipeline v2 */}
+                  {step3Data?.outputData &&
+                    (step3Data.outputData as any)?.source !== "pipeline_v2" && (
+                      <Card className="border-amber-500/50 bg-amber-500/5">
+                        <CardContent className="p-4 flex items-start gap-3">
+                          <div className="text-amber-600 text-sm">⚠️</div>
+                          <div className="flex-1 space-y-1">
+                            <p className="text-sm font-semibold text-amber-700">
+                              Este PRD viene del pipeline antiguo
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              El documento actual no se generó desde Step 28
+                              (<code className="text-[10px]">scope_architecture_v1</code>).
+                              Pulsa <strong>"Generar PRD Técnico (v2)"</strong> para crear el PRD
+                              correcto basado en el alcance aprobado antes de descargarlo o
+                              enviarlo a Lovable. La descarga PDF está bloqueada hasta entonces.
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
                   <ProjectWizardGenericStep
                     stepNumber={3}
                     stepName="PRD Técnico (Lovable)"
@@ -348,6 +371,7 @@ const ProjectWizardEdit = () => {
                     exportMode="internal"
                     onExportModeChange={setExportMode}
                     status={step3Data?.status}
+                    isPipelineV2={(step3Data?.outputData as any)?.source === "pipeline_v2"}
                   />
                 </div>
               )}

@@ -1423,7 +1423,7 @@ async function convertHtmlToPdf(
 
 const STEP_TITLES: Record<number, string> = {
   2: "Briefing Extraído",
-  3: "Borrador de Alcance",
+  3: "PRD Técnico para Construcción",
   4: "Auditoría Cruzada",
   5: "Documento de Alcance",
   6: "Estimación de Presupuesto",
@@ -1577,7 +1577,42 @@ serve(async (req: Request) => {
       });
     }
 
-    const rawTitle = STEP_TITLES[stepNumber] || `Fase ${stepNumber}`;
+    // ── Step 3 PRD: bloqueo de legacy + retitulado v2 ─────────────────
+    // Si el Step 3 actual NO viene del pipeline v2 (source !== "pipeline_v2"),
+    // bloqueamos la descarga y forzamos al usuario a regenerar.
+    let isPipelineV2Prd = false;
+    if (stepNumber === 3) {
+      try {
+        const supabaseAdmin = getSupabaseAdmin();
+        const { data: step3Row } = await supabaseAdmin
+          .from("project_wizard_steps")
+          .select("output_data")
+          .eq("project_id", projectId)
+          .eq("step_number", 3)
+          .order("version", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const source = (step3Row?.output_data as any)?.source;
+        isPipelineV2Prd = source === "pipeline_v2";
+        const allowLegacy = req.headers.get("x-allow-legacy") === "true";
+        if (!isPipelineV2Prd && !allowLegacy) {
+          return new Response(JSON.stringify({
+            error: "LEGACY_PRD_BLOCKED",
+            message: "Este PRD es del pipeline legacy y no es válido. Pulsa \"Generar PRD Técnico (v2)\" para crear el PRD basado en Step 28 antes de descargarlo.",
+          }), {
+            status: 409,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      } catch (e) {
+        console.warn("[generate-document] No se pudo verificar source de Step 3:", e);
+      }
+    }
+
+    const rawTitleBase = STEP_TITLES[stepNumber] || `Fase ${stepNumber}`;
+    const rawTitle = (stepNumber === 3 && isPipelineV2Prd)
+      ? "PRD Técnico para Construcción"
+      : rawTitleBase;
     const title = (stepNumber === 6 && exportMode === "client") ? "Propuesta Económica" : rawTitle;
     const dateRaw = date?.includes("-") ? date : date?.replace(/(\d{4})(\d{2})(\d{2})/, "$1-$2-$3") || new Date().toISOString().split("T")[0];
     const [_y, _m, _d] = dateRaw.split("-");

@@ -809,7 +809,29 @@ export const useProjectWizard = (projectId?: string) => {
         }
       } catch { /* no-op */ }
 
-      const callAction = async (action: string, label: string) => {
+      const checkStepExists = async (stepNumber: number): Promise<boolean> => {
+        const { data } = await supabase
+          .from("project_wizard_steps")
+          .select("id")
+          .eq("project_id", projectId)
+          .eq("step_number", stepNumber)
+          .order("version", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        return !!data?.id;
+      };
+
+      const callAction = async (
+        action: string,
+        label: string,
+        expectedStepNumber: number,
+      ) => {
+        // Idempotente: si el step ya existe en BD, no lo regeneramos.
+        if (await checkStepExists(expectedStepNumber)) {
+          console.info(`[pipeline-v2] ${label} (${action}) — Step ${expectedStepNumber} ya existe, salto`);
+          return { skipped: true };
+        }
+
         console.info(`[pipeline-v2] ${label} (${action})…`);
         const { data, error } = await supabase.functions.invoke("project-wizard-step", {
           body: { action, projectId },
@@ -819,29 +841,47 @@ export const useProjectWizard = (projectId?: string) => {
           throw new Error(`${label} falló: ${error.message || error}`);
         }
         if (data?.error) {
+          console.error(`[pipeline-v2] ${action} returned error:`, data.error);
           throw new Error(`${label}: ${data.error}`);
+        }
+
+        // Verificación dura en BD: el step debe haberse persistido.
+        const persisted = await checkStepExists(expectedStepNumber);
+        if (!persisted) {
+          throw new Error(
+            `${label}: la edge function devolvió OK pero Step ${expectedStepNumber} no aparece en BD.`,
+          );
         }
         return data;
       };
 
       // F2 + F3 — Component Registry (Step 25)
       setChainedPhase("alcance");
-      await callAction("build_registry", "Construir registro de componentes");
+      await callAction("build_registry", "Construir registro de componentes", 25);
 
       // F4a — Gap Audit (Step 26)
-      await callAction("audit_f4a_gaps", "Auditoría de gaps");
+      await callAction("audit_f4a_gaps", "Auditoría de gaps", 26);
 
       // F4b — Feasibility Audit (Step 27)
       setChainedPhase("auditoria");
-      await callAction("audit_f4b_feasibility", "Auditoría de viabilidad");
+      await callAction("audit_f4b_feasibility", "Auditoría de viabilidad", 27);
 
       // F5 — Scope Architect (Step 28)
       setChainedPhase("patrones");
-      await callAction("architect_scope", "Arquitectura de alcance (Step 28)");
+      await callAction("architect_scope", "Arquitectura de alcance (Step 28)", 28);
 
-      // F6 — Technical PRD (Step 29)
+      // F6 — Technical PRD (Step 29) — NO idempotente: siempre regenera.
       setChainedPhase("prd");
-      await callAction("generate_technical_prd", "PRD técnico (Step 29)");
+      console.info(`[pipeline-v2] Generando PRD técnico (Step 29)…`);
+      const prdResp = await supabase.functions.invoke("project-wizard-step", {
+        body: { action: "generate_technical_prd", projectId },
+      });
+      if (prdResp.error) {
+        throw new Error(`PRD técnico (Step 29) falló: ${prdResp.error.message || prdResp.error}`);
+      }
+      if (prdResp.data?.error) {
+        throw new Error(`PRD técnico (Step 29): ${prdResp.data.error}`);
+      }
 
       // Mirror Step 29 → Step 3 para que la UI existente (descarga PDF, badges,
       // budget panel y propuesta cliente) lo encuentre sin cambios mayores.

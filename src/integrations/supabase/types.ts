@@ -69,15 +69,7 @@ export type Database = {
           role?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "agent_chat_messages_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       agent_learnings: {
         Row: {
@@ -110,15 +102,7 @@ export type Database = {
           trigger_text?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "agent_learnings_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       ai_course_lessons: {
         Row: {
@@ -447,15 +431,7 @@ export type Database = {
           voice_profiles?: Json[] | null
           year?: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "analyzed_scripts_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       bl_audits: {
         Row: {
@@ -1108,15 +1084,7 @@ export type Database = {
           title?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "bosco_activity_log_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       bosco_interactions: {
         Row: {
@@ -1167,15 +1135,7 @@ export type Database = {
           title?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "bosco_interactions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       bosco_milestones: {
         Row: {
@@ -1208,15 +1168,7 @@ export type Database = {
           status?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "bosco_milestones_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       bosco_observations: {
         Row: {
@@ -1487,13 +1439,6 @@ export type Database = {
             referencedRelation: "business_projects"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "business_project_discovery_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
         ]
       }
       business_project_live_summary: {
@@ -1604,13 +1549,6 @@ export type Database = {
             referencedRelation: "business_projects"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "business_project_timeline_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
         ]
       }
       business_project_timeline_attachments: {
@@ -1666,13 +1604,6 @@ export type Database = {
             columns: ["timeline_id"]
             isOneToOne: false
             referencedRelation: "business_project_timeline"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "business_project_timeline_attachments_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
             referencedColumns: ["id"]
           },
         ]
@@ -2035,15 +1966,7 @@ export type Database = {
           mood?: number
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "check_ins_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       cinematographic_patterns: {
         Row: {
@@ -2175,13 +2098,6 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "business_projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "client_data_files_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
             referencedColumns: ["id"]
           },
         ]
@@ -3112,15 +3028,7 @@ export type Database = {
           role?: string
           user_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "conversation_history_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       daily_briefings: {
         Row: {
@@ -3168,15 +3076,7 @@ export type Database = {
           user_id?: string
           world_news?: Json | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "daily_briefings_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       daily_briefs: {
         Row: {
@@ -3260,15 +3160,7 @@ export type Database = {
           user_id?: string
           work_win?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "daily_logs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       daily_observations: {
         Row: {
@@ -3564,15 +3456,7 @@ export type Database = {
           id?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "dismissed_alerts_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       economic_backtests: {
         Row: {
@@ -3758,15 +3642,7 @@ export type Database = {
           to_email?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "emails_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       english_chunks: {
         Row: {
@@ -3838,15 +3714,7 @@ export type Database = {
           words_introduced?: number | null
           words_mastered?: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "english_kids_progress_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       english_stats: {
         Row: {
@@ -4251,13 +4119,6 @@ export type Database = {
             referencedRelation: "projects"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "generation_state_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
         ]
       }
       habit_insights: {
@@ -4413,15 +4274,7 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "import_jobs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       improvement_proposals: {
         Row: {
@@ -4638,15 +4491,7 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "jarvis_conversations_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       jarvis_emails_cache: {
         Row: {
@@ -4748,15 +4593,7 @@ export type Database = {
           to_addr?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "jarvis_emails_cache_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       jarvis_entities: {
         Row: {
@@ -4798,15 +4635,7 @@ export type Database = {
           project_id?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "jarvis_entities_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       jarvis_entity_mentions: {
         Row: {
@@ -4892,13 +4721,6 @@ export type Database = {
             referencedRelation: "jarvis_entities"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "jarvis_entity_relations_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
         ]
       }
       jarvis_executive_summaries: {
@@ -4932,15 +4754,7 @@ export type Database = {
           summary_text?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "jarvis_executive_summaries_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       jarvis_feedback: {
         Row: {
@@ -5192,15 +5006,7 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "jarvis_memory_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       jarvis_messages: {
         Row: {
@@ -5353,15 +5159,7 @@ export type Database = {
           last_time?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "jarvis_whatsapp_cache_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       jarvis_whoop_data: {
         Row: {
@@ -5403,15 +5201,7 @@ export type Database = {
           synced_at?: string | null
           user_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "jarvis_whoop_data_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       knowledge_embeddings: {
         Row: {
@@ -6475,15 +6265,7 @@ export type Database = {
           status?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "pattern_detector_datasets_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       pattern_detector_runs: {
         Row: {
@@ -6907,15 +6689,7 @@ export type Database = {
           name?: string
           user_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "pipeline_presets_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       pipeline_runs: {
         Row: {
@@ -6987,15 +6761,7 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "pipeline_runs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       pipeline_steps: {
         Row: {
@@ -7099,15 +6865,7 @@ export type Database = {
           source_email_id?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "plaud_dismissed_emails_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       plaud_recordings: {
         Row: {
@@ -7331,15 +7089,7 @@ export type Database = {
           role?: string
           user_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "potus_chat_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       potus_daily_summary: {
         Row: {
@@ -7387,15 +7137,7 @@ export type Database = {
           wellbeing_score?: number | null
           whoop_summary?: Json | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "potus_daily_summary_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       prediction_log: {
         Row: {
@@ -7577,13 +7319,6 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "business_projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "project_context_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
             referencedColumns: ["id"]
           },
         ]
@@ -8186,15 +7921,7 @@ export type Database = {
           vfx_requirements?: string | null
           voice_over_usage?: boolean | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "projects_owner_id_fkey"
-            columns: ["owner_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       rag_api_keys: {
         Row: {
@@ -10775,15 +10502,7 @@ export type Database = {
           tags?: string[] | null
           user_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "specialist_memory_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       specialist_metadata: {
         Row: {
@@ -11082,13 +10801,6 @@ export type Database = {
             referencedRelation: "business_projects"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "tasks_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
         ]
       }
       transcriptions: {
@@ -11167,15 +10879,7 @@ export type Database = {
           updated_at?: string | null
           user_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_devices_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       user_integrations: {
         Row: {
@@ -11229,15 +10933,7 @@ export type Database = {
           user_id?: string
           whatsapp_phone?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_integrations_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       user_location_history: {
         Row: {
@@ -11456,15 +11152,7 @@ export type Database = {
           user_id?: string | null
           workout_preferences?: Json | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_profile_extended_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       user_settings: {
         Row: {
@@ -11557,15 +11245,7 @@ export type Database = {
           telegram_username?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_telegram_links_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       weekly_patterns: {
         Row: {
@@ -11616,15 +11296,7 @@ export type Database = {
           updated_at?: string | null
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "whatsapp_instance_owners_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       whoop_data: {
         Row: {
@@ -11726,15 +11398,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "whoop_data_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       whoop_tokens: {
         Row: {
@@ -11764,15 +11428,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "whoop_tokens_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "user_directory"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Views: {
@@ -11816,16 +11472,6 @@ export type Database = {
           display_name: string | null
           email: string | null
           id: string | null
-        }
-        Insert: {
-          display_name?: never
-          email?: string | null
-          id?: string | null
-        }
-        Update: {
-          display_name?: never
-          email?: string | null
-          id?: string | null
         }
         Relationships: []
       }
@@ -11899,6 +11545,14 @@ export type Database = {
           importance: number
           last_accessed: string
           memory_type: string
+        }[]
+      }
+      get_user_directory: {
+        Args: never
+        Returns: {
+          display_name: string
+          email: string
+          id: string
         }[]
       }
       has_project_access: {

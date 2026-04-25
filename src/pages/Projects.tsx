@@ -214,7 +214,19 @@ const Projects = () => {
       )}
 
       {/* Project Grid */}
-      {isLoading ? (
+      {isError ? (
+        <Card className="border-destructive/40 bg-card/80">
+          <CardContent className="p-8 text-center space-y-4">
+            <div>
+              <p className="text-lg font-semibold text-foreground">No se pudieron cargar los proyectos</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                {(error as Error)?.message || "La conexión con Supabase falló temporalmente."}
+              </p>
+            </div>
+            <Button onClick={() => refetch()} variant="outline">Reintentar</Button>
+          </CardContent>
+        </Card>
+      ) : isLoading ? (
         <div className="flex justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin text-primary/50" />
         </div>

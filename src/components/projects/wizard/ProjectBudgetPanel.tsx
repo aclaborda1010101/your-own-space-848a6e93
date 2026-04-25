@@ -74,8 +74,10 @@ interface ProjectBudgetPanelProps {
   company?: string;
   budgetData: BudgetData | null;
   generating: boolean;
+  budgetStatus?: "pending" | "generated" | "editing" | "approved";
   onGenerate: (selectedModels: string[]) => Promise<void>;
   onBudgetUpdate?: (data: BudgetData) => void;
+  onApprove?: () => Promise<void> | void;
 }
 
 export const ProjectBudgetPanel = ({
@@ -84,8 +86,10 @@ export const ProjectBudgetPanel = ({
   company = "",
   budgetData,
   generating,
+  budgetStatus = "pending",
   onGenerate,
   onBudgetUpdate,
+  onApprove,
 }: ProjectBudgetPanelProps) => {
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
@@ -93,6 +97,7 @@ export const ProjectBudgetPanel = ({
   const [selectedExportModels, setSelectedExportModels] = useState<number[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [budgetExportMode, setBudgetExportMode] = useState<'internal' | 'client'>('client');
+  const [approving, setApproving] = useState(false);
   // Vista global del panel: cliente oculta márgenes, costes internos, horas
   const [viewMode, setViewMode] = useState<'internal' | 'client'>('internal');
   const isClientView = viewMode === 'client';

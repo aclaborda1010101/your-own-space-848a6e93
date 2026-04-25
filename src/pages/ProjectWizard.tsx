@@ -219,139 +219,153 @@ const ProjectWizardEdit = () => {
         internalStepStatuses={internalStepStatuses}
       />
 
-      {/* Pipeline */}
-      <CollapsibleCard
-        id={`pipeline-${id}`}
-        title="Pipeline del proyecto"
-        icon={<Briefcase className="w-4 h-4 text-primary" />}
-        defaultOpen={false}
-        badge={
-          <Badge variant="outline" className="text-[10px] px-2 py-0">
-            Paso {currentStep}/{TOTAL_STEPS}
-          </Badge>
-        }
-      >
-        <div className="p-4">
-          <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6">
-            {/* Stepper sidebar */}
-            <Card className="border-border/50 bg-card/80 backdrop-blur-sm">
-              <CardContent className="p-3">
-                <ProjectWizardStepper
-                  steps={steps}
-                  currentStep={currentStep}
-                  onNavigate={navigateToStep}
-                  maxUnlockedStep={maxUnlocked}
-                  chainedPhase={chainedPhase}
-                  internalStepStatuses={internalStepStatuses}
-                />
-              </CardContent>
-            </Card>
+      {/* Auto-chain banner */}
+      {(generating && chainedPhase !== "idle" && chainedPhase !== "done") && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 flex items-center gap-3 text-sm">
+          <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-primary">Generando PRD automáticamente tras aprobar el Brief…</p>
+            <p className="text-xs text-muted-foreground truncate">
+              Fase: {chainedPhase} {prdSubProgress?.label ? `· ${prdSubProgress.label}` : ""}
+            </p>
+          </div>
+        </div>
+      )}
+      {budgetGenerating && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-2.5 flex items-center gap-3 text-sm">
+          <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
+          <p className="font-medium text-primary">Generando estimación de presupuesto automáticamente…</p>
+        </div>
+      )}
 
-            {/* Step content */}
-            <div className="min-w-0">
-              {currentStep === 1 && (
-                <ProjectWizardStep1Edit
-                  inputContent={project.inputContent}
-                  onUpdateContent={updateInputContent}
-                  onGoToExtraction={() => navigateToStep(2)}
-                  onReExtract={() => {
-                    navigateToStep(2);
-                    setTimeout(() => runExtraction(), 300);
-                  }}
-                  hasExistingBriefing={!!steps.find(s => s.stepNumber === 2)?.outputData}
-                  generating={generating}
-                />
-              )}
+      {/* Auto-chain toggle */}
+      <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={autoChainEnabled}
+            onChange={(e) => toggleAutoChain(e.target.checked)}
+            className="w-3.5 h-3.5 rounded border-border accent-primary"
+          />
+          <span>Encadenar automáticamente PRD + Presupuesto al aprobar Brief</span>
+        </label>
+      </div>
 
-              {currentStep === 2 && (
-                <ProjectWizardStep2
-                  inputContent={project.inputContent}
-                  briefing={step2Data?.outputData || null}
-                  generating={generating}
-                  onExtract={runExtraction}
-                  onApprove={async (editedBriefing) => {
-                    await approveStep(2, editedBriefing);
-                  }}
-                  projectId={id}
-                  projectName={project.name}
-                  company={project.company}
-                  version={step2Data?.version || 1}
-                />
-              )}
+      {/* Pipeline — sidebar fija + contenido */}
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
+        {/* Stepper sidebar — siempre visible */}
+        <Card className="border-border/50 bg-card/80 backdrop-blur-sm h-fit lg:sticky lg:top-4">
+          <CardContent className="p-3">
+            <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
+              <Briefcase className="w-3.5 h-3.5 text-primary" />
+              <p className="text-xs font-semibold text-foreground">Pipeline del proyecto</p>
+            </div>
+            <ProjectWizardStepper
+              steps={steps}
+              currentStep={currentStep}
+              onNavigate={navigateToStep}
+              maxUnlockedStep={maxUnlocked}
+              chainedPhase={chainedPhase}
+              internalStepStatuses={internalStepStatuses}
+            />
+          </CardContent>
+        </Card>
 
-              {/* QA tool — siempre visible para disparar build_registry sin aprobar Step 2 */}
-              {id && (
-                <div className="mt-4">
-                  <PipelineQAPanel projectId={id} />
-                </div>
-              )}
+        {/* Step content */}
+        <div className="min-w-0 space-y-4">
+          {currentStep === 1 && (
+            <ProjectWizardStep1Edit
+              inputContent={project.inputContent}
+              onUpdateContent={updateInputContent}
+              onGoToExtraction={() => navigateToStep(2)}
+              onReExtract={() => {
+                navigateToStep(2);
+                setTimeout(() => runExtraction(), 300);
+              }}
+              hasExistingBriefing={!!steps.find(s => s.stepNumber === 2)?.outputData}
+              generating={generating}
+            />
+          )}
 
-              {currentStep === 3 && (
-                <>
-                  {/* Show chained progress when generating */}
-                  {generating && chainedPhase !== "idle" && chainedPhase !== "done" ? (
-                    <Card className="border-border/50">
-                      <CardContent className="p-6">
-                        <ChainedPRDProgress currentPhase={chainedPhase} prdSubProgress={prdSubProgress} />
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <ProjectWizardGenericStep
-                      stepNumber={3}
-                      stepName="PRD Técnico"
-                      description="Genera internamente Alcance + Auditoría IA + PRD Técnico en una sola operación."
-                      outputData={step3Data?.outputData || null}
-                      generating={generating && (chainedPhase === "idle" || chainedPhase === "done")}
-                      onGenerate={async () => {
-                        await runChainedPRD(pricingMode);
-                      }}
-                      onApprove={async () => {
-                        await approveStep(3);
-                      }}
-                      generateLabel="Generar PRD Técnico"
-                      isMarkdown={true}
-                      projectId={id}
-                      projectName={project.name}
-                      company={project.company}
-                      version={step3Data?.version || 1}
-                      onUpdateOutputData={(newData) => updateStepOutputData(3, newData)}
-                      exportMode={exportMode}
-                      onExportModeChange={setExportMode}
-                      status={step3Data?.status}
-                    />
-                  )}
-                </>
-              )}
+          {currentStep === 2 && (
+            <ProjectWizardStep2
+              inputContent={project.inputContent}
+              briefing={step2Data?.outputData || null}
+              generating={generating}
+              onExtract={runExtraction}
+              onApprove={async (editedBriefing) => {
+                await approveStep(2, editedBriefing, { autoChain: autoChainEnabled });
+              }}
+              projectId={id}
+              projectName={project.name}
+              company={project.company}
+              version={step2Data?.version || 1}
+            />
+          )}
 
-              {currentStep === 4 && (
+          {currentStep === 3 && (
+            <>
+              {generating && chainedPhase !== "idle" && chainedPhase !== "done" ? (
+                <Card className="border-border/50">
+                  <CardContent className="p-6">
+                    <ChainedPRDProgress currentPhase={chainedPhase} prdSubProgress={prdSubProgress} />
+                  </CardContent>
+                </Card>
+              ) : (
                 <ProjectWizardGenericStep
-                  stepNumber={4}
-                  stepName="Descripción MVP"
-                  description="Genera una descripción detallada del Minimum Viable Product con funcionalidades core, criterios de éxito y plan de lanzamiento."
-                  outputData={step4Data?.outputData || null}
-                  generating={generating}
+                  stepNumber={3}
+                  stepName="PRD Técnico"
+                  description="Genera internamente Alcance + Auditoría IA + PRD Técnico en una sola operación."
+                  outputData={step3Data?.outputData || null}
+                  generating={generating && (chainedPhase === "idle" || chainedPhase === "done")}
                   onGenerate={async () => {
-                    await runGenericStep(4, "generate_mvp");
+                    await runChainedPRD(pricingMode);
                   }}
                   onApprove={async () => {
-                    await approveStep(4);
+                    await approveStep(3, undefined, { autoChain: autoChainEnabled });
                   }}
-                  generateLabel="Generar Descripción MVP"
+                  generateLabel="Generar PRD Técnico"
                   isMarkdown={true}
                   projectId={id}
                   projectName={project.name}
                   company={project.company}
-                  version={step4Data?.version || 1}
-                  onUpdateOutputData={(newData) => updateStepOutputData(4, newData)}
+                  version={step3Data?.version || 1}
+                  onUpdateOutputData={(newData) => updateStepOutputData(3, newData)}
                   exportMode={exportMode}
                   onExportModeChange={setExportMode}
-                  status={step4Data?.status}
+                  status={step3Data?.status}
                 />
               )}
-            </div>
-          </div>
+            </>
+          )}
+
+          {currentStep === 4 && (
+            <ProjectWizardGenericStep
+              stepNumber={4}
+              stepName="Descripción MVP"
+              description="Genera una descripción detallada del Minimum Viable Product con funcionalidades core, criterios de éxito y plan de lanzamiento."
+              outputData={step4Data?.outputData || null}
+              generating={generating}
+              onGenerate={async () => {
+                await runGenericStep(4, "generate_mvp");
+              }}
+              onApprove={async () => {
+                await approveStep(4, undefined, { autoChain: autoChainEnabled });
+              }}
+              generateLabel="Generar Descripción MVP"
+              isMarkdown={true}
+              projectId={id}
+              projectName={project.name}
+              company={project.company}
+              version={step4Data?.version || 1}
+              onUpdateOutputData={(newData) => updateStepOutputData(4, newData)}
+              exportMode={exportMode}
+              onExportModeChange={setExportMode}
+              status={step4Data?.status}
+            />
+          )}
         </div>
-      </CollapsibleCard>
+      </div>
 
 
       {/* Paso 4 — Budget panel — only after step 3 (PRD) approved */}

@@ -968,6 +968,12 @@ export async function normalizeBrief(
   // 4. Semantic dedup (uses canonical override from ctx if provided)
   applySemanticDedup(briefing, changes, ctx);
 
+  // 4b. Inject canonical catalysts that the LLM missed.
+  applyCanonicalCatalysts(briefing, ctx, changes);
+
+  // 4c. Ensure every required canonical component is present.
+  ensureCanonicalComponentsPresent(briefing, ctx, changes);
+
   // 5. Compliance expansion
   applyComplianceExpansion(briefing, changes);
 

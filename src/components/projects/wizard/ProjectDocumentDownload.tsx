@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, forwardRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Download, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,7 +21,7 @@ interface Props {
   disabled?: boolean;
 }
 
-export const ProjectDocumentDownload = ({
+export const ProjectDocumentDownload = forwardRef<HTMLButtonElement, Props>(({
   projectId,
   stepNumber,
   content,
@@ -36,11 +36,11 @@ export const ProjectDocumentDownload = ({
   allowDraft,
   auditJson,
   disabled,
-}: Props) => {
+}, ref) => {
   const [downloading, setDownloading] = useState(false);
 
-  const defaultLabel = stepNumber === 3 
-    ? "Borrador (interno)" 
+  const defaultLabel = stepNumber === 3
+    ? "Borrador (interno)"
     : stepNumber === 5
       ? (exportMode === "client" ? "PDF (cliente)" : "PDF (completo)")
       : "PDF";
@@ -50,7 +50,6 @@ export const ProjectDocumentDownload = ({
     setDownloading(true);
 
     try {
-      // Only send auditJson for steps 4/5
       const shouldSendAudit = (stepNumber === 4 || stepNumber === 5) && auditJson;
 
       const { data, error } = await supabase.functions.invoke("generate-document", {
@@ -100,6 +99,7 @@ export const ProjectDocumentDownload = ({
 
   return (
     <Button
+      ref={ref}
       variant={variant}
       size={size}
       onClick={handleDownload}
@@ -114,4 +114,6 @@ export const ProjectDocumentDownload = ({
       {downloading ? "Generando..." : (label || defaultLabel)}
     </Button>
   );
-};
+});
+
+ProjectDocumentDownload.displayName = "ProjectDocumentDownload";

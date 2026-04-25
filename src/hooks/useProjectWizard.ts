@@ -71,6 +71,7 @@ export const useProjectWizard = (projectId?: string) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [normalizing, setNormalizing] = useState(false);
   const [chainedPhase, setChainedPhase] = useState<ChainedPhase>("idle");
   const [prdSubProgress, setPrdSubProgress] = useState<{ currentPart: number; totalParts: number; label: string; partsCompleted: string[]; startedAt: string } | null>(null);
   const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -457,33 +458,58 @@ export const useProjectWizard = (projectId?: string) => {
     }
   };
 
-  // ── Normalize brief (clean naming, dedup, language, compliance) ──────
-  const normalizeBrief = async () => {
-    if (!project || !projectId) return;
-    setGenerating(true);
-    const toastId = toast.loading("Normalizando brief y generando versión limpia…");
+  // ── Normalize / repair brief (clean naming, dedup, language, retry chunks) ──
+  // Uses the global `repair_step2_brief` action which:
+  //   1. Retries failed chunks if input is available
+  //   2. Runs full normalization
+  //   3. Builds the clean brief markdown
+  //   4. Persists a NEW Step 2 version with status=review
+  const normalizeBrief = async (): Promise<{ success: boolean; cleanLength: number; version: number } | null> => {
+    if (!project || !projectId) return null;
+    setNormalizing(true);
+    const toastId = toast.loading("Limpiando y normalizando brief…");
     try {
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
-          action: "normalize_brief",
+          action: "repair_step2_brief",
           stepData: {
             projectId,
             projectName: project.name,
             companyName: project.company,
+            inputContent: project.inputContent,
+            projectType: project.projectType,
+            clientNeed: project.clientNeed,
           },
         },
       });
-      if (error) throw error;
       toast.dismiss(toastId);
-      toast.success(`Brief normalizado: ${data?.normalization_changes ?? 0} cambios aplicados.`);
+      if (error) {
+        const msg = (error as any)?.message || "Error desconocido";
+        console.error("[normalizeBrief] backend error:", error);
+        toast.error(`Normalización falló: ${msg}`);
+        return null;
+      }
+      if (!data?.success) {
+        const msg = (data as any)?.error || "Sin éxito";
+        toast.error(`Normalización falló: ${msg}`);
+        return null;
+      }
+      const cleanLen = data.clean_brief_length || 0;
+      const recovered = data.recovered_chunks || 0;
+      toast.success(
+        recovered > 0
+          ? `Brief Limpio generado (v${data.version}). ${recovered} bloque(s) recuperado(s).`
+          : `Brief Limpio generado (v${data.version}). Listo para exportar y aprobar.`,
+      );
       await loadProject();
-      return data;
+      return { success: true, cleanLength: cleanLen, version: data.version };
     } catch (e: any) {
       console.error("Normalize brief error:", e);
       toast.dismiss(toastId);
       toast.error(e.message || "Error al normalizar el brief");
+      return null;
     } finally {
-      setGenerating(false);
+      setNormalizing(false);
     }
   };
 
@@ -798,11 +824,40 @@ export const useProjectWizard = (projectId?: string) => {
   const approveStep = async (stepNumber: number, outputData?: any, options?: { autoChain?: boolean }) => {
     if (!projectId) return;
     try {
+      // ── Pre-approval safety: Step 2 must have a clean brief ──
+      // If the user is approving Step 2 but normalization never ran, do it now.
+      // This prevents approving a raw briefing and blocking PDF/PRD downstream.
+      let payloadOutput = outputData;
+      if (stepNumber === 2) {
+        const candidate = outputData || steps.find((s) => s.stepNumber === 2)?.outputData;
+        const hasCleanBrief =
+          typeof candidate?._clean_brief_md === "string" &&
+          candidate._clean_brief_md.trim().length > 200;
+        if (!hasCleanBrief) {
+          const repair = await normalizeBrief();
+          if (!repair?.success) {
+            toast.error("No se pudo generar el Brief Limpio. Revisa los logs antes de aprobar.");
+            return;
+          }
+          // After normalizeBrief() loadProject() updated `steps`, but we read
+          // outputData from the freshly persisted version via Supabase to be safe.
+          const { data: latest } = await supabase
+            .from("project_wizard_steps")
+            .select("output_data")
+            .eq("project_id", projectId)
+            .eq("step_number", 2)
+            .order("version", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          payloadOutput = (latest?.output_data as any) || candidate;
+        }
+      }
+
       const { error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
           action: "approve_step",
           projectId,
-          stepData: { stepNumber, outputData },
+          stepData: { stepNumber, outputData: payloadOutput },
         },
       });
 
@@ -1182,6 +1237,7 @@ export const useProjectWizard = (projectId?: string) => {
     currentStep,
     loading,
     generating,
+    normalizing,
     chainedPhase,
     prdSubProgress,
     internalStepStatuses,

@@ -1,106 +1,161 @@
-# Brief Limpio v4 — corrección global del pipeline Step 2 + exportación PDF
+# Plan — desbloquear Brief Limpio, aprobación y avance a PRD/MVP de forma global
 
-Las correcciones son **globales** (afectan a cualquier proyecto, no solo AFFLUX). El usuario aporta AFFLUX como caso de prueba.
+## Diagnóstico verificado
 
-## Diagnóstico verificado en BD y código
+En el proyecto actual AFFLUX (`6ef807d1-...`) la base de datos muestra:
 
-He inspeccionado `project_wizard_steps` para el proyecto AFFLUX (`6ef807d1-…`, step_number = 2, version 3, status = review):
+- Step 2 existe solo como `version = 3`, `status = review`.
+- No existe `output_data._clean_brief_md`.
+- No existe `output_data._normalization_log`.
+- Sigue habiendo `failed_chunks = [CHUNK-003]`.
+- `business_projects.company = "Alejandro Gordo"`, por eso la normalización no puede inferir bien empresa vs fundador si usa `companyName` como fuente.
+- `business_projects.current_step = 3`, pero Step 2 no está aprobado y no hay Step 3 generado. Esto deja la UI en un estado incoherente: parece que se avanzó, pero no hay base real para PRD/MVP.
 
-| Campo | Estado actual | Esperado |
-|---|---|---|
-| `_clean_brief_md` | **NO existe** | markdown limpio 3-5 páginas |
-| `_normalization_log` | **NO existe** | log con cambios aplicados |
-| `_chunked_extraction_meta` | existe | existe |
-| `client_naming_check.client_company_name` | `"Alejandro Gordo"` (mal) | nombre real de la empresa |
-| `client_naming_check.proposed_product_name` | `null` | nombre del producto |
+Además, los logs recientes de `project-wizard-step` no muestran llamadas a `normalize_brief` ni `retry_failed_chunks`, lo que confirma que el botón no está dejando una versión nueva persistida.
 
-**Conclusión:** las acciones `retry_failed_chunks` y `normalize_brief` añadidas en la iteración anterior **nunca se han ejecutado** sobre este proyecto. La UI tiene los botones, pero o el usuario no los pulsó, o se ejecutaron contra una versión y se persistieron sobre otra que luego fue sobrescrita por una re-extracción.
+## Objetivo global
 
-Y en `supabase/functions/generate-document/index.ts`:
-- **No existe** ninguna rama `if (stepNumber === 2)`.
-- Step 2 cae al fallback genérico (línea 2650+) que serializa el JSON crudo a tablas markdown → de ahí las **61 páginas, mezcla EN/ES, "retail", FAILED CHUNKS visibles, naming incorrecto**.
-- Aunque añadiéramos `_clean_brief_md`, el generador actual **no lo lee** porque recibe el `output_data` completo y lo mete entero en el fallback.
+Que cualquier proyecto con Step 2 crudo pueda repararse sin quedarse bloqueado:
 
-## Plan global — 4 ejes
+1. `Limpiar y normalizar` debe generar y persistir `_clean_brief_md` sí o sí, o mostrar un error real accionable.
+2. El PDF no debe quedar bloqueado para siempre por faltar `_clean_brief_md`; debe poder generar el Brief Limpio al vuelo.
+3. `Aprobar briefing` debe aprobar la última versión real de Step 2 y desbloquear/generar PRD correctamente.
+4. El sistema debe corregir estados incoherentes (`current_step=3` sin Step 2 aprobado / sin Step 3).
+5. Las correcciones serán globales, no específicas de AFFLUX.
 
-### 1. Generador PDF: priorizar `_clean_brief_md` para Step 2 (global)
+## Cambios propuestos
 
-`supabase/functions/generate-document/index.ts` — añadir rama dedicada antes del fallback genérico (~línea 2649):
+### 1. Backend: convertir normalización en operación robusta y persistente
 
-```ts
-// ── Step 2: Brief Limpio renderer (global, todos los proyectos) ──
-if (stepNumber === 2 && typeof processedContent === "object" && processedContent !== null) {
-  const cleanMd = processedContent._clean_brief_md;
-  if (typeof cleanMd === "string" && cleanMd.trim().length > 200) {
-    // Render directo del Brief Limpio normalizado
-    htmlContent = markdownToHtml(cleanMd);
-  } else {
-    // Fallback degradado: aviso + resumen mínimo (NO volcar el JSON crudo)
-    htmlContent = markdownToHtml(buildMinimalBriefFallback(processedContent));
-  }
-}
+En `supabase/functions/project-wizard-step/index.ts`:
+
+- Reforzar `normalize_brief` para que:
+  - Acepte `projectId` tanto en `body.projectId` como en `stepData.projectId`.
+  - Lea siempre la última versión Step 2.
+  - Si hay chunks fallidos, no falle silenciosamente: los registra en `_normalization_log.pending_failed_chunks` y aun así genera un brief limpio provisional sin volcar debug.
+  - Inserte una nueva versión `step_number=2`, `status=review`, con `_clean_brief_md`, `_clean_brief_sections` y `_normalization_log`.
+  - Devuelva `success: true`, `version`, `clean_brief_length`, `normalization_changes`.
+
+- Añadir logs explícitos:
+  - `[normalize_brief] start`
+  - `[normalize_brief] loaded step2 vX`
+  - `[normalize_brief] saved step2 vY clean_len=...`
+  - `[normalize_brief] error ...`
+
+Esto permitirá saber si el botón realmente ejecutó o dónde falla.
+
+### 2. Backend: acción única de reparación del Step 2
+
+Añadir una acción global nueva en `project-wizard-step`:
+
+`action: "repair_step2_brief"`
+
+Flujo:
+
+```text
+latest Step 2
+  -> si hay failed chunks e inputContent disponible: retry_failed_chunks
+  -> normalize_brief
+  -> buildCleanBrief
+  -> guardar nueva versión review
+  -> devolver briefing limpio
 ```
 
-Donde `buildMinimalBriefFallback` extrae solo los 4-5 campos presentables (resumen, naming, top necesidades) y añade un banner: *"Brief no normalizado todavía. Pulsa 'Limpiar y normalizar' antes de exportar."* Así **nunca** se exporta JSON crudo de 61 páginas.
+Uso:
 
-### 2. Auto-ejecución del pipeline limpio en `useProjectWizard`
+- El botón `Limpiar y normalizar` llamará a esta acción, no solo a `normalize_brief`.
+- El botón PDF podrá llamar a esta acción si falta `_clean_brief_md`.
+- Será global para proyectos antiguos o estados intermedios.
 
-Hoy `retry_failed_chunks` y `normalize_brief` solo se disparan si el usuario pulsa los botones. Cambio global:
+Si el retry falla, la acción no bloquea todo: genera Brief Limpio provisional, sin mostrar `FAILED CHUNKS` en PDF, y marca el pendiente en el log interno.
 
-- Tras cualquier `extract` / `force_full_extract` / `chunked_re_extract` exitoso en Step 2, encadenar automáticamente:
-  1. `retry_failed_chunks` si `_chunked_extraction_meta.failed_chunks_count > 0`
-  2. `normalize_brief` siempre (genera `_clean_brief_md`, corrige naming, dedup, EN→ES, sectorial, compliance)
-- Persistir el resultado final como **una sola versión nueva** (no dos), para evitar que el usuario apruebe una versión "sucia".
-- Mostrar un toast informativo: *"Brief extraído, normalizado y limpio generado"*.
+### 3. Frontend: botón `Limpiar y normalizar` con estado propio y actualización inmediata
 
-Los botones manuales se mantienen como fallback para reejecutar cualquier paso.
+En `src/hooks/useProjectWizard.ts`:
 
-### 3. Endurecer `normalize_brief` para que el naming siempre quede bien
+- Separar `normalizing` de `generating`, para que la UI no parezca que “no hace nada”.
+- `normalizeBrief()` pasará a llamar a `repair_step2_brief`.
+- Tras respuesta exitosa:
+  - actualizar `steps` localmente con el `briefing` devuelto;
+  - llamar a `loadProject()`;
+  - mostrar toast claro: `Brief Limpio generado. PDF y aprobación desbloqueados.`
+- Si falla, mostrar el mensaje real del backend, no un error genérico.
 
-En `brief-normalizer.ts` → `applyNamingSplit`:
+En `src/components/projects/wizard/ProjectWizardStep2.tsx`:
 
-- Si `client_company_name` es claramente un **nombre de persona** (2 palabras tipo "Nombre Apellido", sin S.L./S.A./Inc/Corp), promoverlo a `founder_or_decision_maker` y dejar `client_company_name` con el `companyName` del contexto (que viene de `business_projects.company`) o marcar `[POR CONFIRMAR]`.
-- Si `proposed_product_name` está vacío y existe `business_model_summary.title` con un nombre propio único, proponerlo.
-- Registrar todos los cambios en `_normalization_log.changes` con `type: "naming_split"`.
+- Añadir estado visual en el botón:
+  - `Limpiando...`
+  - spinner
+  - disabled solo mientras está ejecutando.
+- Mostrar una caja de estado:
+  - `Brief crudo pendiente de normalizar`
+  - `Brief Limpio listo`
+  - `Hay chunks pendientes, se generará versión limpia provisional`
 
-Esto ya estaba parcialmente, pero no se está activando porque `normalize_brief` nunca corrió. Verifico además que el heurístico cubra el caso "Alejandro Gordo".
+### 4. PDF: auto-reparar antes de exportar si falta el Brief Limpio
 
-### 4. Botón "Descargar PDF" en Step 2: bloqueo + auto-trigger
+En `ProjectDocumentDownload` o en Step 2:
 
-En `ProjectWizardStep2.tsx` y/o `ProjectDocumentDownload`:
+- Para `stepNumber === 2`, si falta `_clean_brief_md`, el botón no debe quedarse muerto.
+- Cambiar de `PDF (genera primero)` deshabilitado a:
+  - `Generar Brief Limpio y PDF`
+- Al hacer clic:
+  - llamar a `repair_step2_brief`;
+  - actualizar contenido local;
+  - invocar `generate-document` con el Step 2 ya limpio.
 
-- Si `briefing._clean_brief_md` no existe, **deshabilitar** el botón de descarga y mostrar tooltip: *"Genera primero el Brief Limpio (Limpiar y normalizar)"*.
-- Alternativa más amable: el botón ofrece *"Generar Brief Limpio y descargar"* que dispara `normalize_brief` y luego descarga.
-- El payload enviado a `generate-document` para Step 2 sigue siendo el `output_data` completo (el generador ya sabe leer `_clean_brief_md`); **no enviamos el markdown desde el cliente** para que el PDF siempre refleje la última versión persistida.
+En `supabase/functions/generate-document/index.ts`:
 
-## Maquetación PDF (afecta global, ya parcialmente cubierto)
+- Mantener la rama Step 2 que prioriza `_clean_brief_md`.
+- Si no existe, usar fallback mínimo de 1-2 páginas, nunca JSON crudo ni tablas enormes.
+- El PDF final debe salir en castellano, corto, con estructura de Brief Limpio.
 
-El CSS actual ya usa Montserrat/Raleway, A4, márgenes 22/18/25/22mm, headers/footers ManIAS. Para el Brief Limpio (~3-5 páginas) **no hace falta** landscape ni tablas anchas — el `_clean_brief_md` está pensado como prosa con bullets y subtítulos H2 simples. Por tanto:
+### 5. Aprobación Step 2 y avance a PRD: corregir incoherencias
 
-- **No** introduzco named pages landscape para Step 2 (sería matar moscas a cañonazos).
-- Mantengo CSS actual.
-- Si en el futuro otro step necesitase landscape, lo añadimos aislado con `@page wide`.
+En `useProjectWizard.ts` / `approveStep`:
+
+- Antes de aprobar Step 2:
+  - si falta `_clean_brief_md`, ejecutar `repair_step2_brief` automáticamente;
+  - aprobar la versión limpia recién creada, no la versión cruda anterior.
+- Corregir el estado local para que no ocurra `current_step=3` sin Step 2 aprobado.
+- Después de aprobar Step 2:
+  - navegar a Step 3;
+  - lanzar `runChainedPRD` si auto-chain está activado;
+  - si auto-chain está apagado, dejar visible el botón `Generar PRD Técnico`.
+
+En `project-wizard-step` acción `approve_step`:
+
+- Evitar `.update(...).order(...).limit(1)` como patrón ambiguo.
+- Buscar explícitamente el `id` de la última versión del step y actualizar por `id`.
+- Para Step 2, si hay varias versiones, aprobar solo la última.
+
+### 6. Reparación de datos del proyecto actual AFFLUX
+
+Una vez aprobado el plan y ya en modo edición:
+
+- Ejecutar la reparación sobre AFFLUX usando el mismo flujo global (`repair_step2_brief`).
+- Corregir `business_projects.current_step` si sigue incoherente.
+- No hardcodear AFFLUX en el código. Solo usar AFFLUX como caso de saneamiento puntual tras desplegar la lógica global.
+
+### 7. Warning React de `ProjectDocumentDownload`
+
+El warning actual indica que `ProjectDocumentDownload` recibe refs desde un wrapper tipo Radix/Tooltip/Collapsible.
+
+- Convertir `ProjectDocumentDownload` a `React.forwardRef<HTMLButtonElement, Props>`.
+- Pasar el ref al `<Button>` interno.
+
+No parece la causa principal del bloqueo, pero limpia ruido y evita fallos de interacción con componentes `asChild`.
+
+### 8. Cache-bust de preview
+
+Actualizar `src/main.tsx` con nuevo `// cache-bust: ...` para forzar que la preview cargue el bundle nuevo inmediatamente.
 
 ## Criterios de aceptación
 
-Tras este cambio, en **cualquier** proyecto:
-
-- [ ] Después de extraer Step 2, el sistema deja `_clean_brief_md` poblado automáticamente.
-- [ ] `_normalization_log.changes` muestra cambios de naming, dedup, idioma, sectorial.
-- [ ] El PDF de Step 2 tiene **3-7 páginas** (no 61), sin "FAILED CHUNKS", sin "retail", sin mezcla EN/ES, con naming correcto.
-- [ ] Si el usuario intenta descargar sin `_clean_brief_md`, el sistema o lo bloquea o lo genera al vuelo.
-- [ ] AFFLUX, al volver a extraer (o al pulsar "Limpiar y normalizar" sobre v3 actual), produce un PDF limpio con `client_company_name = "AFFLUX"` (o la empresa real del proyecto), `founder = "Alejandro Gordo"`.
-
-## Archivos a modificar
-
-1. `supabase/functions/generate-document/index.ts` — rama Step 2 + helper `buildMinimalBriefFallback`.
-2. `supabase/functions/project-wizard-step/brief-normalizer.ts` — endurecer `applyNamingSplit`.
-3. `src/hooks/useProjectWizard.ts` — encadenar auto-normalize tras extract.
-4. `src/components/projects/wizard/ProjectWizardStep2.tsx` — bloqueo/auto-trigger del botón download.
-5. `src/main.tsx` — bump cache-bust.
-
-## Lo que **no** hago
-
-- No toco F2/F3/F4/F5 (fuera de alcance).
-- No introduzco landscape PDF (innecesario para markdown limpio).
-- No re-extraigo automáticamente proyectos viejos: el usuario los normaliza con el botón ya existente o re-extrayendo.
+- Al pulsar `Limpiar y normalizar`, aparece spinner/estado y se guarda una nueva versión Step 2 con `_clean_brief_md`.
+- El botón PDF deja de estar muerto: si falta limpieza, la genera y luego exporta.
+- PDF Step 2: 3-7 páginas, en castellano, sin `FAILED CHUNKS`, sin JSON crudo, sin tablas gigantes.
+- `Aprobar briefing` no aprueba la versión cruda si falta Brief Limpio; primero repara y luego aprueba.
+- Tras aprobar Step 2, se puede generar PRD y avanzar hacia MVP.
+- El estado `current_step` queda coherente con los steps aprobados/generados.
+- La solución aplica a todos los proyectos, no solo a AFFLUX.

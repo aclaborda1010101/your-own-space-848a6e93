@@ -21,11 +21,12 @@ interface Props {
   inputContent: string;
   briefing: any;
   generating: boolean;
+  normalizing?: boolean;
   onExtract: () => void;
   onForceFullExtract?: () => void;
   onChunkedReExtract?: () => void;
   onRetryFailedChunks?: () => void;
-  onNormalizeBrief?: () => void;
+  onNormalizeBrief?: () => Promise<{ success: boolean; cleanLength: number; version: number } | null> | void;
   onApprove: (editedBriefing: any) => void;
   projectId?: string;
   projectName?: string;
@@ -162,7 +163,7 @@ const BriefItemList = ({ items, colorScheme, showComponentType }: {
   );
 };
 
-export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtract, onForceFullExtract, onChunkedReExtract, onRetryFailedChunks, onNormalizeBrief, onApprove, projectId, projectName, company, version = 1 }: Props) => {
+export const ProjectWizardStep2 = ({ inputContent, briefing, generating, normalizing = false, onExtract, onForceFullExtract, onChunkedReExtract, onRetryFailedChunks, onNormalizeBrief, onApprove, projectId, projectName, company, version = 1 }: Props) => {
   const [editedBriefing, setEditedBriefing] = useState<any>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
@@ -397,51 +398,81 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
           <h2 className="text-lg font-bold text-foreground">Briefing Extraído</h2>
           <p className="text-sm text-muted-foreground mt-0.5">Haz clic en cualquier campo para editarlo.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-start">
           <Button variant="outline" size="sm" onClick={() => setShowOriginal(!showOriginal)} className="gap-1.5">
             <Eye className="w-3.5 h-3.5" /> {showOriginal ? "Ocultar" : "Ver"} original
           </Button>
-          <Button variant="outline" size="sm" onClick={onExtract} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={onExtract} className="gap-1.5" disabled={generating || normalizing}>
             <RefreshCw className="w-3.5 h-3.5" /> Regenerar
           </Button>
           {onNormalizeBrief && editedBriefing?.business_extraction_v2 && (
             <Button
               variant="outline"
               size="sm"
-              onClick={onNormalizeBrief}
-              disabled={generating}
+              onClick={() => onNormalizeBrief()}
+              disabled={generating || normalizing}
               className="gap-1.5 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10"
-              title="Aplica deduplicación, traducción a español, corrección de naming/sector y compliance"
+              title="Recupera bloques fallidos, deduplica, traduce y genera el Brief Limpio listo para PDF"
             >
-              <Sparkles className="w-3.5 h-3.5" /> Limpiar y normalizar
+              {normalizing ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+              {normalizing ? "Limpiando…" : "Limpiar y normalizar"}
             </Button>
           )}
           {projectId && editedBriefing && (() => {
             const hasCleanBrief = typeof editedBriefing._clean_brief_md === "string"
               && editedBriefing._clean_brief_md.trim().length > 200;
+
+            const handleAutoPdf = async () => {
+              if (!onNormalizeBrief) return;
+              const result = await Promise.resolve(onNormalizeBrief());
+              if (!result || (result as any).success !== true) return;
+              await new Promise((r) => setTimeout(r, 400));
+            };
+
             return (
               <div className="flex flex-col items-end gap-1">
-                <ProjectDocumentDownload
-                  projectId={projectId}
-                  stepNumber={2}
-                  content={editedBriefing}
-                  contentType="json"
-                  projectName={projectName || ""}
-                  company={company}
-                  version={version}
-                  size="sm"
-                  disabled={!hasCleanBrief}
-                  label={hasCleanBrief ? "PDF Brief Limpio" : "PDF (genera primero)"}
-                />
-                {!hasCleanBrief && (
-                  <span className="text-[10px] text-muted-foreground">
-                    Pulsa "Limpiar y normalizar" antes de exportar
-                  </span>
+                {hasCleanBrief ? (
+                  <ProjectDocumentDownload
+                    projectId={projectId}
+                    stepNumber={2}
+                    content={editedBriefing}
+                    contentType="json"
+                    projectName={projectName || ""}
+                    company={company}
+                    version={version}
+                    size="sm"
+                    label="PDF Brief Limpio"
+                  />
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAutoPdf}
+                    disabled={normalizing || generating || !onNormalizeBrief}
+                    className="gap-1.5"
+                    title="Genera el Brief Limpio y luego puedes descargar el PDF"
+                  >
+                    {normalizing ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5" />
+                    )}
+                    {normalizing ? "Generando…" : "Generar Brief Limpio para PDF"}
+                  </Button>
                 )}
+                <span className="text-[10px] text-muted-foreground">
+                  {hasCleanBrief
+                    ? "Brief Limpio listo para exportar"
+                    : "Aún sin Brief Limpio. Pulsa para generarlo."}
+                </span>
               </div>
             );
           })()}
-          <Button size="sm" onClick={handleApprove} className="gap-1.5 shadow-sm">
+          <Button size="sm" onClick={handleApprove} className="gap-1.5 shadow-sm" disabled={normalizing}>
             <Check className="w-3.5 h-3.5" /> Aprobar briefing
           </Button>
         </div>

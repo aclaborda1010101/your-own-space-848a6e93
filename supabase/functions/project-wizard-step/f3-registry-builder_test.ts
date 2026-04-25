@@ -334,3 +334,115 @@ Deno.test("F3: profiling fuerza human_review mínimo recommended", () => {
   const out = applyHumanReviewRules(item);
   assert(["recommended", "mandatory", "mandatory_with_veto"].includes(out.human_review));
 });
+
+// ── F3 hardening: injectGovernanceIfMissing ──────────────────────────
+
+import { injectGovernanceIfMissing } from "./f3-registry-builder.ts";
+import type { ComponentRegistry } from "../_shared/component-registry-contract.ts";
+
+function makeRegistryFixture(opts: {
+  dpiaRequired: boolean;
+  hasGovernance?: boolean;
+}): ComponentRegistry {
+  const components: ComponentRegistryItem[] = [];
+  if (opts.hasGovernance) {
+    components.push({
+      component_id: "COMP-G01",
+      name: "Existing governance",
+      description: "Already-present governance module",
+      family: "compliance_module",
+      layer: "G_governance",
+      status: "candidate_validated",
+      phase: "F3_registry_builder",
+      priority: "P1_high",
+      business_job: "manage compliance",
+      business_justification: "needed",
+      evidence_type: "compliance_required",
+      evidence_strength: "high",
+      source_quotes: [],
+      soul_dependency: "none",
+      human_review: "mandatory",
+      compliance_flags: ["personal_data_processing"],
+      dpia_required: true,
+      build_complexity: "medium",
+      business_impact: "high",
+      mutation_history: [],
+    });
+  }
+  return {
+    registry_version: "1.0.0",
+    client_company_name: "Test",
+    components,
+    dpia: opts.dpiaRequired
+      ? {
+          required: true,
+          trigger_flags: ["personal_data_processing", "profiling"],
+          status: "not_started",
+          reason: "test",
+        }
+      : {
+          required: false,
+          trigger_flags: [],
+          status: "not_required",
+          reason: "test",
+        },
+    updated_at: new Date().toISOString(),
+  } as ComponentRegistry;
+}
+
+Deno.test("F3 hardening: injectGovernanceIfMissing inyecta cuando DPIA required y no hay governance", () => {
+  const reg = makeRegistryFixture({ dpiaRequired: true });
+  const counters: Record<string, number> = {};
+  const res = injectGovernanceIfMissing(reg, counters);
+  assertEquals(res.injected, true);
+  assert(res.warning?.code === "F3_GOVERNANCE_AUTO_INJECTED");
+  const govComponents = res.registry.components.filter(
+    (c) => c.family === "compliance_module" || c.layer === "G_governance",
+  );
+  assertEquals(govComponents.length, 1);
+  const gov = govComponents[0];
+  assertEquals(gov.name, "Gobernanza RGPD y DPIA");
+  assertEquals(gov.layer, "G_governance");
+  assertEquals(gov.family, "compliance_module");
+  assertEquals(gov.dpia_required, true);
+  assertEquals(gov.human_review, "mandatory");
+  assert(gov.component_id.startsWith("COMP-G"));
+  // mutation_history presente
+  assert(gov.mutation_history.length > 0, "Debe tener mutation_history");
+  assertEquals(gov.mutation_history[0].action, "created");
+  // status NUNCA approved_for_scope
+  assert(gov.status !== "approved_for_scope" as any, "status no debe ser approved_for_scope");
+  assertEquals(gov.status, "candidate_validated");
+});
+
+Deno.test("F3 hardening: injectGovernanceIfMissing NO duplica si ya existe governance", () => {
+  const reg = makeRegistryFixture({ dpiaRequired: true, hasGovernance: true });
+  const counters: Record<string, number> = {};
+  const res = injectGovernanceIfMissing(reg, counters);
+  assertEquals(res.injected, false);
+  assertEquals(res.warning, undefined);
+  const govComponents = res.registry.components.filter(
+    (c) => c.family === "compliance_module" || c.layer === "G_governance",
+  );
+  assertEquals(govComponents.length, 1, "No debe duplicar governance existente");
+});
+
+Deno.test("F3 hardening: injectGovernanceIfMissing NO inyecta si DPIA no requerida", () => {
+  const reg = makeRegistryFixture({ dpiaRequired: false });
+  const counters: Record<string, number> = {};
+  const res = injectGovernanceIfMissing(reg, counters);
+  assertEquals(res.injected, false);
+  const govComponents = res.registry.components.filter(
+    (c) => c.family === "compliance_module" || c.layer === "G_governance",
+  );
+  assertEquals(govComponents.length, 0);
+});
+
+Deno.test("F3 hardening: injectGovernanceIfMissing usa trigger_flags de DPIA como compliance_flags", () => {
+  const reg = makeRegistryFixture({ dpiaRequired: true });
+  const counters: Record<string, number> = {};
+  const res = injectGovernanceIfMissing(reg, counters);
+  const gov = res.registry.components.find((c) => c.layer === "G_governance")!;
+  assert(gov.compliance_flags?.includes("personal_data_processing"));
+  assert(gov.compliance_flags?.includes("profiling"));
+});

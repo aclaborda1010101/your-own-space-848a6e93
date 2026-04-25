@@ -295,6 +295,97 @@ export function applyDpiaRules(registry: ComponentRegistry): ComponentRegistry {
 }
 
 /**
+ * Si registry.dpia.required === true Y NO existe ningún componente con
+ * family="compliance_module" o layer="G_governance", inyecta automáticamente
+ * un componente "Gobernanza RGPD y DPIA" para que el registry no quede
+ * sin gobernanza explícita.
+ *
+ * Reglas:
+ *   - status="candidate_validated" (NUNCA "approved_for_scope").
+ *   - mutation_history con la razón de auto-inyección.
+ *   - dpia_required=true.
+ *   - human_review="mandatory".
+ *   - compliance_flags = registry.dpia.trigger_flags (o personal_data_processing por defecto).
+ */
+export function injectGovernanceIfMissing(
+  registry: ComponentRegistry,
+  counters: Record<string, number>,
+): { registry: ComponentRegistry; injected: boolean; warning?: F3BuildWarning } {
+  if (!registry.dpia?.required) return { registry, injected: false };
+
+  const hasGovernance = registry.components.some(
+    (c) => c.family === "compliance_module" || c.layer === "G_governance",
+  );
+  if (hasGovernance) return { registry, injected: false };
+
+  const componentId = assignComponentId("G_governance", counters);
+  const triggerFlags = (registry.dpia?.trigger_flags && registry.dpia.trigger_flags.length > 0)
+    ? registry.dpia.trigger_flags
+    : (["personal_data_processing"] as ComplianceFlag[]);
+
+  const baseItem: ComponentRegistryItem = {
+    component_id: componentId,
+    name: "Gobernanza RGPD y DPIA",
+    description: "Módulo de gobernanza que gestiona DPIA, base legal, retención de datos y human-in-the-loop para el sistema.",
+    family: "compliance_module",
+    layer: "G_governance",
+    status: "candidate_validated",
+    phase: "F3_registry_builder",
+    priority: "P0_critical",
+    business_job: "Gestionar DPIA, base legal, retención de datos y human-in-the-loop para el sistema.",
+    business_justification: "El proyecto procesa datos personales, profiling o priorización comercial, por lo que requiere gobernanza explícita.",
+    evidence_type: "compliance_required",
+    evidence_strength: "high",
+    source_quotes: [],
+    business_catalysts_covered: undefined,
+    data_assets_activated: undefined,
+    economic_pains_addressed: undefined,
+    input_data: undefined,
+    output_data: undefined,
+    required_rags: undefined,
+    required_agents: undefined,
+    required_forms: undefined,
+    external_sources: undefined,
+    moe_route: undefined,
+    soul_dependency: "none",
+    human_review: "mandatory",
+    prerequisites: undefined,
+    dataset_requirements: undefined,
+    success_metric: undefined,
+    acceptance_criteria: undefined,
+    compliance_flags: triggerFlags,
+    dpia_required: true,
+    build_complexity: "medium",
+    business_impact: "high",
+    cost_estimate: undefined,
+    mutation_history: [],
+  };
+
+  const withMutation = appendMutation(baseItem, {
+    phase: "F3_registry_builder",
+    action: "created",
+    reason: "Auto-injected because registry.dpia.required=true and no governance component existed.",
+    new_status: baseItem.status,
+  });
+
+  const newRegistry: ComponentRegistry = {
+    ...registry,
+    components: [...registry.components, withMutation],
+  };
+
+  return {
+    registry: newRegistry,
+    injected: true,
+    warning: {
+      code: "F3_GOVERNANCE_AUTO_INJECTED",
+      severity: "info",
+      message: `Componente de gobernanza auto-inyectado (${componentId}) porque registry.dpia.required=true y no existía componente compliance_module/G_governance.`,
+      component_id: componentId,
+    },
+  };
+}
+
+/**
  * Deduplica oportunidades por:
  *   - misma `recommended_component_family`
  *   - jaccard(name_tokens) >= 0.6  ó  contención de nombre normalizado
@@ -540,6 +631,12 @@ export function buildRegistryFromDesign(
 
   // 7. DPIA rules (recorre items, popula item.dpia_required y registry.dpia).
   registry = applyDpiaRules(registry);
+
+  // 7.b Auto-inyectar componente de gobernanza si DPIA es required y no existe
+  // ningún compliance_module / G_governance todavía.
+  const govRes = injectGovernanceIfMissing(registry, counters);
+  registry = govRes.registry;
+  if (govRes.warning) warnings.push(govRes.warning);
 
   // 8. updated_at
   registry.updated_at = new Date().toISOString();

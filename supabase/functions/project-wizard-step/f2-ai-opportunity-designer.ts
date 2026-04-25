@@ -237,6 +237,109 @@ function clampNumber(v: unknown, min: number, max: number, fallback: number): nu
   return Math.min(max, Math.max(min, n));
 }
 
+// ── Hardening: name derivation + confidence normalization ────────────
+
+const FAMILY_NAME_FALLBACK: Partial<Record<ComponentFamily, string>> = {
+  rag: "RAG funcional",
+  agent: "Agente especialista",
+  data_pipeline: "Pipeline de datos",
+  matching_engine: "Motor de matching",
+  prediction_engine: "Motor predictivo",
+  scoring_engine: "Motor de scoring",
+  deterministic_engine: "Motor determinista",
+  pattern_module: "Módulo de patrones",
+  soul_module: "Soul del fundador",
+  compliance_module: "Gobernanza y compliance",
+  orchestrator: "Orquestador",
+  workflow: "Workflow operativo",
+  dashboard: "Dashboard analítico",
+  form: "Formulario funcional",
+  integration: "Integración externa",
+  non_ai_crud: "Componente CRUD",
+};
+
+function firstShortSentence(s: unknown, maxWords = 10, maxChars = 90): string {
+  if (typeof s !== "string") return "";
+  const cleaned = s.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  // Cortar en signo de puntuación fuerte para quedarnos con la primera frase.
+  const cut = cleaned.split(/[.!?:;]/)[0]?.trim() ?? cleaned;
+  const words = cut.split(/\s+/).slice(0, maxWords).join(" ");
+  return truncate(words, maxChars).replace(/[…]+$/, "").trim();
+}
+
+/**
+ * Deriva un nombre humano para una oportunidad cuando el LLM NO lo emitió.
+ *
+ * Orden de preferencia:
+ *   1. raw.name (si no vacío y no parece COMP-XXX)
+ *   2. raw.signal_name | raw.item | raw.title
+ *   3. Primera frase corta de raw.business_job
+ *   4. Primera frase corta de raw.description
+ *   5. Fallback por family
+ *   6. `Oportunidad N`
+ *
+ * Reglas:
+ *   - máx 10 palabras / 90 chars
+ *   - sin saltos de línea
+ *   - nunca string vacío
+ *   - nunca prefijo COMP-XXX
+ */
+export function deriveOpportunityName(raw: any, index: number): string {
+  const tryClean = (s: unknown): string => {
+    if (typeof s !== "string") return "";
+    const t = s.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+    if (!t) return "";
+    if (/^COMP-/i.test(t)) return "";
+    const words = t.split(/\s+/).slice(0, 10).join(" ");
+    return truncate(words, 90).replace(/[…]+$/, "").trim();
+  };
+
+  const candidates = [
+    tryClean(raw?.name),
+    tryClean(raw?.signal_name),
+    tryClean(raw?.item),
+    tryClean(raw?.title),
+    firstShortSentence(raw?.business_job),
+    firstShortSentence(raw?.description),
+  ];
+  for (const c of candidates) {
+    if (c && c.length > 0) return c;
+  }
+
+  const fam = typeof raw?.recommended_component_family === "string"
+    ? raw.recommended_component_family as ComponentFamily
+    : undefined;
+  if (fam && FAMILY_NAME_FALLBACK[fam]) return FAMILY_NAME_FALLBACK[fam]!;
+
+  return `Oportunidad ${index + 1}`;
+}
+
+/**
+ * Normaliza confidence a number [0..1] usando evidence_strength como ancla
+ * cuando el LLM no lo emite o lo emite como string inválido.
+ */
+export function normalizeConfidence(rawConfidence: unknown, evidenceStrength?: string): number {
+  // 1. Number directo válido
+  if (typeof rawConfidence === "number" && Number.isFinite(rawConfidence)) {
+    return Math.min(1, Math.max(0, rawConfidence));
+  }
+  // 2. String parseable
+  if (typeof rawConfidence === "string" && rawConfidence.trim().length > 0) {
+    const parsed = Number(rawConfidence);
+    if (Number.isFinite(parsed)) {
+      return Math.min(1, Math.max(0, parsed));
+    }
+  }
+  // 3. Anclado por evidence_strength
+  switch (evidenceStrength) {
+    case "high": return 0.85;
+    case "medium": return 0.65;
+    case "low": return 0.4;
+    default: return 0.6;
+  }
+}
+
 function clampStringArray(arr: unknown, max: number, charLimit = 200): string[] {
   return asArray<unknown>(arr)
     .map((x) => (typeof x === "string" ? x : ""))
@@ -266,7 +369,7 @@ function clampComplianceFlags(arr: unknown): ComplianceFlag[] {
     .slice(0, COMPLIANCE_FLAGS.length);
 }
 
-function clampCandidate(raw: any, idx: number): OpportunityCandidate {
+function clampCandidate(raw: any, idx: number): { candidate: OpportunityCandidate; nameDerived: boolean } {
   const family = pickEnum<ComponentFamily>(raw?.recommended_component_family, FAMILY_VALUES, "non_ai_crud");
   const layer = pickEnum<RegistryLayer>(raw?.recommended_layer, LAYER_VALUES, "B_action");
 
@@ -276,18 +379,28 @@ function clampCandidate(raw: any, idx: number): OpportunityCandidate {
     ? rawId.toUpperCase()
     : `OPP-${String(idx + 1).padStart(3, "0")}`;
 
-  return {
+  // Detectar si el LLM emitió un name válido o si toca derivarlo.
+  const llmRawName = typeof raw?.name === "string" ? raw.name.trim() : "";
+  const llmHasValidName = llmRawName.length > 0 && !/^COMP-/i.test(llmRawName);
+  const finalName = llmHasValidName
+    ? truncate(llmRawName.replace(/[\r\n]+/g, " ").replace(/\s+/g, " "), LIMITS.name_chars)
+    : deriveOpportunityName(raw, idx);
+  const nameDerived = !llmHasValidName;
+
+  const evidenceStrength = pickEnum<"low" | "medium" | "high">(
+    raw?.evidence_strength,
+    new Set(["low", "medium", "high"] as const),
+    "medium",
+  );
+
+  const candidate: OpportunityCandidate = {
     opportunity_id: safeId,
-    name: truncate(raw?.name ?? "", LIMITS.name_chars),
+    name: finalName,
     description: truncate(raw?.description ?? "", LIMITS.description_chars),
 
     origin: pickEnum<OpportunityOrigin>(raw?.origin, ORIGIN_VALUES, "inferred_need"),
 
-    evidence_strength: pickEnum<"low" | "medium" | "high">(
-      raw?.evidence_strength,
-      new Set(["low", "medium", "high"] as const),
-      "medium",
-    ),
+    evidence_strength: evidenceStrength,
     source_quotes: clampSourceQuotes(raw?.source_quotes),
 
     recommended_component_family: family,
@@ -386,8 +499,10 @@ function clampCandidate(raw: any, idx: number): OpportunityCandidate {
     build_complexity: pickEnum<OpportunityComplexity>(raw?.build_complexity, COMPLEXITY_VALUES, "medium"),
     business_impact: pickEnum<OpportunityImpact>(raw?.business_impact, IMPACT_VALUES, "medium"),
 
-    confidence: clampNumber(raw?.confidence, 0, 1, 0.5),
+    confidence: normalizeConfidence(raw?.confidence, evidenceStrength),
   };
+
+  return { candidate, nameDerived };
 }
 
 // ── API pública ──────────────────────────────────────────────────────
@@ -429,9 +544,10 @@ export function clampOpportunityDesign(raw: any): AiOpportunityDesignV1 {
   const sliced = rawCandidates.slice(0, LIMITS.opportunities);
   const candidates: OpportunityCandidate[] = [];
   const usedIds = new Set<string>();
+  const derivedNameWarnings: Array<{ code: string; message: string; severity: "info" | "warning" | "error"; opportunity_id?: string }> = [];
 
   for (let i = 0; i < sliced.length; i++) {
-    const c = clampCandidate(sliced[i], i);
+    const { candidate: c, nameDerived } = clampCandidate(sliced[i], i);
     // Dedup IDs
     let id = c.opportunity_id;
     if (usedIds.has(id)) {
@@ -445,10 +561,19 @@ export function clampOpportunityDesign(raw: any): AiOpportunityDesignV1 {
     delete cleaned.component_id;
     delete cleaned.components;
     candidates.push(cleaned);
+
+    if (nameDerived) {
+      derivedNameWarnings.push({
+        code: "F2_NAME_DERIVED",
+        severity: "warning",
+        message: `Opportunity name was missing and was derived from description/business_job/family fallback.`,
+        opportunity_id: id,
+      });
+    }
   }
 
   const coverage = (raw?.coverage_analysis && typeof raw.coverage_analysis === "object") ? raw.coverage_analysis : {};
-  const warnings = asArray<any>(raw?.warnings)
+  const llmWarnings = asArray<any>(raw?.warnings)
     .slice(0, LIMITS.warnings)
     .map((w) => ({
       code: truncate(w?.code ?? "WARNING", 80),
@@ -460,6 +585,7 @@ export function clampOpportunityDesign(raw: any): AiOpportunityDesignV1 {
       ),
     }))
     .filter((w) => w.message.length > 0);
+  const warnings = [...llmWarnings, ...derivedNameWarnings].slice(0, LIMITS.warnings);
 
   return {
     version: "1.0.0",
@@ -578,6 +704,19 @@ REGLAS DURAS — INVIOLABLES:
 6. Si detectas una oportunidad que el cliente NO pidió pero claramente aporta valor, márcala con origin="unrequested_ai_insight".
 7. Si una oportunidad procesa datos personales, hace profiling, prioriza comercialmente personas físicas, o enriquece con fuentes externas, añade los compliance_flags correspondientes y human_review mínimo "recommended".
 8. NO generes SQL, NO generes PRD, NO generes prompts de otros agentes.
+9. CADA opportunity_candidate DEBE tener un campo "name" no vacío. El "name" es OBLIGATORIO. Reglas:
+   - máximo 10 palabras y 90 caracteres;
+   - corto, humano y vendible (estilo título de feature);
+   - distinto de "description";
+   - sin saltos de línea;
+   - PROHIBIDO usar prefijo COMP-XXX como name.
+   Ejemplos buenos: "Pipeline de transcripción de llamadas", "RAG de conversaciones con propietarios",
+   "Catalogador de roles de propietario", "Detector de fallecimientos y herencias",
+   "Matching activo-inversor", "Detector de compradores institucionales",
+   "Generador de revista emocional", "Soul de Alejandro", "Gobernanza RGPD y DPIA".
+   Si emites un opportunity_candidate sin "name", el output se considera inválido.
+10. "confidence" DEBE ser un número entre 0 y 1 (no un string). Calíbralo según evidence_strength:
+   high≈0.8-0.95 · medium≈0.55-0.75 · low≈0.3-0.5. NO emitas todos iguales.
 
 CATEGORÍAS A CUBRIR (no todas son obligatorias en cada caso, depende del brief):
 A. RAGs funcionales del producto (no el RAG interno del proyecto): RAG de llamadas, propietarios, compradores, documentación legal, Soul.
@@ -589,6 +728,67 @@ F. Fuentes externas (BOE, BORME, esquelas, ayuntamientos, APIs sectoriales).
 G. MoE / routing.
 H. Soul (módulos que dependen del criterio del fundador/CEO).
 I. Compliance / governance (DPIA, legal basis, human-in-the-loop, retención).
+
+CHECKLIST DE CONVERSIÓN SEÑAL → OPORTUNIDAD (CRÍTICO):
+Detecta señales en business_extraction_v2 + _f0_signals y, cuando aparezcan, emite OPORTUNIDADES SEPARADAS (no las mezcles):
+
+- Llamadas grabadas / centralita / audio / Whisper / volumen alto de llamadas
+  → "Pipeline de transcripción de llamadas" (family=data_pipeline, layer=F_integration, suggested_delivery_phase=data_foundation o MVP)
+  Y, si hay también consultas/know-how/conversaciones recurrentes:
+  → "RAG de llamadas y conversaciones" (family=rag, layer=A_knowledge)
+
+- Roles de clientes/propietarios/personas (especialmente "7 roles", segmentación de propietarios, tipos de cliente)
+  → "Catalogador de roles de propietario" (family=agent, layer=B_action, priority=P0_critical o P1_high)
+
+- Notas comerciales / notas de venta / CRM notes / seguimiento post-interacción
+  → "Analizador de notas comerciales" (family=agent, layer=B_action)
+
+- Llamadas comerciales con equipo junior / guiones / objeciones / preparación o seguimiento
+  → "Asistente pre/post llamada" (family=agent o workflow, layer=B_action)
+
+- Fallecimientos / herencias / esquelas / Registro Civil / BOE / eventos vitales
+  → "Detector de fallecimientos y herencias" (family=pattern_module o deterministic_engine, layer=C_intelligence)
+  compliance_flags MÍNIMAS: personal_data_processing, external_data_enrichment, legal_basis_required, human_in_the_loop_required.
+  human_review: mandatory o mandatory_with_veto. NO clasificar como simple agent B_action.
+
+- Catálogo de activos + compradores/inversores/fondos / "saber a quién vender antes de comprar"
+  → "Matching activo-inversor" (family=matching_engine, layer=C_intelligence)
+  dataset_readiness_required=true, sin fórmula, minimum_dataset_needed describiendo histórico de matches/compradores/activos/conversiones.
+  human_review: mandatory si afecta priorización comercial.
+
+- Compradores institucionales / fondos / servicers / "Benatar" / BORME / CNAE / licencias / ayuntamiento
+  → "Detector de compradores institucionales" (family=pattern_module o data_pipeline, layer=C_intelligence o F_integration)
+  suggested_external_sources: incluir BORME, CNAE, licencias, ayuntamiento, noticias, CRM de inversores cuando aparezcan.
+
+- Revista / libro / copy / marketing emocional / puntos de dolor por rol
+  → "Generador de revista emocional por rol" (family=agent, layer=B_action, soul_dependency=consults_soul o requires_soul_approval)
+
+- Founder/CEO con criterio diferencial / know-how / "Soul" / dificultad de seguimiento / capturar criterio
+  → "Soul del fundador" (family=soul_module, layer=D_soul, human_review=recommended o mandatory, priority=P0_critical o P1_high si varios componentes dependen)
+
+- Datos personales / profiling / priorización comercial / enrichment externo / DNI / llamadas / scoring
+  → "Gobernanza RGPD y DPIA" (family=compliance_module, layer=G_governance, origin=compliance_required, priority=P0_critical o P1_high)
+
+REGLA GENERAL DE NO-FUSIÓN (F2):
+NO mezcles oportunidades con jobs distintos. Específicamente:
+- "Pipeline de transcripción" y "RAG de llamadas" son componentes distintos.
+- "Matching activo-inversor" y "Detector de compradores institucionales" son componentes distintos.
+- "Soul" y "Generador de revista emocional" son componentes distintos.
+
+COVERAGE GUARD (OBLIGATORIO):
+Para CADA elemento detectado en:
+- business_catalysts
+- underutilized_data_assets
+- quantified_economic_pains
+- decision_points
+- founder_commitment_signals
+- initial_compliance_flags
+
+debe ocurrir UNA de estas dos cosas:
+(a) está cubierto por al menos una opportunity_candidate (vía business_catalysts_covered / data_assets_activated / economic_pains_addressed o evidencia equivalente);
+(b) aparece en coverage_analysis.*_without_opportunity con una razón clara.
+
+NUNCA dejes señales críticas sin cubrir silenciosamente.
 
 ENUMS PERMITIDAS (úsalas literalmente):
 - origin: client_requested | inferred_need | unrequested_ai_insight | business_catalyst_activation | data_asset_activation | sector_pattern | technical_dependency | compliance_required

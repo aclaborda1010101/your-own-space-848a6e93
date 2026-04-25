@@ -93,6 +93,9 @@ export const ProjectBudgetPanel = ({
   const [selectedExportModels, setSelectedExportModels] = useState<number[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [budgetExportMode, setBudgetExportMode] = useState<'internal' | 'client'>('client');
+  // Vista global del panel: cliente oculta márgenes, costes internos, horas
+  const [viewMode, setViewMode] = useState<'internal' | 'client'>('internal');
+  const isClientView = viewMode === 'client';
 
   useEffect(() => {
     if (budgetData) {

@@ -592,6 +592,22 @@ export const ProjectBudgetPanel = ({
                               </div>
                               <p className="text-xs text-muted-foreground mt-0.5">{model.description}</p>
                             </div>
+                            {!isClientView && (
+                              <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer shrink-0">
+                                <Checkbox
+                                  checked={model.visible_to_client ?? isRecommended}
+                                  onCheckedChange={(checked) => {
+                                    if (!editData) return;
+                                    const models = [...editData.monetization_models];
+                                    models[i] = { ...models[i], visible_to_client: checked === true };
+                                    setEditData({ ...editData, monetization_models: models });
+                                    onBudgetUpdate?.({ ...editData, monetization_models: models });
+                                  }}
+                                  className="h-3 w-3"
+                                />
+                                <Users className="w-3 h-3" /> Mostrar al cliente
+                              </label>
+                            )}
                           </div>
                           <div className="flex flex-wrap gap-3 text-xs">
                             {(model.setup_price_eur || editing) && (

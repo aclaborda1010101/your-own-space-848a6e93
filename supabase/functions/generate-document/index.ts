@@ -1423,7 +1423,7 @@ async function convertHtmlToPdf(
 
 const STEP_TITLES: Record<number, string> = {
   2: "Briefing Extraído",
-  3: "Borrador de Alcance",
+  3: "PRD Técnico para Construcción",
   4: "Auditoría Cruzada",
   5: "Documento de Alcance",
   6: "Estimación de Presupuesto",

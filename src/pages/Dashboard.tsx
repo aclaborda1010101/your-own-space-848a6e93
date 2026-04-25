@@ -61,7 +61,7 @@ const Dashboard = () => {
     loading: tasksLoading, 
     toggleComplete, 
   } = useTasks();
-  const { events } = useCalendar();
+  const { events, loading: calendarLoading, connected: calendarConnected, fetchEvents } = useCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
   const { notifications } = useSmartNotifications();
   const { challenges, loading: challengesLoading, toggleGoalCompletion, createChallenge, updateChallenge } = useJarvisChallenge();
@@ -183,7 +183,7 @@ const Dashboard = () => {
         case "publications":
           return <PublicationsCard />;
         case "agenda":
-          return <AgendaCard />;
+          return <AgendaCard events={events} loading={calendarLoading} connected={calendarConnected} fetchEvents={fetchEvents} />;
         case "challenge":
           return (
             <ChallengeCard 

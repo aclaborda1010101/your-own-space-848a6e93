@@ -234,6 +234,50 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
     inputStepsAllowed: [2],
     outputSchemaVersion: "v1.0",
   },
+
+  // ── Step 26: Pipeline v2 — F4a Registry Gap Audit ──
+  // Read-only audit. NEVER mutates the registry. NEVER approves for scope.
+  26: {
+    name: "Pipeline v2 — Registry Gap Audit (F4a)",
+    allowedTopLevelKeys: [
+      "registry_gap_audit_v1",
+      "audit_meta",
+      "_contract_validation",
+    ],
+    forbiddenKeys: [
+      "component_registry",
+      "ai_opportunity_design_v1",
+      "approved_for_scope",
+      "prd", "sql_schema", "edge_functions",
+      "monetization_models", "pricing", "budget", "monetization",
+    ],
+    forbiddenTerms: ["CREATE TABLE"],
+    requiredFields: ["registry_gap_audit_v1"],
+    inputStepsAllowed: [2, 25],
+    outputSchemaVersion: "v1.0",
+  },
+
+  // ── Step 27: Pipeline v2 — F4b Feasibility / Anti-Inflation Audit ──
+  // Read-only audit. The brake. NEVER mutates the registry. NEVER approves for scope.
+  27: {
+    name: "Pipeline v2 — Feasibility Audit (F4b)",
+    allowedTopLevelKeys: [
+      "registry_feasibility_audit_v1",
+      "audit_meta",
+      "_contract_validation",
+    ],
+    forbiddenKeys: [
+      "component_registry",
+      "ai_opportunity_design_v1",
+      "approved_for_scope",
+      "prd", "sql_schema", "edge_functions",
+      "monetization_models", "pricing", "budget", "monetization",
+    ],
+    forbiddenTerms: ["CREATE TABLE"],
+    requiredFields: ["registry_feasibility_audit_v1"],
+    inputStepsAllowed: [25, 26],
+    outputSchemaVersion: "v1.0",
+  },
 };
 
 /**

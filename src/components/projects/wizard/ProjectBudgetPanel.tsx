@@ -407,22 +407,47 @@ export const ProjectBudgetPanel = ({
 
         {displayData && !generating && (
           <div className="space-y-5">
-            {/* Edit toggle */}
-            <div className="flex justify-end gap-2">
-              {!editing ? (
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setEditing(true)}>
-                  <Pencil className="w-3.5 h-3.5" /> Editar presupuesto
-                </Button>
-              ) : (
-                <>
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleCancel}>
-                    <X className="w-3.5 h-3.5" /> Cancelar
-                  </Button>
-                  <Button size="sm" className="gap-1.5 text-xs" onClick={handleSave}>
-                    <Save className="w-3.5 h-3.5" /> Guardar cambios
-                  </Button>
-                </>
-              )}
+            {/* Edit + Approve toggles */}
+            <div className="flex flex-wrap justify-between items-center gap-2">
+              <div className="text-xs text-muted-foreground">
+                {budgetStatus === "approved"
+                  ? "Presupuesto aprobado. Ya puedes generar la propuesta cliente."
+                  : budgetStatus === "editing"
+                  ? "Has editado el presupuesto. Apruébalo de nuevo para habilitar la propuesta."
+                  : "Revisa, edita y aprueba el presupuesto para generar la propuesta cliente."}
+              </div>
+              <div className="flex gap-2">
+                {!editing ? (
+                  <>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setEditing(true)}>
+                      <Pencil className="w-3.5 h-3.5" /> Editar presupuesto
+                    </Button>
+                    {onApprove && budgetStatus !== "approved" && (
+                      <Button
+                        size="sm"
+                        className="gap-1.5 text-xs"
+                        disabled={approving}
+                        onClick={async () => {
+                          setApproving(true);
+                          try { await onApprove(); } finally { setApproving(false); }
+                        }}
+                      >
+                        {approving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                        Aprobar presupuesto
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={handleCancel}>
+                      <X className="w-3.5 h-3.5" /> Cancelar
+                    </Button>
+                    <Button size="sm" className="gap-1.5 text-xs" onClick={handleSave}>
+                      <Save className="w-3.5 h-3.5" /> Guardar cambios
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Development costs */}

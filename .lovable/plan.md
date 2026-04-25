@@ -1,112 +1,90 @@
-# Plan: arreglar el botón PRD técnico para que use el pipeline v2 (Step 28 como fuente de verdad)
+## Diagnóstico (confirmado en BD)
 
-## Diagnóstico (confirmado leyendo el código)
+Consulté `project_wizard_steps` para el proyecto AFFLUX (`6ef807d1-…`) y esto es lo que hay realmente:
 
-Hoy en `ProjectWizard.tsx` el botón **"Generar PRD Técnico"** (Step 3 del wizard) llama a `runChainedPRD()` → `supabase.functions.invoke("project-wizard-step", { action: "generate_prd_chained" })`.
+| step | versión | estado | model | qué es |
+|------|---------|--------|-------|--------|
+| 3 v1 | review | gemini-3.1-pro-preview | **PRD legacy LOW-LEVEL**, empieza con `"Claro, aquí tienes las secciones 1 a 4..."` |
+| 5 v1 | review | gemini-3.1-pro-preview | Documento legacy |
+| 10, 11, 12 | review/generating | — | **Restos del chained legacy** (Lovable Build Blueprint, etc.) |
+| 25 v1 | review | gemini-2.5-flash | Registry v2 ✅ |
+| 26 v1 | review | gemini-2.5-flash | Gap audit v2 ✅ |
+| **27, 28, 29** | — | — | **NO EXISTEN** |
 
-`generate_prd_chained` es el **pipeline LEGACY**:
-- Llena `step_number = 10` (alcance legacy "Senior AI Solutions Architect", 14 secciones, 120 variables, 25 patrones).
-- Llena `step_number = 11` (auditoría IA legacy con scoring de automatización).
-- Llena `step_number = 12` (patrones).
-- Llena `step_number = 3` con un PRD low-level que arranca con "PRD LOW-LEVEL: AFFLUX", contiene "Lovable Build Blueprint", "Checklist Maestro", SQL completo, RLS, Edge Functions, motor de scoring determinista, y residuos LLM tipo "Claro, aquí tienes…". Las fases vienen del LLM, no del scope aprobado, así que mete fallecimientos en F2, matching en F2 y Soul en F3+.
+Es decir: el botón "Descargar PDF" del Step 3 baja el `output_data.document` del Step 3 v1, que es el legacy `"Claro, aquí tienes…"`. Y el `generate-document` lo titula "Borrador de Alcance" porque su `STEP_TITLES[3] = "Borrador de Alcance"`. El `runPipelineV2PRD` arrancó hoy pero se cortó tras el Step 26 (Step 27/28/29 nunca llegaron a crearse), así que el espejo Step 29→Step 3 no se ejecutó y quedó el v1 legacy intacto.
 
-En paralelo existe el **pipeline v2 nuevo** (ya implementado y funcionando, pero solo accesible desde el panel "Avanzado / Interno → PipelineQAPanel"):
-- `build_registry` → `step_number = 25` (ai_opportunity_design_v1 + component_registry, F2+F3 deterministas).
-- `audit_f4a_gaps` → `step_number = 26` (registry_gap_audit_v1).
-- `audit_f4b_feasibility` → `step_number = 27` (registry_feasibility_audit_v1).
-- `architect_scope` → `step_number = 28` (`scope_architecture_v1` con buckets data_foundation / mvp / fast_follow_f2 / deferred, blockers DPIA y dataset_readiness, soul_capture_plan).
-- `generate_technical_prd` → `step_number = 29` (PRD técnico determinista construido **únicamente** desde Step 28 vía `f6-prd-builder.ts`, sin LLM, sin SQL, sin scoring inventado).
-- `generate_client_proposal` → `step_number = 30` (propuesta cliente sin jerga interna vía `f7-proposal-builder.ts`).
-- `audit_final_deliverables` → cross-check final.
+Por eso el PDF que estás abriendo:
+- Se titula "Borrador de Alcance".
+- Cita "Cliente: Alejandro Gordo" y mete fallecimientos como Fase 2.
+- Mete "Lovable Build Blueprint", scoring 120 variables, etc.
+- Tiene residuo `"Claro, aquí tienes…"` en la página 3.
 
-Resultado: el pipeline correcto ya existe y produce exactamente lo que pide el usuario (Step 28 como fuente única, sin fases inventadas, separación PRD técnico vs propuesta cliente, sin "Claro aquí tienes"), pero **el botón principal del wizard sigue apuntando a la ruta antigua**.
-
----
-
-## Cambios
-
-### A. Botón "Generar PRD Técnico" → pipeline v2
-
-**`src/hooks/useProjectWizard.ts` — nueva función `runPipelineV2PRD(pricingMode)` que reemplaza a `runChainedPRD` para el botón del wizard:**
-
-1. Verifica que Step 2 (briefing) esté `approved`. Si no, error claro.
-2. Llama secuencialmente a `project-wizard-step` con:
-   - `action: "build_registry"` (steps 25 + 26 + 27 internamente — el `build_registry` actual ya hace F2+F3; añadir `audit_f4a_gaps` y `audit_f4b_feasibility` justo después porque `architect_scope` los exige).
-   - `action: "audit_f4a_gaps"`.
-   - `action: "audit_f4b_feasibility"`.
-   - `action: "architect_scope"` → genera Step 28 `scope_architecture_v1`.
-   - `action: "generate_technical_prd"` → genera Step 29 con `prd_markdown` determinista.
-3. Va actualizando `chainedPhase`: `"alcance"` (registry+gap+feas), `"patrones"` (architect_scope), `"prd"` (generate_technical_prd), `"done"`.
-4. Al terminar, **escribe también `step_number = 3`** con el contenido de Step 29 (`prd_markdown` + manifest_summary) para que el resto del wizard (descarga PDF, budget panel, propuesta cliente, navegación) siga funcionando sin tocar el resto de la UI. Marcar status `review`.
-5. `pricingMode` se almacena para que `generate_client_proposal` lo use después.
-
-**`src/pages/ProjectWizard.tsx`:**
-- Reemplazar `runChainedPRD(pricingMode)` por `runPipelineV2PRD(pricingMode)` en el `onGenerate` del Step 3.
-- En `useProjectWizard.ts` línea 932, donde tras aprobar Step 2 se auto-lanza `runChainedPRD('none')`, cambiar también a `runPipelineV2PRD('none')`.
-- Mantener `runChainedPRD` exportado pero **no enlazado al botón principal** — solo accesible vía herramienta de debug por si hace falta revisar el legacy.
-
-### B. PRD técnico generado SIEMPRE desde Step 28 (sin LLM)
-
-`generate_technical_prd` (ya implementado) usa `buildTechnicalPrd()` y `renderPrdMarkdown()` de `f6-prd-builder.ts`, que es 100% determinista a partir de `scope_architecture_v1`. Esto garantiza:
-
-- ✅ Cliente = AFLU/AFFLUX, decisor = Alejandro Gordo (vienen del scope que ya respeta los overrides).
-- ✅ Detector de fallecimientos en MVP con DPIA/HITL (porque Step 28 lo coloca ahí).
-- ✅ Matching activo-inversor en MVP con dataset_readiness blocker.
-- ✅ Soul de Alejandro en data_foundation.
-- ✅ Benatar en fast_follow_f2.
-- ✅ Sin "Claro, aquí tienes" (no hay LLM en F6).
-- ✅ Sin SQL, sin RLS, sin scoring inventado, sin "120 variables / 25 patrones".
-- ✅ Sin fases inventadas.
-
-**Pequeño ajuste en `f6-prd-builder.ts`** (`renderPrdMarkdown`): añadir cabecera explícita al PDF:
-```
-# PRD Técnico de Construcción
-**Proyecto:** {projectName}
-**Cliente / empresa:** {clientName}
-**Decisor:** {decision_maker_from_scope}
-**Producto:** {projectName}
-**Fuente de alcance:** scope_architecture_v1 (Step 28 v{version}, row {row_id})
-```
-para que quede crystal-clear que ya no es legacy.
-
-### C. Propuesta cliente separada del PRD técnico
-
-`ProjectProposalExport` ya existe y ya invoca `generate_client_proposal` (Step 30) que es el `f7-proposal-builder.ts` determinista (renombrado a "Propuesta Cliente", sin jerga interna, con Gantt/precios/condiciones, validado contra `detectInternalJargon`).
-
-Ajustes en `src/pages/ProjectWizard.tsx`:
-1. **Renombrar el botón de descarga del Step 3** de "Borrador de alcance" a **"PRD Técnico (Lovable)"** y forzar `exportMode="internal"` para ese documento.
-2. **`ProjectProposalExport`** queda etiquetado como **"Propuesta Cliente"** y es el único entregable cliente.
-3. La generación de `generate_client_proposal` debe leer el `pricingMode` que se eligió en Step 3 y pasar `commercial_terms_v1` al backend (ya está casi todo cableado en `useProjectWizard.ts:1206`; solo falta inyectar `pricing_model` derivado de `pricingMode`).
-
-### D. Bloquear el path legacy para evitar regresiones
-
-En `supabase/functions/project-wizard-step/index.ts`:
-1. En `generate_prd_chained`: **dejar el código** (por compatibilidad con proyectos viejos), pero añadir en `index.ts` un flag `LEGACY_PRD_ALLOWED = false` que devuelva 410 Gone con mensaje "Pipeline legacy desactivado. Usar build_registry + architect_scope + generate_technical_prd." cuando alguien intente llamarlo desde producción. Mantener accesible solo vía un header `x-allow-legacy: true` para debug local.
-2. En `generate_prd` (action standalone): mismo tratamiento.
-
-### E. Limpieza de `step_number = 3` cuando viene del nuevo pipeline
-
-Cuando `runPipelineV2PRD` escribe Step 3, su `outputData` debe ser:
-```json
-{
-  "document": "<prd_markdown de Step 29>",
-  "source": "pipeline_v2",
-  "step_28_ref": { "version": N, "row_id": "..." },
-  "step_29_ref": { "version": N, "row_id": "..." },
-  "components_total": 13,
-  "components_by_bucket": { "data_foundation": 1, "mvp": 9, "fast_follow_f2": 2, "deferred": 1 }
-}
-```
-
-Así `ProjectDocumentDownload` (que lee `step3.outputData.document`) baja el PDF correcto, y el badge "Avanzado/Interno" puede mostrar el manifest sin reinventar nada.
+No es un problema de prompt: es que estás bajando un Step 3 que nunca se regeneró desde Step 28 v2.
 
 ---
 
-## Criterio de aceptación
+## Plan de corrección
 
-1. Pulsar "Generar PRD Técnico" en Step 3 NO genera más el documento "PRD LOW-LEVEL / Lovable Build Blueprint / Checklist Maestro / 120 variables / 25 patrones / motor de scoring".
-2. El PDF descargado desde Step 3 arranca con `# PRD Técnico de Construcción · Fuente de alcance: scope_architecture_v1 (Step 28 v…)` y respeta exactamente los buckets de Step 28 (fallecimientos en MVP, matching en MVP, Soul en data_foundation, Benatar en F2).
-3. El PDF NO contiene SQL, RLS, "Claro aquí tienes…", "Edge Functions", ni "Lovable Build Blueprint".
-4. La propuesta cliente sigue siendo `ProjectProposalExport` (Step 30 / `generate_client_proposal`) y queda claramente separada del PRD técnico.
-5. Llamar al endpoint legacy `generate_prd_chained` desde producción devuelve 410 con mensaje claro.
-6. La aprobación del Step 2 sigue auto-encadenando, pero ahora dispara `runPipelineV2PRD` en vez de la cadena legacy.
+### 1. Botón "Descargar PDF" del Step 3 ya no debe servir contenido legacy
+En `src/components/projects/wizard/ProjectWizardGenericStep.tsx` (Step 3) y/o en `src/pages/ProjectWizard.tsx`:
+- Si `step3Data.outputData.source !== "pipeline_v2"` ⇒ ocultar/disable el botón de descarga y mostrar un aviso: *"Este PRD viene del pipeline legacy. Pulsa **Generar PRD Técnico (v2)** antes de descargarlo."*
+- Solo permitir descargar cuando `source === "pipeline_v2"` y exista `step_29_ref`.
+
+### 2. Retitular el PDF de Step 3 cuando es v2
+En `supabase/functions/generate-document/index.ts`:
+- Detectar en el body un flag `isPipelineV2` (o leer en BD el `output_data.source` cuando `stepNumber === 3`).
+- Si v2 ⇒ título = **"PRD Técnico para Construcción — {projectName}"** (no "Borrador de Alcance").
+- Cabecera del PDF con: cliente = `companyName` (AFLU/AFFLUX), decisor = `client_decision_maker` del Step 28, ref a Step 28/29.
+- Si NO v2 (legacy) ⇒ devolver `409 LEGACY_PRD_BLOCKED` con mensaje claro, salvo header `x-allow-legacy: true`.
+
+### 3. Saneamiento de datos legacy en este proyecto
+Una vez generado el PRD v2 correcto, marcar como obsoletos los pasos legacy en `project_wizard_steps`:
+- `step_number IN (10, 11, 12)` para este proyecto ⇒ `status = 'archived_legacy'`.
+- `step_number = 3 v1` ⇒ se sobrescribe por el espejo Step 29→Step 3 (newV3 = 2).
+- Eliminar la versión v1 legacy del Step 3 si interfiere con la UI (o filtrar por `version` máxima — ya se hace).
+
+### 4. Hacer el `runPipelineV2PRD` resiliente y observable
+En `src/hooks/useProjectWizard.ts → runPipelineV2PRD`:
+- Tras cada `callAction`, **verificar en BD** que el step esperado (25/26/27/28/29) existe con `version` mayor o igual al esperado, antes de pasar al siguiente. Hoy se confía en el `data.error` y por eso se cortó silenciosamente entre Step 26 y 27.
+- Si una llamada devuelve 4xx/5xx, parar y mostrar `toast.error` con el step exacto y el body de error (no genérico).
+- Botón "Reintentar desde el último paso completado".
+
+### 5. Garantizar que F5 (Step 28) NO degrade el scope
+Memoria de proyecto y feedback del usuario marcan estas reglas duras que `f5-scope-architect.ts` ya debería cumplir, pero hay que verificarlas con un test sobre el scope generado para AFFLUX:
+- `COMP-C01` fallecimientos/herencias ⇒ MVP + compliance blocker DPIA/HITL.
+- `COMP-C03` matching activo-inversor ⇒ MVP + dataset readiness blocker.
+- `COMP-D01` Soul Alejandro ⇒ data foundation.
+- `COMP-C04` Benatar ⇒ fast-follow F2.
+- Governance RGPD/DPIA en MVP.
+- Sin scoring/fórmula predictiva sin dataset readiness.
+
+Si `runDeterministicPreWarm` o el LLM enrichment muta esos buckets ⇒ rechazar y loguear `traceable_violations`.
+
+### 6. Bloqueo total del legacy en producción
+- En `supabase/functions/project-wizard-step/index.ts`: confirmar que `LEGACY_PRD_ALLOWED = false` por defecto, y que las acciones `generate_prd_chained`, `generate_scope`, `generate_audit`, `generate_final_doc` devuelven 410 sin `x-allow-legacy: true`. (Ya parece estar — verificar en runtime.)
+- En `src/hooks/useProjectWizard.ts`: marcar `runChainedPRD` como deprecated y no exponerlo en UI (solo desde el panel debug interno).
+
+### 7. Renombrado UX para que no haya confusión nunca más
+- "Borrador de Alcance" ⇒ **"PRD Técnico para Construcción"** en el Step 3 y en el PDF.
+- "Documento de Alcance" del Step 5 ⇒ **"Propuesta Cliente"** (separado, viene del Step 30).
+
+---
+
+## Acciones concretas (cuando apruebes el plan)
+
+1. **Migración SQL**: marcar Steps 10/11/12 del proyecto AFFLUX como archivados y borrar Step 3 v1 legacy para que la UI muestre solo lo que venga del v2.
+2. **Edit `useProjectWizard.ts`**: hacer `runPipelineV2PRD` con verificación en BD entre pasos + toasts específicos por step.
+3. **Edit `generate-document/index.ts`**: leer `source` del Step 3 en BD y aplicar título "PRD Técnico para Construcción" + cabecera con cliente correcto. Bloquear con 409 si `source !== 'pipeline_v2'`.
+4. **Edit `ProjectWizardGenericStep.tsx`** (Step 3 path): ocultar el botón Download cuando el contenido no es v2; mostrar banner de aviso.
+5. **Re-ejecutar pipeline v2** sobre AFFLUX desde la UI tras el saneamiento, y validar Step 28 contra las reglas duras (COMP-C01, C03, D01, C04, governance).
+6. **Test deno** que verifique sobre un fixture AFFLUX que `buildTechnicalPrd` mantiene la asignación correcta de buckets (regression test).
+
+---
+
+## Resultado esperado
+
+- Pulsar **"Generar PRD Técnico (v2)"** ejecuta los 5 steps; si falla uno, el toast lo dice claramente.
+- El Step 3 mostrado en UI siempre proviene de Step 29 (espejo).
+- El PDF se titula **"PRD Técnico para Construcción — AFFLUX"**, cliente = AFLU/AFFLUX, decisor = Alejandro Gordo, fases = exactamente las del Step 28.
+- Sin `"Claro, aquí tienes…"`, sin "Lovable Build Blueprint" antiguo, sin scoring 120 variables.
+- Bajar el PDF de un proyecto que solo tenga Step 3 legacy queda **bloqueado** con un mensaje claro hasta regenerar.

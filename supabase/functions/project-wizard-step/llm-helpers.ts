@@ -145,6 +145,10 @@ export interface LLMCallOptions {
   /** Override for retry attempts. Use sparingly (e.g. extract action with
    * very long inputs to keep wall time under Edge Function 150s timeout). */
   maxRetries?: number;
+  /** Override for max output tokens. Lower it (e.g. 24576) on long-running
+   * actions like extract/F2 to stay under the 150s Edge Function timeout —
+   * Gemini Flash spends most wall time GENERATING tokens, not reading. */
+  maxTokens?: number;
 }
 
 export async function callGeminiFlash(
@@ -155,7 +159,7 @@ export async function callGeminiFlash(
   return callGateway(systemPrompt, userPrompt, {
     model: "google/gemini-2.5-flash",
     temperature: 0.2,
-    maxTokens: 65536,
+    maxTokens: options.maxTokens ?? 65536,
     jsonMode: true,
     maxRetries: options.maxRetries,
   });

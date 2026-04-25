@@ -588,8 +588,14 @@ REGLAS PARA deep_patterns:
 - ia_component_link: Obligatorio para Capas 3-5. Para Capas 1-2: null si el patrón es puramente observacional.
 - titulo: Máximo 10 palabras, descriptivo y específico al proyecto. PROHIBIDO: títulos genéricos como "Problema de eficiencia" o "Oportunidad de mejora".`;
 
-      // maxRetries=1 to keep total wall time bounded under 150s Edge Function idle timeout for the extract action.
-      const result = await callGeminiFlash(systemPrompt, userPrompt, { maxRetries: 1 });
+      // maxRetries=1 + maxTokens cap to keep total wall time bounded under
+      // the 150s Edge Function idle timeout. Gemini Flash spends almost all
+      // wall time GENERATING output tokens; capping at 24k tokens keeps the
+      // briefing JSON within typical size (15-22k tokens) while leaving margin.
+      const result = await callGeminiFlash(systemPrompt, userPrompt, {
+        maxRetries: 1,
+        maxTokens: 24576,
+      });
       console.log(`[wizard] F2 finishReason=${result.finishReason}, outputTokens=${result.tokensOutput}`);
 
       // Parse JSON from response — robust cleaning with truncation repair

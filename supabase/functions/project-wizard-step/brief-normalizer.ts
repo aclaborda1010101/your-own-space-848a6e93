@@ -156,6 +156,42 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
     cnc.collision_detected = false;
   }
 
+  // Authoritative product name from context (e.g. wizard input).
+  if (ctx.productName && typeof ctx.productName === "string" && ctx.productName.trim().length > 0) {
+    const desired = ctx.productName.trim();
+    if (cnc.proposed_product_name !== desired) {
+      const before = cnc.proposed_product_name;
+      cnc.proposed_product_name = desired;
+      changes.push({
+        type: "naming_split",
+        field: "proposed_product_name",
+        before,
+        after: desired,
+        reason: "Aplicado productName autoritario desde contexto.",
+      });
+    }
+  }
+
+  // Authoritative company name from context overrides extraction noise.
+  if (ctx.companyName && typeof ctx.companyName === "string" && ctx.companyName.trim().length > 0) {
+    const desiredCompany = ctx.companyName.trim();
+    // Only override if extraction looks invalid (person name, placeholder, missing).
+    const extracted = cnc.client_company_name;
+    const looksInvalid = !extracted ||
+      extracted === "[POR CONFIRMAR]" ||
+      (typeof extracted === "string" && looksLikePersonName(extracted));
+    if (looksInvalid && extracted !== desiredCompany) {
+      cnc.client_company_name = desiredCompany;
+      changes.push({
+        type: "naming_split",
+        field: "client_company_name",
+        before: extracted,
+        after: desiredCompany,
+        reason: "Aplicado companyName autoritario desde contexto.",
+      });
+    }
+  }
+
   // Diff log (compact).
   if (JSON.stringify(before) !== JSON.stringify(cnc)) {
     changes.push({ type: "naming_check_updated", before, after: { ...cnc } });
@@ -168,6 +204,14 @@ const SECTOR_REPLACEMENTS: Array<{ from: RegExp; to: string; label: string }> = 
   { from: /\bretail\s+data\b/gi, to: "real estate data", label: "retail data → real estate data" },
   { from: /\bcomercio\s+minorista\b/gi, to: "inversión inmobiliaria", label: "comercio minorista → inversión inmobiliaria" },
   { from: /\bretail\b/gi, to: "real estate off-market", label: "retail → real estate off-market" },
+];
+
+// Patterns that strongly indicate off-topic content (other domains entirely).
+// When matched in a string field of a list item, the entire item is removed.
+const DEFAULT_FORBIDDEN_TOPICS: RegExp[] = [
+  /\b(weather|pollen|allergy\s+medicine|allergy\s+season|hay\s+fever)\b/i,
+  /\b(clima|polen|alergia|fiebre\s+del\s+heno)\b/i,
+  /\bmedicamento(s)?\s+(de\s+)?alergia\b/i,
 ];
 
 function applySectorCleanup(node: any, changes: NormalizationChange[], path: string[] = []): any {
@@ -208,6 +252,51 @@ function applySectorCleanup(node: any, changes: NormalizationChange[], path: str
     return out;
   }
   return node;
+}
+
+function itemMatchesForbidden(item: any, patterns: RegExp[]): RegExp | null {
+  if (!item) return null;
+  const blob = typeof item === "string"
+    ? item
+    : Object.entries(item)
+        .filter(([k]) => !k.startsWith("_"))
+        .map(([_, v]) => (typeof v === "string" ? v : ""))
+        .join(" ");
+  for (const re of patterns) {
+    if (re.test(blob)) return re;
+  }
+  return null;
+}
+
+function applyForbiddenTopicsFilter(briefing: any, ctx: NormalizationContext, changes: NormalizationChange[]) {
+  const v2 = briefing?.business_extraction_v2;
+  if (!v2) return;
+  const patterns = [...DEFAULT_FORBIDDEN_TOPICS, ...(ctx.forbiddenTopics || [])];
+  const FIELDS = [
+    "observed_facts", "business_catalysts", "underutilized_data_assets",
+    "quantified_economic_pains", "decision_points", "client_requested_items",
+    "inferred_needs", "ai_native_opportunity_signals", "external_data_sources_mentioned",
+    "constraints_and_risks", "open_questions",
+  ];
+  for (const field of FIELDS) {
+    const arr = v2[field];
+    if (!Array.isArray(arr)) continue;
+    const kept: any[] = [];
+    for (const item of arr) {
+      const hit = itemMatchesForbidden(item, patterns);
+      if (hit) {
+        changes.push({
+          type: "forbidden_topic_removed",
+          field,
+          before: typeof item === "string" ? item : (item.title || item.description || JSON.stringify(item).slice(0, 80)),
+          reason: `Tema fuera de alcance (${hit.source}).`,
+        });
+      } else {
+        kept.push(item);
+      }
+    }
+    v2[field] = kept;
+  }
 }
 
 // ── 3. Language normalization (LLM) ──────────────────────────────────

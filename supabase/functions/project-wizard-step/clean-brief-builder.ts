@@ -124,22 +124,16 @@ export function buildCleanBrief(briefing: any, ctx: { projectName: string }): Cl
 
   // 9. Componentes candidatos normalizados
   const candidates = Array.isArray(v2.ai_native_opportunity_signals) ? v2.ai_native_opportunity_signals : [];
-  const merged = candidates.filter((c: any) => Array.isArray(c?._merged_from) && c._merged_from.length > 0);
   const compMd = candidates.length === 0
     ? "_Sin candidatos extraídos._"
     : candidates.slice(0, 16).map((c: any, i: number) => {
         const title = clean(c.title || c.description || `Candidato ${i + 1}`);
-        const isCanonInjected = c?._inferred_by === "normalizer_required_component_v1";
-        const merge = Array.isArray(c._merged_from) && c._merged_from.length > 0
-          ? `\n  - *Fusionado de:* ${c._merged_from.slice(0, 3).join(", ")}`
-          : "";
-        const tag = isCanonInjected ? " *(candidato F2/roadmap)*" : "";
-        return `${i + 1}. **${title}**${tag}${merge}`;
+        return `${i + 1}. **${title}**`;
       }).join("\n");
   sections.push({
     id: "candidatos",
     title: "9. Componentes candidatos normalizados",
-    markdown: compMd + (merged.length > 0 ? `\n\n_${merged.length} componente(s) son fusión de duplicados detectados._` : ""),
+    markdown: compMd,
   });
 
   // Compose final markdown.

@@ -269,6 +269,13 @@ const ProjectWizardEdit = () => {
                 />
               )}
 
+              {/* QA tool — siempre visible para disparar build_registry sin aprobar Step 2 */}
+              {id && (
+                <div className="mt-4">
+                  <BuildRegistryPanel projectId={id} />
+                </div>
+              )}
+
               {currentStep === 3 && (
                 <>
                   {/* Show chained progress when generating */}

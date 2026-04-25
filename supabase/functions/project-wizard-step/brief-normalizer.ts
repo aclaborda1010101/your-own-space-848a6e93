@@ -769,11 +769,14 @@ export async function normalizeBrief(
     briefing.business_extraction_v2 = applySectorCleanup(briefing.business_extraction_v2, changes, ["business_extraction_v2"]);
   }
 
+  // 2b. Off-topic / forbidden topics filter (whole-item removal).
+  applyForbiddenTopicsFilter(briefing, ctx, changes);
+
   // 3. Language normalization (single LLM call, non-blocking)
   const langResult = await applyLanguageNormalization(briefing, changes);
 
-  // 4. Semantic dedup
-  applySemanticDedup(briefing, changes);
+  // 4. Semantic dedup (uses canonical override from ctx if provided)
+  applySemanticDedup(briefing, changes, ctx);
 
   // 5. Compliance expansion
   applyComplianceExpansion(briefing, changes);
@@ -781,13 +784,18 @@ export async function normalizeBrief(
   // 6. Quote validator
   applyQuoteValidator(briefing, changes);
 
+  // 7. Manual review alerts (project-specific, optional)
+  applyManualReviewAlerts(briefing, ctx, changes);
+
   // Attach log.
   briefing._normalization_log = {
-    version: "1.0.0",
+    version: "1.1.0",
     applied_at: new Date().toISOString(),
     changes_count: changes.length,
     changes,
     language_llm_called: langResult.called,
+    canonical_components_used: (ctx.canonicalComponents || []).map((c) => c.canonical),
+    manual_review_alerts_count: (ctx.manualReviewAlerts || []).length,
   };
 
   return {

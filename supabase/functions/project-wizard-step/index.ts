@@ -297,7 +297,12 @@ serve(async (req) => {
       const sectorHint = sd.sectorHint;
       const inputContent: string | undefined = sd.inputContent;
       // Optional project-specific normalization overrides.
+      const companyNameOverride: string | undefined = typeof sd.companyNameOverride === "string" && sd.companyNameOverride.trim().length > 0
+        ? sd.companyNameOverride.trim()
+        : undefined;
       const canonicalComponents = Array.isArray(sd.canonicalComponents) ? sd.canonicalComponents : undefined;
+      const canonicalCatalysts = Array.isArray(sd.canonicalCatalysts) ? sd.canonicalCatalysts : undefined;
+      const mutexGroups = Array.isArray(sd.mutexGroups) ? sd.mutexGroups as Array<[string, string]> : undefined;
       const forbiddenTopicsRaw = Array.isArray(sd.forbiddenTopics) ? sd.forbiddenTopics : [];
       const forbiddenTopics = forbiddenTopicsRaw
         .map((p: any) => {
@@ -310,7 +315,7 @@ serve(async (req) => {
         .filter(Boolean) as RegExp[];
       const manualReviewAlerts = Array.isArray(sd.manualReviewAlerts) ? sd.manualReviewAlerts : undefined;
 
-      console.log(`[${action}] start project=${pid} hasInput=${!!inputContent} canonical=${canonicalComponents?.length || 0} forbidden=${forbiddenTopics.length} alerts=${manualReviewAlerts?.length || 0}`);
+      console.log(`[${action}] start project=${pid} hasInput=${!!inputContent} companyOverride=${companyNameOverride || "—"} canonical=${canonicalComponents?.length || 0} catalysts=${canonicalCatalysts?.length || 0} mutex=${mutexGroups?.length || 0} forbidden=${forbiddenTopics.length} alerts=${manualReviewAlerts?.length || 0}`);
 
       if (!pid) {
         return new Response(JSON.stringify({ error: "projectId required" }), {

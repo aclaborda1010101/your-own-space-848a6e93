@@ -312,10 +312,10 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0 flex-1">
-            <CardTitle className="text-base">QA · Pipeline v2 — Steps 25 / 26 / 27 / 28</CardTitle>
+            <CardTitle className="text-base">QA · Pipeline v2 — Steps 25–31</CardTitle>
             <CardDescription className="text-xs mt-1">
-              Lanza acciones del wizard sin tocar consola. Tiempos típicos: Build Registry ~60–120s,
-              F4a ~60–180s (Flash), F4b ~120–240s (Pro), F5 ~60–180s (Pro).
+              Pipeline interno (25–28) y entregables finales (29 PRD · 30 Propuesta · 31 Auditoría).
+              Tiempos típicos: Registry ~60–120s, F4a ~60–180s, F4b ~120–240s, F5 ~60–180s, PRD/Propuesta ~30–60s.
             </CardDescription>
           </div>
           {loading && currentAction && (
@@ -330,6 +330,74 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
           {renderActionButton("audit_f4a_gaps")}
           {renderActionButton("audit_f4b_feasibility")}
           {renderActionButton("architect_scope")}
+        </div>
+
+        <div className="border-t border-border/40 mt-3 pt-3 space-y-3">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Entregables finales
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              onClick={() => run("generate_technical_prd")}
+              disabled={loading}
+              variant="outline"
+              size="sm"
+            >
+              {loading && currentAction === "generate_technical_prd" ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Generando PRD…</>
+              ) : (
+                <><FileText className="w-4 h-4" />Generar PRD técnico (Step 29)</>
+              )}
+            </Button>
+            <Button
+              onClick={() => setShowTermsForm((v) => !v)}
+              variant="ghost"
+              size="sm"
+              className="text-xs"
+            >
+              {showTermsForm ? "Ocultar" : "Editar"} commercial_terms
+            </Button>
+            <Button
+              onClick={() => run("generate_client_proposal")}
+              disabled={loading}
+              variant="outline"
+              size="sm"
+            >
+              {loading && currentAction === "generate_client_proposal" ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Generando propuesta…</>
+              ) : (
+                <><FileBadge className="w-4 h-4" />Generar Propuesta cliente (Step 30)</>
+              )}
+            </Button>
+            <Button
+              onClick={() => run("audit_final_deliverables")}
+              disabled={loading}
+              variant="ghost"
+              size="sm"
+            >
+              {loading && currentAction === "audit_final_deliverables" ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Auditando…</>
+              ) : (
+                <><ShieldCheck className="w-4 h-4" />Auditar entregables (Step 31)</>
+              )}
+            </Button>
+          </div>
+
+          {showTermsForm && (
+            <div className="space-y-1.5">
+              <Label htmlFor="commercial-terms" className="text-xs text-muted-foreground">
+                commercial_terms_v1 (JSON) — usado por Step 30
+              </Label>
+              <Textarea
+                id="commercial-terms"
+                value={commercialTerms}
+                onChange={(e) => setCommercialTerms(e.target.value)}
+                rows={12}
+                className="font-mono text-[11px]"
+                spellCheck={false}
+              />
+            </div>
+          )}
         </div>
       </CardHeader>
 

@@ -651,7 +651,7 @@ export const useProjectWizard = (projectId?: string) => {
 
   // ── Approve step ─────────────────────────────────────────────────────
 
-  const approveStep = async (stepNumber: number, outputData?: any) => {
+  const approveStep = async (stepNumber: number, outputData?: any, options?: { autoChain?: boolean }) => {
     if (!projectId) return;
     try {
       const { error } = await supabase.functions.invoke("project-wizard-step", {
@@ -690,6 +690,29 @@ export const useProjectWizard = (projectId?: string) => {
       }
 
       await loadProject();
+
+      // ── Auto-chain pipeline ────────────────────────────────────────
+      // After approving Brief (step 2): jump to step 3 and auto-launch chained PRD
+      // After approving PRD (step 3): auto-launch budget estimate (no models = empty cart)
+      const autoChain = options?.autoChain !== false; // default ON
+      if (autoChain) {
+        if (stepNumber === 2) {
+          setCurrentStep(3);
+          // Fire-and-forget chained PRD generation
+          setTimeout(() => {
+            runChainedPRD('none').catch((err) => {
+              console.error("Auto-chained PRD failed:", err);
+            });
+          }, 500);
+        } else if (stepNumber === 3) {
+          // Auto-launch budget estimation in background (user can refine models later)
+          setTimeout(() => {
+            generateBudgetEstimate([]).catch((err) => {
+              console.error("Auto budget estimate failed:", err);
+            });
+          }, 500);
+        }
+      }
     } catch (e: any) {
       console.error("Approve error:", e);
       toast.error("Error al aprobar paso");

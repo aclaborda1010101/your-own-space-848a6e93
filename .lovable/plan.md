@@ -1,53 +1,50 @@
 ## Objetivo
 
-Añadir un botón en la UI autenticada del wizard que ejecute `action: build_registry` sobre el proyecto actual y muestre `STATUS` + `RAW` + `JSON parseado` directamente en pantalla, sin necesidad de pegar snippets en la consola del navegador.
+Permitir lanzar las auditorías F4a (Step 26) y F4b (Step 27) desde la UI del wizard, sin depender de la consola del navegador.
 
 ## Cambios
 
-### 1. Nuevo componente `src/components/projects/wizard/BuildRegistryPanel.tsx`
+### 1. Refactor `src/components/projects/wizard/BuildRegistryPanel.tsx` → `PipelineQAPanel.tsx`
 
-Card con título **"QA · Pipeline v2 — Build Registry (Step 25)"**, que contiene:
+Renombrar el archivo y extender la lógica:
 
-- Botón **"Ejecutar build_registry"** (variant `holo`, deshabilitado mientras corre).
-- Indicador de duración en segundos (cuenta hacia arriba mientras corre, para vigilar el límite de 150 s).
-- Estado tras la respuesta:
-  - `STATUS: <code>` con color (verde 200, ámbar 4xx, rojo 5xx).
-  - Bloque `<pre>` con `RAW` (texto plano de la respuesta).
-  - Bloque `<pre>` con `JSON.stringify(parsed, null, 2)` si es JSON válido.
-  - Resumen rápido si el JSON contiene `ok / opportunity_count / component_count / warnings_count / validation_issues_count / f2_ms / f3_ms`.
-- Botón **"Copiar RAW"** (usa `navigator.clipboard.writeText`).
+- Mantener toda la mecánica actual: fetch directo a `${SUPABASE_URL}/functions/v1/project-wizard-step` con `Authorization: Bearer <token>` y `apikey`, captura de `STATUS` HTTP, `RAW` text, `JSON` parseado, ticker de duración en segundos, botón "Copiar RAW", resumen rápido.
+- Convertir `run()` en `run(action: WizardAction, timeoutHint: number)` parametrizando la acción.
+- Estado adicional: `currentAction: WizardAction | null` para mostrar qué se está ejecutando.
+- Renderizar **3 botones** en el header:
+  1. `Build Registry (Step 25)` → `build_registry`, hint 150s, variant `outline`.
+  2. `F4a · Gap Audit (Step 26)` → `audit_f4a_gaps`, hint 180s, variant `holo`.
+  3. `F4b · Feasibility (Step 27)` → `audit_f4b_feasibility`, hint 240s, variant `holo`.
+- Mientras `loading`, deshabilitar los 3 botones y mostrar en el badge `${currentAction} · ${elapsed}s / ${timeoutHint}s`.
+- Resumen rápido adaptativo:
+  - Si `parsed.opportunity_count` o `parsed.component_count` → mostrar resumen de Step 25 (como ahora).
+  - Si `parsed.audit?.gaps` o `parsed.gaps_count` → mostrar `gaps_count`, `critical_count`, `coverage_summary` (Step 26).
+  - Si `parsed.audit?.component_reviews` o `parsed.recommended_next_step` → mostrar `components_reviewed`, `risks_count`, `recommended_next_step` (Step 27).
 
-Implementación interna:
+### 2. Actualizar `src/pages/ProjectWizard.tsx`
 
-- `import { supabase } from "@/integrations/supabase/client"`.
-- Lee `session.access_token` desde `supabase.auth.getSession()`.
-- Hace `fetch` directo a `https://${VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/project-wizard-step` con `Authorization: Bearer <token>` y body `{ action: "build_registry", projectId }`.
-  - Se usa `fetch` directo en vez de `supabase.functions.invoke` para capturar el `STATUS` HTTP exacto y el `RAW` text aunque la respuesta no sea JSON (504 IDLE_TIMEOUT, 401, etc.).
-- `try/catch` que muestra el error de red en pantalla (no rompe el wizard).
-- Sin timeout propio — deja que el navegador resuelva (el límite real es el 150 s del Edge Function).
+- Cambiar import: `BuildRegistryPanel` → `PipelineQAPanel`.
+- Sustituir el render del componente en su posición actual (después del paso 2). Sin cambios de envoltorio ni de orden.
 
-Props: `{ projectId: string }`.
+### 3. Borrar `BuildRegistryPanel.tsx`
 
-### 2. Integrar en `src/pages/ProjectWizard.tsx`
+Eliminar el archivo viejo para evitar imports duplicados.
 
-- Importar `BuildRegistryPanel`.
-- Renderizarlo dentro de `ProjectWizardEdit`, justo **después del bloque del paso 2** y **antes del paso 3** (alrededor de la línea 269), envuelto en su propia `Card` para que sea visible en cualquier momento (no condicionado a `currentStep`).
-  - Razón: queremos poder dispararlo independientemente del paso actual del wizard.
+### 4. Cache-bust
 
-### 3. Restricciones (lo que NO se toca)
+Bumpear timestamp en `src/main.tsx` (`// cache-bust: 2026-04-25T11:35`) para que `runtimeFreshness` fuerce reload tras el deploy y se vea la versión nueva con los 3 botones.
 
-- No se modifican prompts F1/F2/F3 ni `useProjectWizard.ts`.
-- No se corrigen las 9 violaciones pendientes del Step 2.
-- No se añade lógica que apruebe el briefing ni regenere downstream legacy.
-- No se modifica el Edge Function `project-wizard-step`.
-- No se añaden migraciones de base de datos.
+## Lo que NO se toca
+
+- Edge Function `project-wizard-step` (las acciones `audit_f4a_gaps` y `audit_f4b_feasibility` ya existen).
+- Detectores deterministas F4a/F4b ni runners.
+- `useProjectWizard.ts`, stepper, prompts, pipeline.
+- Migraciones de base de datos.
 
 ## Verificación
 
-Una vez aplicado:
-
-1. El usuario navega al wizard de AFFLUX (`/projects/wizard/6ef807d1-9c3b-4a9d-b88a-71530c3d7aaf`).
-2. Pulsa **"Ejecutar build_registry"**.
-3. Espera (puede tardar ~60–120 s).
-4. Comparte el `STATUS` y `RAW` mostrados en pantalla.
-5. Con eso, el AI procede a leer el Step 25 desde DB y entrega el informe completo (oportunidades F2, componentes F3, checklist AFFLUX de los 11 componentes esperados, validaciones críticas, problemas, recomendación final).
+1. Recargar `/projects/wizard/6ef807d1-9c3b-4a9d-b88a-71530c3d7aaf`.
+2. Ver card **"QA · Pipeline v2"** con 3 botones.
+3. Pulsar **F4a · Gap Audit** → esperar ~3 min → `STATUS 200` + RAW + resumen `gaps_count`.
+4. Si F4a `ok: true`, pulsar **F4b · Feasibility** → esperar ~4 min → `STATUS 200` + RAW + `recommended_next_step`.
+5. Pegar ambos RAW para informe final.

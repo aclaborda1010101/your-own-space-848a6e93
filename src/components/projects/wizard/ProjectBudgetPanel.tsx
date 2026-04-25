@@ -61,6 +61,7 @@ interface BudgetData {
     pros: string[];
     cons: string[];
     best_for?: string;
+    visible_to_client?: boolean;
   }>;
   pricing_notes?: string;
   risk_factors?: string[];

@@ -1,0 +1,1 @@
+UPDATE public.business_projects SET client_company = 'AFLU / AFFLUX', decision_maker_name = 'Alejandro Gordo' WHERE id = '6ef807d1-9c3b-4a9d-b88a-71530c3d7aaf';

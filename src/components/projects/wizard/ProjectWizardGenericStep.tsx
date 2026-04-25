@@ -267,6 +267,7 @@ export const ProjectWizardGenericStep = ({
   exportMode,
   onExportModeChange,
   status,
+  isPipelineV2 = true,
 }: Props) => {
   const hasOutput = outputData !== null && outputData !== undefined;
   const isApproved = status === "approved";
@@ -485,6 +486,7 @@ export const ProjectWizardGenericStep = ({
                     company={company}
                     version={version}
                     exportMode={exportMode || "client"}
+                    disabled={stepNumber === 3 && !isPipelineV2}
                   />
                 )}
                 <Button variant="outline" onClick={() => setLocked(false)} className="gap-2">
@@ -529,6 +531,7 @@ export const ProjectWizardGenericStep = ({
                     company={company}
                     version={version}
                     exportMode={exportMode || "client"}
+                    disabled={stepNumber === 3 && !isPipelineV2}
                   />
                 )}
                 <Button onClick={onApprove} className="gap-2 flex-1">

@@ -99,6 +99,6 @@ Deno.test("F7: requires pricing_model — meta counts coherent", () => {
 });
 
 Deno.test("F7: detectInternalJargon catches banned phrases", () => {
-  const found = detectInternalJargon("This mentions Step 28 and F4b and registry_gap_audit_v1.");
+  const found = detectInternalJargon("This mentions Step 28 and F4 and registry_gap_audit_v1.");
   assert(found.length >= 3);
 });

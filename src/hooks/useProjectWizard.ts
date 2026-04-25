@@ -1208,6 +1208,7 @@ export const useProjectWizard = (projectId?: string) => {
     currentStep,
     loading,
     generating,
+    normalizing,
     chainedPhase,
     prdSubProgress,
     internalStepStatuses,

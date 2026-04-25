@@ -10,7 +10,7 @@ interface PipelineQAPanelProps {
   projectId: string;
 }
 
-type WizardAction = "build_registry" | "audit_f4a_gaps" | "audit_f4b_feasibility";
+type WizardAction = "build_registry" | "audit_f4a_gaps" | "audit_f4b_feasibility" | "architect_scope";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -19,6 +19,7 @@ const ACTION_META: Record<WizardAction, { label: string; step: string; hint: num
   build_registry: { label: "Build Registry", step: "Step 25", hint: 150, variant: "outline" },
   audit_f4a_gaps: { label: "F4a · Gap Audit", step: "Step 26", hint: 180, variant: "holo" },
   audit_f4b_feasibility: { label: "F4b · Feasibility", step: "Step 27", hint: 240, variant: "holo" },
+  architect_scope: { label: "F5 · Scope Architect", step: "Step 28", hint: 180, variant: "holo" },
 };
 
 export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
@@ -214,10 +215,10 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0 flex-1">
-            <CardTitle className="text-base">QA · Pipeline v2 — Steps 25 / 26 / 27</CardTitle>
+            <CardTitle className="text-base">QA · Pipeline v2 — Steps 25 / 26 / 27 / 28</CardTitle>
             <CardDescription className="text-xs mt-1">
               Lanza acciones del wizard sin tocar consola. Tiempos típicos: Build Registry ~60–120s,
-              F4a ~60–180s (Flash), F4b ~120–240s (Pro).
+              F4a ~60–180s (Flash), F4b ~120–240s (Pro), F5 ~60–180s (Pro).
             </CardDescription>
           </div>
           {loading && currentAction && (
@@ -231,6 +232,7 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
           {renderActionButton("build_registry")}
           {renderActionButton("audit_f4a_gaps")}
           {renderActionButton("audit_f4b_feasibility")}
+          {renderActionButton("architect_scope")}
         </div>
       </CardHeader>
 

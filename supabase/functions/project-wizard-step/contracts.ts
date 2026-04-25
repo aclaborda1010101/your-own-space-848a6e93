@@ -257,6 +257,36 @@ export const PHASE_CONTRACTS: Record<number, PhaseContract> = {
     outputSchemaVersion: "v1.0",
   },
 
+  // ── Step 28: Pipeline v2 — F5 Scope Architect ──
+  // FIRST phase allowed to use status === "approved_for_scope".
+  // Reads Step 25 registry + Step 26 gaps + Step 27 feasibility + 3 human decisions.
+  // Produces scope_architecture_v1 organised in buckets. NEVER mutates registry.
+  28: {
+    name: "Pipeline v2 — F5 Scope Architect",
+    allowedTopLevelKeys: [
+      "scope_architecture_v1",
+      "scope_meta",
+      "_contract_validation",
+    ],
+    forbiddenKeys: [
+      // Cannot mutate upstream artefacts.
+      "component_registry",
+      "ai_opportunity_design_v1",
+      "registry_gap_audit_v1",
+      "registry_feasibility_audit_v1",
+      // Conceptual: F5 doesn't mutate the registry, so don't borrow that vocabulary.
+      "mutation_history",
+      // Pricing/PRD live downstream.
+      "prd", "sql_schema", "edge_functions",
+      "monetization_models", "pricing", "budget", "monetization",
+      "setup_price_eur", "monthly_price_eur", "hourly_rate", "hourly_rate_eur",
+    ],
+    forbiddenTerms: ["CREATE TABLE", "Edge Function", "precio de venta", "monetización"],
+    requiredFields: ["scope_architecture_v1"],
+    inputStepsAllowed: [25, 26, 27],
+    outputSchemaVersion: "v1.0",
+  },
+
   // ── Step 27: Pipeline v2 — F4b Feasibility / Anti-Inflation Audit ──
   // Read-only audit. The brake. NEVER mutates the registry. NEVER approves for scope.
   27: {

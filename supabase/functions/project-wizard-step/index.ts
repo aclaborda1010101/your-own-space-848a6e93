@@ -1084,6 +1084,149 @@ REGLAS PARA deep_patterns:
     }
 
 
+    if (action === "architect_scope") {
+      const { runF5ScopeArchitect, F5TraceabilityError } = await import("./f5-scope-architect.ts");
+
+      // 1. Load latest Step 25, 26, 27 (with id + version for source_steps trace).
+      const { data: step25Row } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version, output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 25)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!step25Row?.output_data) {
+        return new Response(JSON.stringify({ error: "No Step 25 registry found. Run build_registry first." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: step26Row } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version, output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 26)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!step26Row?.output_data) {
+        return new Response(JSON.stringify({ error: "No Step 26 gap audit found. Run audit_f4a_gaps first." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: step27Row } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version, output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 27)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!step27Row?.output_data) {
+        return new Response(JSON.stringify({ error: "No Step 27 feasibility audit found. Run audit_f4b_feasibility first." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // 2. Project context.
+      const { data: projectRow } = await supabase
+        .from("business_projects")
+        .select("name, company")
+        .eq("id", projectId)
+        .single();
+      const ctx = {
+        projectName: stepData?.projectName ?? projectRow?.name ?? undefined,
+        companyName: stepData?.companyName ?? projectRow?.company ?? "Cliente",
+      };
+
+      // 3. Run F5 (deterministic pre-warm + LLM enrichment + hard traceability check).
+      let f5Result;
+      try {
+        f5Result = await runF5ScopeArchitect({
+          step25Output: step25Row.output_data,
+          step26Output: step26Row.output_data,
+          step27Output: step27Row.output_data,
+          source_steps: {
+            registry_step: { step_number: 25, version: step25Row.version, row_id: step25Row.id },
+            gap_audit_step: { step_number: 26, version: step26Row.version, row_id: step26Row.id },
+            feasibility_audit_step: { step_number: 27, version: step27Row.version, row_id: step27Row.id },
+          },
+          ctx,
+        });
+      } catch (err) {
+        if (err instanceof F5TraceabilityError) {
+          console.error("[F5] Traceability hard-block:", err.violations);
+          return new Response(JSON.stringify({
+            error: "F5 output rejected by traceability validator",
+            violations: err.violations,
+          }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        throw err;
+      }
+
+      const scopeOutput: Record<string, unknown> = {
+        scope_architecture_v1: f5Result.scope_architecture_v1,
+        scope_meta: f5Result.scope_meta,
+      };
+
+      // 4. Contract validation (Step 28) — must NOT include forbidden keys.
+      const validation28 = runAllValidators(28, scopeOutput, JSON.stringify(scopeOutput));
+      const errors28 = validation28.violations.filter((v) => v.severity === "error");
+      if (errors28.length > 0) {
+        console.error("[F5] Hard-blocked by Step 28 validator:", errors28.map((e) => e.detail).join("; "));
+        return new Response(JSON.stringify({
+          error: "F5 output rejected by Step 28 contract guard",
+          violations: errors28,
+        }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (Object.keys(validation28.flags).length > 0) {
+        scopeOutput._contract_validation = validation28.flags;
+      }
+
+      // 5. Persist as Step 28 (does NOT touch 25/26/27).
+      const { data: existing28 } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 28)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const newVersion28 = existing28 ? existing28.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existing28?.id || undefined,
+        project_id: projectId,
+        step_number: 28,
+        step_name: "Pipeline v2 — F5 Scope Architect",
+        status: "review",
+        input_data: { source_steps: [25, 26, 27] },
+        output_data: scopeOutput,
+        model_used: "gemini-2.5-pro",
+        version: newVersion28,
+        user_id: user.id,
+      });
+
+      // 6. Counts derived from persisted JSON (Precision 7).
+      const counts = f5Result.scope_meta.counts;
+      return new Response(JSON.stringify({
+        ok: true,
+        version: newVersion28,
+        source_steps: f5Result.scope_meta.source_steps,
+        counts,
+        soul_capture_required: f5Result.scope_architecture_v1.soul_capture_plan.required,
+        human_decisions_applied: f5Result.scope_architecture_v1.human_decisions_applied.map((d) => d.decision_id),
+        llm_added_actions: f5Result.scope_meta.llm_added_actions,
+        llm_rejected_changes: f5Result.scope_meta.llm_rejected_changes,
+        f5_ms: f5Result.scope_meta.f5_ms,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+
     if (action === "generate_scope") {
       const { briefingJson, contactName, currentDate, attachmentsContent } = stepData;
 

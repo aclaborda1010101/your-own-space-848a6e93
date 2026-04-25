@@ -884,31 +884,32 @@ function ensureCanonicalComponentsPresent(briefing: any, ctx: NormalizationConte
   if (!v2) return;
   const components = ctx.canonicalComponents || [];
   if (components.length === 0) return;
-  if (!Array.isArray(v2.ai_native_opportunity_signals)) v2.ai_native_opportunity_signals = [];
 
-  const presentNames = new Set(
-    v2.ai_native_opportunity_signals
-      .map((s: any) => (typeof s === "string" ? s : (s?.title || "")).toLowerCase().trim())
-      .filter(Boolean),
-  );
-
-  for (const comp of components) {
-    const lc = comp.canonical.toLowerCase().trim();
-    if (presentNames.has(lc)) continue;
-    v2.ai_native_opportunity_signals.push({
-      title: comp.canonical,
-      description: comp.description || `${comp.canonical} (componente canónico inyectado por normalizer; revisar evidencia en F2/roadmap).`,
-      _inferred_by: "normalizer_required_component_v1",
-      _evidence_count: 0,
-    });
-    presentNames.add(lc);
-    changes.push({
-      type: "canonical_component_injected",
-      field: "ai_native_opportunity_signals",
-      after: comp.canonical,
-      reason: "Componente canónico ausente tras dedup; inyectado como candidato F2/roadmap.",
-    });
+  const previous = Array.isArray(v2.ai_native_opportunity_signals) ? v2.ai_native_opportunity_signals : [];
+  const evidenceByCanonical = new Map<string, any>();
+  for (const item of previous) {
+    if (!item || typeof item !== "object") continue;
+    const title = (item.title || "").toLowerCase().trim();
+    if (title) evidenceByCanonical.set(title, item);
   }
+
+  v2.ai_native_opportunity_signals = components.map((comp) => {
+    const prior = evidenceByCanonical.get(comp.canonical.toLowerCase().trim());
+    return {
+      title: comp.canonical,
+      description: comp.description || prior?.description || "Componente canónico principal para el roadmap AFFLUX.",
+      ...(prior?._source_chunks ? { _source_chunks: prior._source_chunks } : {}),
+      _evidence_count: prior?._evidence_count || 0,
+      _inferred_by: prior ? (prior._inferred_by || "normalizer_canonical_component_v1") : "normalizer_required_component_v1",
+    };
+  });
+  changes.push({
+    type: "canonical_component_list_replaced",
+    field: "ai_native_opportunity_signals",
+    before: previous.map((p: any) => typeof p === "string" ? p : p?.title).filter(Boolean),
+    after: components.map((c) => c.canonical),
+    reason: "Sección 9 sustituida por la taxonomía canónica estricta del proyecto.",
+  });
 }
 
 // ── 5. Compliance flag expansion ─────────────────────────────────────

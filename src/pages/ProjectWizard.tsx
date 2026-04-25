@@ -297,6 +297,8 @@ const ProjectWizardEdit = () => {
               onExtract={() => runExtraction(undefined, { forceRefresh: true })}
               onForceFullExtract={() => runExtraction(undefined, { skipSampler: true, forceRefresh: true })}
               onChunkedReExtract={() => runExtraction(undefined, { chunkedExtraction: true, forceRefresh: true })}
+              onRetryFailedChunks={retryFailedChunks}
+              onNormalizeBrief={normalizeBrief}
               onApprove={async (editedBriefing) => {
                 await approveStep(2, editedBriefing, { autoChain: autoChainEnabled });
               }}

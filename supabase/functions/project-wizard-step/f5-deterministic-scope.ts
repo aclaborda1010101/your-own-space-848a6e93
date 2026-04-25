@@ -97,6 +97,32 @@ export interface SoulCapturePlan {
   fallback: string;
 }
 
+export interface ComplianceBlockerEntry {
+  scope_id: string;
+  component_name: string;
+  required_artifacts: string[];
+  reason: string;
+  owner: string;
+  deadline_weeks: number;
+}
+
+export interface DatasetReadinessBlockerEntry {
+  scope_id: string;
+  component_id: string;
+  component_name: string;
+  dataset_required: string;
+  current_readiness_pct: number;
+  min_readiness_for_mvp: number;
+  unblocking_actions: string[];
+  reason: string;
+}
+
+export interface ClientDeliverables {
+  mvp_demo_features: string[];
+  documentation: string[];
+  training_sessions: string[];
+}
+
 export interface ScopeArchitectureV1 {
   schema_version: "1.0.0";
   data_foundation: ScopeComponent[];
@@ -104,24 +130,15 @@ export interface ScopeArchitectureV1 {
   fast_follow_f2: ScopeComponent[];
   roadmap_f3: ScopeComponent[];
   rejected_out_of_scope: ScopeComponent[];
-  compliance_blockers: Array<{
-    scope_id: string;
-    component_name: string;
-    required_artifacts: string[];
-    reason: string;
-  }>;
-  data_readiness_blockers: Array<{
-    scope_id: string;
-    component_name: string;
-    dataset_required: string;
-    reason: string;
-  }>;
+  compliance_blockers: ComplianceBlockerEntry[];
+  data_readiness_blockers: DatasetReadinessBlockerEntry[];
   human_decisions_applied: Array<{
     decision_id: string;
     label: string;
     applied_to: string[];
   }>;
   soul_capture_plan: SoulCapturePlan;
+  client_deliverables: ClientDeliverables;
   scope_decision_log: ScopeDecisionLogEntry[];
 }
 

@@ -24,7 +24,7 @@ import { ChainedPRDProgress } from "@/components/projects/wizard/ChainedPRDProgr
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { PublishToForgeDialog } from "@/components/projects/wizard/PublishToForgeDialog";
 import { ManifestViewer } from "@/components/projects/wizard/ManifestViewer";
-import { BuildRegistryPanel } from "@/components/projects/wizard/BuildRegistryPanel";
+import { PipelineQAPanel } from "@/components/projects/wizard/PipelineQAPanel";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
 
@@ -272,7 +272,7 @@ const ProjectWizardEdit = () => {
               {/* QA tool — siempre visible para disparar build_registry sin aprobar Step 2 */}
               {id && (
                 <div className="mt-4">
-                  <BuildRegistryPanel projectId={id} />
+                  <PipelineQAPanel projectId={id} />
                 </div>
               )}
 

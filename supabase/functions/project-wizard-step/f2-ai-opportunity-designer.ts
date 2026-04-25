@@ -400,11 +400,7 @@ function clampCandidate(raw: any, idx: number): { candidate: OpportunityCandidat
 
     origin: pickEnum<OpportunityOrigin>(raw?.origin, ORIGIN_VALUES, "inferred_need"),
 
-    evidence_strength: pickEnum<"low" | "medium" | "high">(
-      raw?.evidence_strength,
-      new Set(["low", "medium", "high"] as const),
-      "medium",
-    ),
+    evidence_strength: evidenceStrength,
     source_quotes: clampSourceQuotes(raw?.source_quotes),
 
     recommended_component_family: family,

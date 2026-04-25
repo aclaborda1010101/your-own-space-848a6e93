@@ -121,10 +121,10 @@ class AppErrorBoundary extends React.Component<
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 0,
+      staleTime: 60 * 1000,
       gcTime: 5 * 60 * 1000,
-      refetchOnMount: "always",
-      refetchOnWindowFocus: true,
+      refetchOnMount: false,
+      refetchOnWindowFocus: false,
       refetchOnReconnect: true,
       retry: 1,
     },

@@ -325,9 +325,6 @@ export const ProjectBudgetPanel = ({
             </button>
           </div>
         </div>
-      <div>
-
-      <div className="p-4 space-y-4">
         {/* Monetization model selector */}
         <div className="space-y-3">
           <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">

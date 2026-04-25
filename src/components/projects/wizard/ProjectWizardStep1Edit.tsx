@@ -164,7 +164,7 @@ export const ProjectWizardStep1Edit = ({
                 Ir a Extracción <ArrowRight className="w-4 h-4" />
               </Button>
             ) : (
-              <Button onClick={onReExtract} className="gap-2 shadow-lg shadow-primary/20" disabled={generating}>
+              <Button onClick={() => onReExtract()} className="gap-2 shadow-lg shadow-primary/20" disabled={generating}>
                 <Sparkles className="w-4 h-4" /> Extraer briefing
               </Button>
             )}

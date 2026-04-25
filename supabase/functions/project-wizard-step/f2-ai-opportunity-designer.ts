@@ -775,6 +775,29 @@ NO mezcles oportunidades con jobs distintos. Específicamente:
 - "Matching activo-inversor" y "Detector de compradores institucionales" son componentes distintos.
 - "Soul" y "Generador de revista emocional" son componentes distintos.
 
+REGLAS REFORZADAS DE EMISIÓN OBLIGATORIA (CRÍTICO — fallos previos):
+
+A) SOUL OBLIGATORIO. Si se cumple CUALQUIERA:
+   - founder_commitment_signals existe y no está vacío;
+   - se menciona founder/CEO/Alejandro/know-how/Soul/criterio del fundador/dificultad de seguimiento;
+   - 2 o más oportunidades tienen soul_dependency en {consults_soul, requires_soul_approval};
+   ENTONCES debes emitir una oportunidad con name="Soul de Alejandro" (o "Soul del fundador" si no se conoce el nombre),
+   recommended_component_family="soul_module", recommended_layer="D_soul",
+   origin="inferred_need", priority="P0_critical", suggested_delivery_phase="MVP",
+   soul_dependency="none", human_review="mandatory", confidence≈0.85.
+
+B) MATCHING ACTIVO-INVERSOR OBLIGATORIO. Si el brief contiene SEÑALES DE ACTIVOS
+   (catálogo de activos, edificios, oportunidades inmobiliarias, fondos, servicers, bancos)
+   Y SEÑALES DE COMPRADORES/INVERSORES (compradores, inversores, fondos, Dapper, LinkedIn,
+   CRM de inversores, "vender antes de comprar", matching, Benatar, "a quién vender"),
+   ENTONCES debes emitir una oportunidad SEPARADA con name="Matching activo-inversor",
+   recommended_component_family="matching_engine", recommended_layer="C_intelligence",
+   origin="unrequested_ai_insight", priority="P1_high", suggested_delivery_phase="F2",
+   dataset_readiness_required=true, human_review="mandatory",
+   compliance_flags ⊇ {personal_data_processing, commercial_prioritization, human_in_the_loop_required},
+   confidence≈0.8, dataset_readiness_reason y minimum_dataset_needed poblados.
+   NO la fusiones con "Detector de compradores institucionales".
+
 COVERAGE GUARD (OBLIGATORIO):
 Para CADA elemento detectado en:
 - business_catalysts

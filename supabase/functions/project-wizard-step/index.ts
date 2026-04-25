@@ -116,7 +116,16 @@ serve(async (req) => {
 
     // ── Action: retry_failed_chunks (Step 2 — surgical repair) ───────────
     if (action === "retry_failed_chunks") {
-      const { projectId: pid, inputContent, projectName, companyName, projectType, clientNeed, founderName, sectorHint } = body.stepData || {};
+      const { projectId: pid, inputContent, projectName, companyName, projectType, clientNeed, founderName, productName, sectorHint, canonicalComponents, forbiddenTopics: forbiddenTopicsRaw, manualReviewAlerts } = body.stepData || {};
+      const forbiddenTopics = (Array.isArray(forbiddenTopicsRaw) ? forbiddenTopicsRaw : [])
+        .map((p: any) => {
+          if (p instanceof RegExp) return p;
+          if (typeof p === "string" && p.length > 0) {
+            try { return new RegExp(p, "i"); } catch { return null; }
+          }
+          return null;
+        })
+        .filter(Boolean) as RegExp[];
       if (!pid || !inputContent) {
         return new Response(JSON.stringify({ error: "projectId and inputContent required" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },

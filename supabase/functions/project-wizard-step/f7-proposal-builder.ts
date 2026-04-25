@@ -192,6 +192,8 @@ export function buildClientProposal(input: F7Input): F7Output {
   const hasBudget =
     typeof commercialTerms.setup_fee === "number" ||
     typeof commercialTerms.monthly_retainer === "number" ||
+    (typeof commercialTerms.setup_fee_display === "string" && commercialTerms.setup_fee_display.trim().length > 0) ||
+    (typeof commercialTerms.monthly_retainer_display === "string" && commercialTerms.monthly_retainer_display.trim().length > 0) ||
     (commercialTerms.phase_prices?.length ?? 0) > 0;
   if (!hasBudget) {
     throw new Error("MISSING_BUDGET_AMOUNTS: la propuesta no puede generarse sin importes (setup_fee, monthly_retainer o phase_prices).");

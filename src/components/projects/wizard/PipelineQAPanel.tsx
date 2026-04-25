@@ -110,7 +110,7 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
 
       if (action === "generate_client_proposal") {
         try {
-          body.commercial_terms = JSON.parse(commercialTerms);
+          body.stepData = { commercial_terms_v1: JSON.parse(commercialTerms) };
         } catch (e) {
           setError("commercial_terms no es JSON válido. Revisa el formulario.");
           return;

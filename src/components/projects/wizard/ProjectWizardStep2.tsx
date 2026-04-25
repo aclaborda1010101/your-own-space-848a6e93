@@ -24,6 +24,8 @@ interface Props {
   onExtract: () => void;
   onForceFullExtract?: () => void;
   onChunkedReExtract?: () => void;
+  onRetryFailedChunks?: () => void;
+  onNormalizeBrief?: () => void;
   onApprove: (editedBriefing: any) => void;
   projectId?: string;
   projectName?: string;
@@ -160,7 +162,7 @@ const BriefItemList = ({ items, colorScheme, showComponentType }: {
   );
 };
 
-export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtract, onForceFullExtract, onChunkedReExtract, onApprove, projectId, projectName, company, version = 1 }: Props) => {
+export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtract, onForceFullExtract, onChunkedReExtract, onRetryFailedChunks, onNormalizeBrief, onApprove, projectId, projectName, company, version = 1 }: Props) => {
   const [editedBriefing, setEditedBriefing] = useState<any>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
@@ -402,6 +404,18 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
           <Button variant="outline" size="sm" onClick={onExtract} className="gap-1.5">
             <RefreshCw className="w-3.5 h-3.5" /> Regenerar
           </Button>
+          {onNormalizeBrief && editedBriefing?.business_extraction_v2 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onNormalizeBrief}
+              disabled={generating}
+              className="gap-1.5 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10"
+              title="Aplica deduplicación, traducción a español, corrección de naming/sector y compliance"
+            >
+              <Sparkles className="w-3.5 h-3.5" /> Limpiar y normalizar
+            </Button>
+          )}
           {projectId && editedBriefing && (
             <ProjectDocumentDownload
               projectId={projectId}
@@ -626,6 +640,61 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
                 )}
 
                 {/* Extraction Warnings */}
+                {/* Brief Limpio (rendered from _clean_brief_md) */}
+                {editedBriefing._clean_brief_md && (
+                  <Card className="border-emerald-500/30 bg-emerald-500/5 overflow-hidden border-l-[3px] border-l-emerald-500/60">
+                    <div className="px-4 py-3 flex items-center gap-2.5">
+                      <Sparkles className="w-4 h-4 text-emerald-600" />
+                      <span className="text-sm font-semibold text-emerald-700">Brief Limpio (versión presentable)</span>
+                      {editedBriefing._normalization_log?.changes_count > 0 && (
+                        <Badge variant="outline" className="text-[10px] h-5 border-emerald-500/40 text-emerald-700">
+                          {editedBriefing._normalization_log.changes_count} cambios
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="px-4 pb-4">
+                      <details>
+                        <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground select-none mb-2">
+                          Ver brief limpio (markdown)
+                        </summary>
+                        <pre className="text-xs whitespace-pre-wrap font-sans bg-background/60 p-3 rounded-md border border-emerald-500/20 max-h-[600px] overflow-auto">
+{editedBriefing._clean_brief_md}
+                        </pre>
+                      </details>
+                    </div>
+                  </Card>
+                )}
+
+                {/* Failed-chunks repair panel */}
+                {Array.isArray(editedBriefing._chunked_extraction_meta?.failed_chunks) &&
+                  editedBriefing._chunked_extraction_meta.failed_chunks.length > 0 &&
+                  onRetryFailedChunks && (
+                    <Card className="border-amber-500/30 bg-amber-500/5 overflow-hidden border-l-[3px] border-l-amber-500/60">
+                      <div className="px-4 py-3 flex items-center gap-2.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-600" />
+                        <span className="text-sm font-semibold text-amber-700">
+                          {editedBriefing._chunked_extraction_meta.failed_chunks.length} bloque(s) fallaron en la extracción
+                        </span>
+                      </div>
+                      <div className="px-4 pb-4 space-y-2">
+                        <p className="text-xs text-muted-foreground">
+                          Algunos bloques no pudieron procesarse. Reintentar SOLO los fallidos es mucho más barato y rápido que re-extraer todo.
+                        </p>
+                        <div className="text-[11px] text-muted-foreground/80 font-mono">
+                          {editedBriefing._chunked_extraction_meta.failed_chunks.map((c: any) => c.chunk_id).join(", ")}
+                        </div>
+                        <button
+                          type="button"
+                          disabled={generating}
+                          onClick={onRetryFailedChunks}
+                          className="text-xs px-2.5 py-1.5 rounded-md border border-amber-500/40 text-amber-700 bg-amber-500/5 hover:bg-amber-500/15 transition-colors disabled:opacity-50 font-medium"
+                        >
+                          🔁 Reintentar bloques fallidos
+                        </button>
+                      </div>
+                    </Card>
+                  )}
+
                 {editedBriefing.extraction_warnings?.length > 0 && (
                   <Card className="border-destructive/20 bg-destructive/5 overflow-hidden border-l-[3px] border-l-destructive/60">
                     <div className="px-4 py-3 flex items-center gap-2.5">

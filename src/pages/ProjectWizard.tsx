@@ -73,7 +73,7 @@ const ProjectWizardEdit = () => {
   const {
     project, steps, costs, totalCost, currentStep,
     loading, generating, chainedPhase, prdSubProgress, internalStepStatuses,
-    runExtraction, approveStep, navigateToStep, runGenericStep, runChainedPRD, updateStepOutputData,
+    runExtraction, retryFailedChunks, normalizeBrief, approveStep, navigateToStep, runGenericStep, runChainedPRD, updateStepOutputData,
     updateInputContent, updateProjectName,
     budgetData, budgetGenerating, budgetStatus, generateBudgetEstimate, updateBudgetData, approveBudget,
     proposalData, proposalGenerating, generateClientProposal,
@@ -297,6 +297,8 @@ const ProjectWizardEdit = () => {
               onExtract={() => runExtraction(undefined, { forceRefresh: true })}
               onForceFullExtract={() => runExtraction(undefined, { skipSampler: true, forceRefresh: true })}
               onChunkedReExtract={() => runExtraction(undefined, { chunkedExtraction: true, forceRefresh: true })}
+              onRetryFailedChunks={retryFailedChunks}
+              onNormalizeBrief={normalizeBrief}
               onApprove={async (editedBriefing) => {
                 await approveStep(2, editedBriefing, { autoChain: autoChainEnabled });
               }}

@@ -374,7 +374,69 @@ export const useProjectWizard = (projectId?: string) => {
     }
   };
 
-  // ── Generate scope document (Step 3 — fused: draft + audit + final) ──
+  // ── Retry only failed chunks (surgical repair, no full re-extraction) ──
+  const retryFailedChunks = async () => {
+    if (!project || !projectId) return;
+    setGenerating(true);
+    const toastId = toast.loading("Reintentando bloques fallidos…");
+    try {
+      const { data, error } = await supabase.functions.invoke("project-wizard-step", {
+        body: {
+          action: "retry_failed_chunks",
+          stepData: {
+            projectId,
+            inputContent: project.inputContent,
+            projectName: project.name,
+            companyName: project.company,
+            projectType: project.projectType,
+            clientNeed: project.clientNeed,
+          },
+        },
+      });
+      if (error) throw error;
+      toast.dismiss(toastId);
+      toast.success(`Recuperados ${data?.recovered ?? 0} bloque(s). ${data?.still_failed ?? 0} sigue(n) fallando.`);
+      await loadProject();
+      return data;
+    } catch (e: any) {
+      console.error("Retry failed chunks error:", e);
+      toast.dismiss(toastId);
+      toast.error(e.message || "Error al reintentar bloques");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  // ── Normalize brief (clean naming, dedup, language, compliance) ──────
+  const normalizeBrief = async () => {
+    if (!project || !projectId) return;
+    setGenerating(true);
+    const toastId = toast.loading("Normalizando brief y generando versión limpia…");
+    try {
+      const { data, error } = await supabase.functions.invoke("project-wizard-step", {
+        body: {
+          action: "normalize_brief",
+          stepData: {
+            projectId,
+            projectName: project.name,
+            companyName: project.company,
+          },
+        },
+      });
+      if (error) throw error;
+      toast.dismiss(toastId);
+      toast.success(`Brief normalizado: ${data?.normalization_changes ?? 0} cambios aplicados.`);
+      await loadProject();
+      return data;
+    } catch (e: any) {
+      console.error("Normalize brief error:", e);
+      toast.dismiss(toastId);
+      toast.error(e.message || "Error al normalizar el brief");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
 
   const generateScope = async (briefingJson: any, contactName: string, pricingMode: string = 'none') => {
     if (!projectId) return;
@@ -1076,6 +1138,8 @@ export const useProjectWizard = (projectId?: string) => {
     stepNames: STEP_NAMES,
     createWizardProject,
     runExtraction,
+    retryFailedChunks,
+    normalizeBrief,
     generateScope,
     approveStep,
     saveStepData,

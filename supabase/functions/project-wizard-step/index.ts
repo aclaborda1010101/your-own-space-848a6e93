@@ -114,6 +114,247 @@ serve(async (req) => {
     const { action, projectId, stepData } = body;
     const supabase = getSupabaseAdmin();
 
+    // ── Action: retry_failed_chunks (Step 2 — surgical repair) ───────────
+    if (action === "retry_failed_chunks") {
+      const { projectId: pid, inputContent, projectName, companyName, projectType, clientNeed, founderName, sectorHint } = body.stepData || {};
+      if (!pid || !inputContent) {
+        return new Response(JSON.stringify({ error: "projectId and inputContent required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: latestStep2 } = await supabase
+        .from("project_wizard_steps")
+        .select("id, output_data, version, input_data")
+        .eq("project_id", pid)
+        .eq("step_number", 2)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!latestStep2 || !latestStep2.output_data) {
+        return new Response(JSON.stringify({ error: "No existing Step 2 to repair" }), {
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const existingBriefing: any = latestStep2.output_data;
+      const meta = existingBriefing._chunked_extraction_meta;
+      const failedIds: string[] = Array.isArray(meta?.failed_chunks)
+        ? meta.failed_chunks.map((c: any) => c.chunk_id).filter(Boolean)
+        : [];
+
+      if (failedIds.length === 0) {
+        return new Response(JSON.stringify({ error: "No failed chunks to retry", briefing: existingBriefing }), {
+          status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { retryFailedChunks, mergeChunkBriefs } = await import("./chunked-extractor.ts");
+      const { normalizeBrief } = await import("./brief-normalizer.ts");
+      const { buildCleanBrief } = await import("./clean-brief-builder.ts");
+
+      console.log(`[wizard][retry] retrying ${failedIds.length} failed chunks for project ${pid}`);
+
+      const { recovered, stillFailed } = await retryFailedChunks(
+        failedIds,
+        inputContent,
+        { projectName, companyName, projectType, clientNeed },
+      );
+
+      // Reconstruct full chunk list: previously-OK chunks (we don't have raw briefs,
+      // but we have the merged result) + newly recovered. To merge cleanly, we
+      // re-merge from the existing v2 fields treated as a single "synthetic" brief
+      // plus the recovered ones.
+      const v2 = existingBriefing.business_extraction_v2 || {};
+      const syntheticOk: any = {
+        chunk_id: "MERGED-PRIOR",
+        observed_facts: v2.observed_facts || [],
+        business_catalysts: v2.business_catalysts || [],
+        underutilized_data_assets: v2.underutilized_data_assets || [],
+        quantified_economic_pains: v2.quantified_economic_pains || [],
+        decision_points: v2.decision_points || [],
+        stakeholder_signals: v2.stakeholder_signals || [],
+        client_requested_items: v2.client_requested_items || [],
+        inferred_needs: v2.inferred_needs || [],
+        ai_native_opportunity_signals: v2.ai_native_opportunity_signals || [],
+        external_data_sources_mentioned: v2.external_data_sources_mentioned || [],
+        founder_commitment_signals: v2.founder_commitment_signals || [],
+        initial_compliance_flags: v2.initial_compliance_flags || [],
+        constraints_and_risks: v2.constraints_and_risks || [],
+        open_questions: v2.open_questions || [],
+        architecture_signals: v2.architecture_signals || [],
+        source_quotes: v2.source_quotes || [],
+        tokensInput: 0,
+        tokensOutput: 0,
+      };
+
+      const mergeResult = await mergeChunkBriefs(
+        [syntheticOk, ...recovered],
+        { projectName, companyName },
+        { synthesizeNarrative: false }, // keep original narrative
+      );
+
+      let mergedBriefing: any = mergeResult.briefing;
+      // Preserve narrative & meta from prior version.
+      if (v2.business_model_summary) mergedBriefing.business_extraction_v2.business_model_summary = v2.business_model_summary;
+      if (v2.executive_summary) mergedBriefing.business_extraction_v2.executive_summary = v2.executive_summary;
+      if (v2.project_title) mergedBriefing.business_extraction_v2.project_title = v2.project_title;
+
+      // Update chunked extraction metadata.
+      const recoveredIds = recovered.map((r) => r.chunk_id);
+      const stillFailedList = stillFailed.map((s) => ({ chunk_id: s.chunk_id, error: s.error }));
+      mergedBriefing._chunked_extraction_meta = {
+        ...meta,
+        chunks_succeeded: Array.from(new Set([...(meta?.chunks_succeeded || []), ...recoveredIds])),
+        failed_chunks: stillFailedList,
+        retry_applied: true,
+        retry_at: new Date().toISOString(),
+        recovered_count: recovered.length,
+      };
+      mergedBriefing._extraction_mode = "chunked";
+      mergedBriefing._f0_signals = existingBriefing._f0_signals;
+
+      // Apply normalization layer.
+      const normResult = await normalizeBrief(mergedBriefing, {
+        projectName, companyName, founderName, sectorHint, language: "es",
+      });
+      let finalBriefing: any = normResult.briefing;
+
+      // Build clean brief.
+      const cleanBrief = buildCleanBrief(finalBriefing, { projectName });
+      finalBriefing._clean_brief_md = cleanBrief.markdown;
+      finalBriefing._clean_brief_sections = cleanBrief.sections;
+
+      // Anti-leak + legacy.
+      const leak = stripRegistryLeaks(finalBriefing);
+      finalBriefing = leak.cleaned;
+      finalBriefing = ensureLegacyBriefShape(finalBriefing);
+      finalBriefing.brief_version = "2.0.0";
+
+      // Save snapshot of previous version.
+      const newVersion = (latestStep2.version || 1) + 1;
+      const totalTokensInput = recovered.reduce((acc: number, c: any) => acc + (c.tokensInput || 0), 0) + normResult.tokensInput;
+      const totalTokensOutput = recovered.reduce((acc: number, c: any) => acc + (c.tokensOutput || 0), 0) + normResult.tokensOutput;
+      const costUsd = (totalTokensInput / 1_000_000) * 0.075 + (totalTokensOutput / 1_000_000) * 0.30;
+
+      await recordCost(supabase, {
+        projectId: pid, stepNumber: 2, service: "gemini-flash", operation: "retry_failed_chunks",
+        tokensInput: totalTokensInput, tokensOutput: totalTokensOutput,
+        costUsd, userId: user.id,
+        metadata: { recovered: recovered.length, still_failed: stillFailedList.length },
+      });
+
+      await supabase.from("project_wizard_steps").insert({
+        project_id: pid,
+        step_number: 2,
+        step_name: "Extracción Inteligente (Chunked + Retry)",
+        status: "review",
+        input_data: {
+          ...(latestStep2.input_data || {}),
+          retry_action: "retry_failed_chunks",
+          previous_version: latestStep2.version,
+          previous_version_snapshot: existingBriefing,
+        },
+        output_data: finalBriefing,
+        model_used: "gemini-2.5-flash",
+        version: newVersion,
+        user_id: user.id,
+      });
+
+      return new Response(JSON.stringify({
+        briefing: finalBriefing,
+        version: newVersion,
+        recovered: recovered.length,
+        still_failed: stillFailedList.length,
+        normalization_changes: normResult.changes.length,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Action: normalize_brief (Step 2 — clean + dedup + clean brief) ───
+    if (action === "normalize_brief") {
+      const { projectId: pid, projectName, companyName, founderName, sectorHint } = body.stepData || {};
+      if (!pid) {
+        return new Response(JSON.stringify({ error: "projectId required" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: latestStep2 } = await supabase
+        .from("project_wizard_steps")
+        .select("id, output_data, version, input_data")
+        .eq("project_id", pid)
+        .eq("step_number", 2)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!latestStep2 || !latestStep2.output_data) {
+        return new Response(JSON.stringify({ error: "No existing Step 2 to normalize" }), {
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { normalizeBrief } = await import("./brief-normalizer.ts");
+      const { buildCleanBrief } = await import("./clean-brief-builder.ts");
+
+      const existingBriefing: any = latestStep2.output_data;
+      const normResult = await normalizeBrief(existingBriefing, {
+        projectName: projectName || "",
+        companyName: companyName || "",
+        founderName, sectorHint, language: "es",
+      });
+      let finalBriefing: any = normResult.briefing;
+
+      const cleanBrief = buildCleanBrief(finalBriefing, { projectName: projectName || "" });
+      finalBriefing._clean_brief_md = cleanBrief.markdown;
+      finalBriefing._clean_brief_sections = cleanBrief.sections;
+
+      const leak = stripRegistryLeaks(finalBriefing);
+      finalBriefing = leak.cleaned;
+      finalBriefing = ensureLegacyBriefShape(finalBriefing);
+      finalBriefing.brief_version = "2.0.0";
+
+      const newVersion = (latestStep2.version || 1) + 1;
+      const costUsd = (normResult.tokensInput / 1_000_000) * 0.075 + (normResult.tokensOutput / 1_000_000) * 0.30;
+
+      if (normResult.tokensInput > 0 || normResult.tokensOutput > 0) {
+        await recordCost(supabase, {
+          projectId: pid, stepNumber: 2, service: "gemini-flash", operation: "normalize_brief",
+          tokensInput: normResult.tokensInput, tokensOutput: normResult.tokensOutput,
+          costUsd, userId: user.id,
+          metadata: { changes: normResult.changes.length, llm_called: normResult.llmCalled },
+        });
+      }
+
+      await supabase.from("project_wizard_steps").insert({
+        project_id: pid,
+        step_number: 2,
+        step_name: "Extracción Inteligente (Normalizada)",
+        status: "review",
+        input_data: {
+          ...(latestStep2.input_data || {}),
+          retry_action: "normalize_brief",
+          previous_version: latestStep2.version,
+          previous_version_snapshot: existingBriefing,
+        },
+        output_data: finalBriefing,
+        model_used: "gemini-2.5-flash",
+        version: newVersion,
+        user_id: user.id,
+      });
+
+      return new Response(JSON.stringify({
+        briefing: finalBriefing,
+        version: newVersion,
+        normalization_changes: normResult.changes.length,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // ── Action: extract (Step 2) ─────────────────────────────────────────
 
     if (action === "extract") {

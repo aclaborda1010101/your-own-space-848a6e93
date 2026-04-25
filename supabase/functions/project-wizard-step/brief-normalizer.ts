@@ -1,0 +1,626 @@
+/**
+ * brief-normalizer.ts — Post-extraction cleanup layer.
+ *
+ * Takes a raw `business_extraction_v2` briefing and applies deterministic
+ * normalizations + ONE optional LLM call for language translation.
+ *
+ * Steps (in order):
+ *   1. Naming split (founder vs company vs product).
+ *   2. Sector token cleanup (e.g. "retail" → "real estate off-market").
+ *   3. Language normalization (EN → ES, single LLM batch).
+ *   4. Semantic dedup of solution candidates (deterministic stem-based).
+ *   5. Compliance flag expansion (rule-based inference).
+ *   6. Quote validator for numeric signals (marks _unverified_number).
+ *
+ * Each step appends to `briefing._normalization_log`.
+ */
+
+import { callGeminiFlash } from "./llm-helpers.ts";
+import { checkNamingCollision } from "../_shared/component-registry-contract.ts";
+
+// ── Types ────────────────────────────────────────────────────────────
+
+export interface NormalizationContext {
+  projectName: string;
+  companyName: string;
+  founderName?: string;
+  sectorHint?: string;
+  language?: "es" | "en";
+}
+
+export interface NormalizationChange {
+  type: string;
+  field?: string;
+  before?: any;
+  after?: any;
+  reason?: string;
+}
+
+export interface NormalizationResult {
+  briefing: any;
+  changes: NormalizationChange[];
+  llmCalled: boolean;
+  tokensInput: number;
+  tokensOutput: number;
+}
+
+// ── 1. Naming split ──────────────────────────────────────────────────
+
+const PERSON_NAME_RE = /^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(\s[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){0,2}$/;
+const COMPANY_SUFFIX_RE = /\b(S\.L\.|S\.A\.|SLU|SAU|Ltd|LLC|Inc|GmbH|AG|BV|S\.r\.l\.|Sociedad|Limited)\b/i;
+
+function looksLikePersonName(s: string): boolean {
+  if (!s || typeof s !== "string") return false;
+  const trimmed = s.trim();
+  if (COMPANY_SUFFIX_RE.test(trimmed)) return false;
+  return PERSON_NAME_RE.test(trimmed);
+}
+
+function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: NormalizationChange[]) {
+  const v2 = briefing?.business_extraction_v2;
+  if (!v2 || typeof v2 !== "object") return;
+
+  if (!v2.client_naming_check || typeof v2.client_naming_check !== "object") {
+    v2.client_naming_check = {};
+  }
+  const cnc = v2.client_naming_check;
+
+  const before = { ...cnc };
+
+  // Detect founder mistakenly placed in client_company_name.
+  if (typeof cnc.client_company_name === "string" && looksLikePersonName(cnc.client_company_name)) {
+    const personName = cnc.client_company_name.trim();
+    if (!cnc.founder_or_decision_maker) {
+      cnc.founder_or_decision_maker = personName;
+    }
+    cnc.client_company_name = ctx.companyName || "";
+    changes.push({
+      type: "naming_split",
+      field: "client_company_name",
+      before: personName,
+      after: cnc.client_company_name,
+      reason: `"${personName}" parecía un nombre de persona; movido a founder_or_decision_maker.`,
+    });
+  }
+
+  // Default founder if hint provided.
+  if (!cnc.founder_or_decision_maker && ctx.founderName) {
+    cnc.founder_or_decision_maker = ctx.founderName;
+    changes.push({
+      type: "naming_split",
+      field: "founder_or_decision_maker",
+      before: null,
+      after: ctx.founderName,
+      reason: "Aplicado founderName desde contexto.",
+    });
+  }
+
+  // Default product name to project name.
+  if (!cnc.proposed_product_name || (typeof cnc.proposed_product_name === "string" && cnc.proposed_product_name.trim().length === 0)) {
+    cnc.proposed_product_name = ctx.projectName || null;
+    if (cnc.proposed_product_name) {
+      changes.push({
+        type: "naming_split",
+        field: "proposed_product_name",
+        before: null,
+        after: cnc.proposed_product_name,
+        reason: "Aplicado projectName por defecto.",
+      });
+    }
+  }
+
+  // Re-check collision.
+  if (cnc.client_company_name && cnc.proposed_product_name) {
+    try {
+      const collision = checkNamingCollision(cnc.client_company_name, cnc.proposed_product_name);
+      cnc.collision_detected = collision.detected;
+      if (collision.reason) cnc.collision_reason = collision.reason;
+    } catch {
+      cnc.collision_detected = false;
+    }
+  } else {
+    cnc.collision_detected = false;
+  }
+
+  // Diff log (compact).
+  if (JSON.stringify(before) !== JSON.stringify(cnc)) {
+    changes.push({ type: "naming_check_updated", before, after: { ...cnc } });
+  }
+}
+
+// ── 2. Sector cleanup ────────────────────────────────────────────────
+
+const SECTOR_REPLACEMENTS: Array<{ from: RegExp; to: string; label: string }> = [
+  { from: /\bretail\s+data\b/gi, to: "real estate data", label: "retail data → real estate data" },
+  { from: /\bcomercio\s+minorista\b/gi, to: "inversión inmobiliaria", label: "comercio minorista → inversión inmobiliaria" },
+  { from: /\bretail\b/gi, to: "real estate off-market", label: "retail → real estate off-market" },
+];
+
+function applySectorCleanup(node: any, changes: NormalizationChange[], path: string[] = []): any {
+  if (typeof node === "string") {
+    let out = node;
+    for (const r of SECTOR_REPLACEMENTS) {
+      // Skip URLs / IDs (rough heuristic: contains :// or COMP-).
+      if (/:\/\//.test(out) || /COMP-\d+/.test(out)) continue;
+      if (r.from.test(out)) {
+        const before = out;
+        out = out.replace(r.from, r.to);
+        if (before !== out) {
+          changes.push({
+            type: "sector_cleanup",
+            field: path.join("."),
+            before,
+            after: out,
+            reason: r.label,
+          });
+        }
+      }
+    }
+    return out;
+  }
+  if (Array.isArray(node)) {
+    return node.map((item, i) => applySectorCleanup(item, changes, [...path, String(i)]));
+  }
+  if (node && typeof node === "object") {
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(node)) {
+      if (k.startsWith("_")) {
+        // Don't mutate internal metadata strings.
+        out[k] = v;
+        continue;
+      }
+      out[k] = applySectorCleanup(v, changes, [...path, k]);
+    }
+    return out;
+  }
+  return node;
+}
+
+// ── 3. Language normalization (LLM) ──────────────────────────────────
+
+const EN_HINT_WORDS = new Set([
+  "the", "and", "for", "with", "from", "this", "that", "have", "will",
+  "system", "data", "client", "based", "process", "management", "business",
+  "platform", "agent", "tool", "tools", "knowledge", "support", "service",
+  "automation", "workflow", "extensive", "potential", "rate", "response",
+  "analysis", "managing", "unified", "custom", "powered", "generation",
+  "marketing", "content", "copywriting", "guidance", "negotiation", "coaching",
+]);
+
+function isLikelyEnglish(s: string): boolean {
+  if (!s || typeof s !== "string") return false;
+  const words = s.toLowerCase().match(/[a-záéíóúñ]+/gi) || [];
+  if (words.length < 3) return false;
+  const enHits = words.filter((w) => EN_HINT_WORDS.has(w)).length;
+  return enHits / words.length > 0.25;
+}
+
+interface TranslateItem {
+  id: string;
+  text: string;
+}
+
+function collectTranslatableStrings(briefing: any): TranslateItem[] {
+  const items: TranslateItem[] = [];
+  const v2 = briefing?.business_extraction_v2;
+  if (!v2) return items;
+
+  const FIELDS_TO_SCAN = [
+    "observed_facts", "business_catalysts", "underutilized_data_assets",
+    "quantified_economic_pains", "decision_points", "client_requested_items",
+    "inferred_needs", "ai_native_opportunity_signals", "constraints_and_risks",
+    "open_questions", "architecture_signals", "stakeholder_signals",
+  ];
+  const STRING_KEYS = ["title", "description", "signal", "question", "name_or_role"];
+
+  for (const field of FIELDS_TO_SCAN) {
+    const arr = v2[field];
+    if (!Array.isArray(arr)) continue;
+    arr.forEach((item: any, idx: number) => {
+      if (!item || typeof item !== "object") return;
+      for (const key of STRING_KEYS) {
+        const val = item[key];
+        if (typeof val === "string" && isLikelyEnglish(val)) {
+          items.push({ id: `${field}|${idx}|${key}`, text: val });
+        }
+      }
+    });
+  }
+
+  return items;
+}
+
+function applyTranslations(briefing: any, translations: Record<string, string>, changes: NormalizationChange[]) {
+  const v2 = briefing?.business_extraction_v2;
+  if (!v2) return;
+
+  for (const [id, translated] of Object.entries(translations)) {
+    const [field, idxStr, key] = id.split("|");
+    const idx = parseInt(idxStr, 10);
+    const arr = v2[field];
+    if (!Array.isArray(arr) || !arr[idx] || typeof arr[idx] !== "object") continue;
+    const before = arr[idx][key];
+    if (typeof before === "string" && before !== translated) {
+      arr[idx][key] = translated;
+      changes.push({
+        type: "language_normalization",
+        field: `${field}[${idx}].${key}`,
+        before,
+        after: translated,
+        reason: "Traducido EN → ES",
+      });
+    }
+  }
+}
+
+async function applyLanguageNormalization(
+  briefing: any,
+  changes: NormalizationChange[],
+): Promise<{ tokensInput: number; tokensOutput: number; called: boolean }> {
+  const items = collectTranslatableStrings(briefing);
+  if (items.length === 0) return { tokensInput: 0, tokensOutput: 0, called: false };
+
+  // Cap to avoid massive prompts.
+  const capped = items.slice(0, 60);
+
+  const systemPrompt = `Eres traductor técnico ES↔EN. Recibes una lista JSON de strings en inglés (o mezcla) extraídas de un briefing de proyecto. Tradúcelas a ESPAÑOL NEUTRO TÉCNICO.
+
+REGLAS:
+- Conserva nombres propios (HubSpot, Drive, BORME, Teclofine, AFFLUX, etc.).
+- Conserva tecnicismos universales: RAG, LLM, API, JSON, MVP, KPI, CRM, ROI.
+- No inventes contenido; traduce literal pero idiomático.
+- Devuelve JSON con la MISMA forma { "translations": { "<id>": "<texto en español>", ... } } usando los IDs proporcionados.
+- Si un string ya está claramente en español, devuélvelo tal cual.`;
+
+  const userPrompt = `Traduce estos strings y devuelve solo el JSON:
+${JSON.stringify({ items: capped }, null, 2)}`;
+
+  try {
+    const result = await callGeminiFlash(systemPrompt, userPrompt, { maxRetries: 1, maxTokens: 4096 });
+    let parsed: any = null;
+    try {
+      const cleaned = result.text.trim().replace(/^```(?:json)?\s*\n?/gm, "").replace(/\n?```\s*$/gm, "").trim();
+      parsed = JSON.parse(cleaned);
+    } catch {
+      const fb = result.text.indexOf("{");
+      const lb = result.text.lastIndexOf("}");
+      if (fb !== -1 && lb > fb) {
+        try { parsed = JSON.parse(result.text.substring(fb, lb + 1)); } catch { /* swallow */ }
+      }
+    }
+    if (parsed?.translations && typeof parsed.translations === "object") {
+      applyTranslations(briefing, parsed.translations, changes);
+    }
+    return { tokensInput: result.tokensInput, tokensOutput: result.tokensOutput, called: true };
+  } catch (e) {
+    console.warn("[normalizer][language] non-blocking failure:", e instanceof Error ? e.message : e);
+    changes.push({
+      type: "language_normalization_skipped",
+      reason: e instanceof Error ? e.message : String(e),
+    });
+    return { tokensInput: 0, tokensOutput: 0, called: false };
+  }
+}
+
+// ── 4. Semantic dedup ────────────────────────────────────────────────
+
+function stemEs(word: string): string {
+  return word
+    .toLowerCase()
+    .replace(/[áàä]/g, "a").replace(/[éèë]/g, "e").replace(/[íìï]/g, "i")
+    .replace(/[óòö]/g, "o").replace(/[úùü]/g, "u").replace(/ñ/g, "n")
+    .replace(/(ciones|ciónes|ción|ciones|aciones|aciones)$/i, "")
+    .replace(/(mente|miento|ado|ido|ar|er|ir|es|s)$/i, "")
+    .slice(0, 6);
+}
+
+function tokenize(s: string): Set<string> {
+  const STOP = new Set(["de","la","el","los","las","y","a","o","en","con","por","para","del","un","una","al","sobre","que"]);
+  const words = (s || "").toLowerCase().match(/[a-záéíóúñ]+/gi) || [];
+  return new Set(words.filter((w) => w.length > 2 && !STOP.has(w)).map(stemEs));
+}
+
+function jaccardSim(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  const union = a.size + b.size - inter;
+  return union === 0 ? 0 : inter / union;
+}
+
+const CANONICAL_GROUPS: Array<{ canonical: string; matchTokens: string[] }> = [
+  {
+    canonical: "Generador de revista emocional y contenido por rol",
+    matchTokens: ["copy", "magazine", "revista", "marketing", "content", "contenido", "emocional", "publicacion"],
+  },
+  {
+    canonical: "Asistente pre/post llamada y coaching comercial",
+    matchTokens: ["call", "llamada", "negotia", "negocia", "coach", "asistente", "agent", "post"],
+  },
+  {
+    canonical: "RAG de conocimiento del proyecto",
+    matchTokens: ["unified", "platform", "knowledge", "rag", "base", "conocimiento", "custom"],
+  },
+];
+
+function tryAssignCanonical(item: any): string | null {
+  const text = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+  for (const group of CANONICAL_GROUPS) {
+    const hits = group.matchTokens.filter((t) => text.includes(t)).length;
+    if (hits >= 2) return group.canonical;
+  }
+  return null;
+}
+
+function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: string): any[] {
+  if (!Array.isArray(arr)) return arr;
+
+  // 1. Group by canonical mapping first.
+  const canonicalBuckets = new Map<string, any[]>();
+  const remaining: any[] = [];
+  for (const item of arr) {
+    const canon = tryAssignCanonical(item);
+    if (canon) {
+      const bucket = canonicalBuckets.get(canon) || [];
+      bucket.push(item);
+      canonicalBuckets.set(canon, bucket);
+    } else {
+      remaining.push(item);
+    }
+  }
+
+  // Merge each canonical bucket into one item.
+  const merged: any[] = [];
+  for (const [canonical, bucket] of canonicalBuckets.entries()) {
+    if (bucket.length === 1) {
+      merged.push(bucket[0]);
+      continue;
+    }
+    const first = { ...bucket[0] };
+    first.title = canonical;
+    first._merged_from = bucket.map((b) => b.title || b.description || "").filter(Boolean);
+    first._source_chunks = Array.from(new Set(bucket.flatMap((b) => b._source_chunks || [])));
+    first._evidence_count = first._source_chunks.length;
+    const evSnippets = bucket.flatMap((b) => b.evidence_snippets || []);
+    if (evSnippets.length > 0) first.evidence_snippets = Array.from(new Set(evSnippets)).slice(0, 5);
+    merged.push(first);
+    changes.push({
+      type: "candidate_merge_canonical",
+      field: fieldName,
+      before: first._merged_from,
+      after: canonical,
+      reason: `Fusionados ${bucket.length} candidatos en componente canónico.`,
+    });
+  }
+
+  // 2. Then jaccard-dedup the remaining.
+  const tokenizedRemaining = remaining.map((it) => ({ item: it, tokens: tokenize(`${it.title || ""} ${it.description || ""}`) }));
+  const used = new Array(tokenizedRemaining.length).fill(false);
+
+  for (let i = 0; i < tokenizedRemaining.length; i++) {
+    if (used[i]) continue;
+    const group = [tokenizedRemaining[i].item];
+    used[i] = true;
+    for (let j = i + 1; j < tokenizedRemaining.length; j++) {
+      if (used[j]) continue;
+      const sim = jaccardSim(tokenizedRemaining[i].tokens, tokenizedRemaining[j].tokens);
+      if (sim >= 0.6) {
+        group.push(tokenizedRemaining[j].item);
+        used[j] = true;
+      }
+    }
+    if (group.length === 1) {
+      merged.push(group[0]);
+    } else {
+      const head = { ...group[0] };
+      head._merged_from = group.slice(1).map((g) => g.title || g.description || "").filter(Boolean);
+      head._source_chunks = Array.from(new Set(group.flatMap((g) => g._source_chunks || [])));
+      head._evidence_count = head._source_chunks.length;
+      merged.push(head);
+      changes.push({
+        type: "candidate_merge_lexical",
+        field: fieldName,
+        before: group.map((g) => g.title || g.description),
+        after: head.title || head.description,
+        reason: `Fusionados ${group.length} candidatos por similitud léxica (jaccard ≥ 0.6).`,
+      });
+    }
+  }
+
+  return merged;
+}
+
+function applySemanticDedup(briefing: any, changes: NormalizationChange[]) {
+  const v2 = briefing?.business_extraction_v2;
+  if (!v2) return;
+  for (const field of ["ai_native_opportunity_signals", "client_requested_items", "inferred_needs"] as const) {
+    const before = Array.isArray(v2[field]) ? v2[field].length : 0;
+    v2[field] = dedupCandidates(v2[field], changes, field);
+    const after = Array.isArray(v2[field]) ? v2[field].length : 0;
+    if (before !== after) {
+      changes.push({
+        type: "candidate_dedup_summary",
+        field,
+        before,
+        after,
+        reason: `Reducción ${before} → ${after}.`,
+      });
+    }
+  }
+}
+
+// ── 5. Compliance flag expansion ─────────────────────────────────────
+
+interface FlagRule {
+  flag: string;
+  evidence: string;
+  trigger: (briefing: any) => boolean;
+}
+
+function hasTokenInArrayField(briefing: any, field: string, keys: string[], tokens: string[]): boolean {
+  const v2 = briefing?.business_extraction_v2;
+  const arr = v2?.[field];
+  if (!Array.isArray(arr)) return false;
+  const blob = arr.map((item: any) => {
+    if (typeof item === "string") return item;
+    if (item && typeof item === "object") return keys.map((k) => item[k] || "").join(" ");
+    return "";
+  }).join(" ").toLowerCase();
+  return tokens.some((t) => blob.includes(t));
+}
+
+function applyComplianceExpansion(briefing: any, changes: NormalizationChange[]) {
+  const v2 = briefing?.business_extraction_v2;
+  if (!v2) return;
+  if (!Array.isArray(v2.initial_compliance_flags)) v2.initial_compliance_flags = [];
+
+  const existing = new Set(v2.initial_compliance_flags.map((f: any) => (typeof f === "string" ? f : f?.flag)).filter(Boolean));
+
+  const rules: FlagRule[] = [
+    {
+      flag: "external_data_enrichment",
+      evidence: "Mencionan enriquecimiento de datos externos (BORME, esquelas, Registro Civil, prensa).",
+      trigger: (b) =>
+        hasTokenInArrayField(b, "external_data_sources_mentioned", ["name", "purpose"], ["borme", "esquela", "registro civil", "boe", "prensa", "scraping"]) ||
+        hasTokenInArrayField(b, "ai_native_opportunity_signals", ["title", "description"], ["enrich", "enriquec", "scraping", "esquela", "borme"]),
+    },
+    {
+      flag: "scraping_public_sources",
+      evidence: "Se planea extraer datos de fuentes públicas online.",
+      trigger: (b) =>
+        hasTokenInArrayField(b, "external_data_sources_mentioned", ["name", "purpose"], ["scraping", "scrape", "boe", "borme", "esquela", "prensa local"]),
+    },
+    {
+      flag: "commercial_prioritization",
+      evidence: "Hay priorización comercial automatizada (matching, scoring, ranking).",
+      trigger: (b) =>
+        hasTokenInArrayField(b, "ai_native_opportunity_signals", ["title", "description"], ["matching", "scoring", "ranking", "priorizac", "priorit"]),
+    },
+    {
+      flag: "gdpr_article_22_risk",
+      evidence: "Decisiones automatizadas con efecto comercial sobre personas (Art. 22 RGPD).",
+      trigger: (b) =>
+        hasTokenInArrayField(b, "ai_native_opportunity_signals", ["title", "description"], ["matching", "scoring", "ranking", "priorizac", "decisi"]) &&
+        existing.has("personal_data_processing"),
+    },
+    {
+      flag: "legal_basis_required",
+      evidence: "Procesamiento de datos personales requiere base legal documentada.",
+      trigger: (_b) => existing.has("personal_data_processing") || existing.has("profiling"),
+    },
+    {
+      flag: "human_in_the_loop_required",
+      evidence: "Decisiones sensibles deberían tener revisión humana antes de impacto comercial.",
+      trigger: (_b) => existing.has("personal_data_processing") || existing.has("profiling"),
+    },
+    {
+      flag: "data_retention_required",
+      evidence: "Se necesita política de retención y borrado para datos personales recolectados.",
+      trigger: (_b) => existing.has("personal_data_processing"),
+    },
+  ];
+
+  for (const r of rules) {
+    if (existing.has(r.flag)) continue;
+    if (r.trigger(briefing)) {
+      v2.initial_compliance_flags.push({
+        flag: r.flag,
+        evidence: r.evidence,
+        _inferred_by: "normalizer_v1",
+      });
+      existing.add(r.flag);
+      changes.push({
+        type: "compliance_flag_inferred",
+        field: "initial_compliance_flags",
+        after: r.flag,
+        reason: r.evidence,
+      });
+    }
+  }
+}
+
+// ── 6. Quote validator for numeric signals ───────────────────────────
+
+const NUMERIC_PATTERN = /\b(\d{1,4})\s*(visitas|llamadas|propietarios|meses|semanas|años|%|euros|€|edificios|inmuebles|reuniones)\b/gi;
+
+function applyQuoteValidator(briefing: any, changes: NormalizationChange[]) {
+  const v2 = briefing?.business_extraction_v2;
+  if (!v2) return;
+  const quotes = (v2.source_quotes || []).map((q: string) => (q || "").toLowerCase());
+
+  const FIELDS_TO_CHECK = ["observed_facts", "quantified_economic_pains", "business_catalysts"];
+  for (const field of FIELDS_TO_CHECK) {
+    const arr = v2[field];
+    if (!Array.isArray(arr)) continue;
+    for (const item of arr) {
+      if (!item || typeof item !== "object") continue;
+      const text = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+      const matches = Array.from(text.matchAll(NUMERIC_PATTERN));
+      if (matches.length === 0) continue;
+      const unverified: string[] = [];
+      for (const m of matches) {
+        const fragment = `${m[1]} ${m[2]}`;
+        const inQuotes = quotes.some((q: string) => q.includes(fragment) || q.includes(m[1]));
+        if (!inQuotes) unverified.push(fragment);
+      }
+      if (unverified.length > 0) {
+        item._unverified_number = true;
+        item._unverified_fragments = unverified;
+        changes.push({
+          type: "unverified_number",
+          field,
+          after: unverified,
+          reason: "Cifra no encontrada literal en source_quotes; revisar manualmente.",
+        });
+      }
+    }
+  }
+}
+
+// ── Main entrypoint ──────────────────────────────────────────────────
+
+export async function normalizeBrief(
+  inputBriefing: any,
+  ctx: NormalizationContext,
+): Promise<NormalizationResult> {
+  // Deep clone so we don't mutate the caller's object.
+  const briefing = JSON.parse(JSON.stringify(inputBriefing || {}));
+  const changes: NormalizationChange[] = [];
+
+  // 1. Naming
+  applyNamingSplit(briefing, ctx, changes);
+
+  // 2. Sector cleanup (deep, but skip _-prefixed keys)
+  if (briefing.business_extraction_v2) {
+    briefing.business_extraction_v2 = applySectorCleanup(briefing.business_extraction_v2, changes, ["business_extraction_v2"]);
+  }
+
+  // 3. Language normalization (single LLM call, non-blocking)
+  const langResult = await applyLanguageNormalization(briefing, changes);
+
+  // 4. Semantic dedup
+  applySemanticDedup(briefing, changes);
+
+  // 5. Compliance expansion
+  applyComplianceExpansion(briefing, changes);
+
+  // 6. Quote validator
+  applyQuoteValidator(briefing, changes);
+
+  // Attach log.
+  briefing._normalization_log = {
+    version: "1.0.0",
+    applied_at: new Date().toISOString(),
+    changes_count: changes.length,
+    changes,
+    language_llm_called: langResult.called,
+  };
+
+  return {
+    briefing,
+    changes,
+    llmCalled: langResult.called,
+    tokensInput: langResult.tokensInput,
+    tokensOutput: langResult.tokensOutput,
+  };
+}

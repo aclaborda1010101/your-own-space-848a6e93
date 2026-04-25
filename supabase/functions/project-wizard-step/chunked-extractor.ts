@@ -330,6 +330,158 @@ export async function runChunkedExtraction(
   return results;
 }
 
+// ── 3.b Retry only failed chunks ─────────────────────────────────────
+
+/**
+ * Reconstructs the chunk list from the original input and re-runs ONLY the
+ * chunks whose IDs appear in `failedChunkIds`. This avoids re-spending tokens
+ * on chunks that already succeeded.
+ *
+ * Uses higher maxTokens (12_288) and an extra sequential retry compared to the
+ * initial run, since failed chunks are typically the long/dense ones.
+ */
+export async function retryFailedChunks(
+  failedChunkIds: string[],
+  rawInput: string,
+  ctx: ChunkExtractionContext,
+  splitOpts: SplitOpts = {},
+): Promise<{ recovered: ChunkBriefPartial[]; stillFailed: ChunkFailure[] }> {
+  if (!failedChunkIds || failedChunkIds.length === 0) {
+    return { recovered: [], stillFailed: [] };
+  }
+
+  // Re-split with the SAME options used originally so chunk_ids align.
+  const allChunks = splitInputIntoChunks(rawInput, splitOpts);
+  const wanted = new Set(failedChunkIds);
+  const targets = allChunks.filter((c) => wanted.has(c.chunk_id));
+
+  if (targets.length === 0) {
+    console.warn(`[chunked-extractor][retry] no chunks matched IDs ${failedChunkIds.join(",")} (chunk count changed?)`);
+    return {
+      recovered: [],
+      stillFailed: failedChunkIds.map((id) => ({ failed: true, chunk_id: id, error: "Chunk ID not found in current split" })),
+    };
+  }
+
+  const recovered: ChunkBriefPartial[] = [];
+  const stillFailed: ChunkFailure[] = [];
+
+  // Run sequentially with up to 2 retries each (failed chunks are usually long).
+  for (const chunk of targets) {
+    let lastErr: unknown = null;
+    let success = false;
+    for (let attempt = 0; attempt < 3 && !success; attempt++) {
+      try {
+        const result = await extractSignalsFromChunkWithMaxTokens(chunk, ctx, 12_288);
+        recovered.push(result);
+        success = true;
+      } catch (e) {
+        lastErr = e;
+        console.warn(`[chunked-extractor][retry] ${chunk.chunk_id} attempt ${attempt + 1}/3 failed: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+    if (!success) {
+      stillFailed.push({
+        failed: true,
+        chunk_id: chunk.chunk_id,
+        error: lastErr instanceof Error ? lastErr.message : String(lastErr),
+      });
+    }
+  }
+
+  console.log(`[chunked-extractor][retry] recovered ${recovered.length}/${targets.length}, still failed ${stillFailed.length}`);
+  return { recovered, stillFailed };
+}
+
+/** Internal variant of extractSignalsFromChunk that accepts custom maxTokens. */
+async function extractSignalsFromChunkWithMaxTokens(
+  chunk: Chunk,
+  ctx: ChunkExtractionContext,
+  maxTokens: number,
+): Promise<ChunkBriefPartial> {
+  const systemPrompt = `Eres un analista senior de extracción de información para consultoría tecnológica.
+Estás procesando UN BLOQUE PARCIAL de un material más largo (transcripción + documentos) sobre un proyecto.
+
+REGLAS ESTRICTAS:
+- Extrae SOLO señales presentes en este bloque. NO inventes.
+- NO generes ComponentRegistryItem ni IDs tipo COMP-XXX. Solo señales de negocio.
+- NO generes PRD ni propuestas comerciales.
+- Conserva citas literales relevantes en evidence_snippets y source_quotes.
+- Devuelve JSON ESTRICTO con la estructura indicada. Todos los arrays son opcionales.
+- Sé CONCISO en descriptions (máx 2 frases) para no agotar el output budget.
+
+PROYECTO OBJETIVO: ${ctx.projectName}
+EMPRESA OBJETIVO: ${ctx.companyName}
+${ctx.projectType ? `TIPO DE PROYECTO: ${ctx.projectType}` : ""}
+${ctx.clientNeed ? `NECESIDAD INICIAL DEL CLIENTE: ${ctx.clientNeed}` : ""}
+
+ESTRUCTURA OBLIGATORIA DE SALIDA (JSON):
+${CHUNK_EXTRACTION_SCHEMA_HINT}`;
+
+  const userPrompt = `BLOQUE ${chunk.chunk_id} (chars ${chunk.char_start}–${chunk.char_end}):
+
+${chunk.text}
+
+Devuelve SOLO el JSON con las señales encontradas en ESTE bloque. chunk_id debe ser "${chunk.chunk_id}".`;
+
+  const result = await callGeminiFlash(systemPrompt, userPrompt, {
+    maxRetries: 1,
+    maxTokens,
+  });
+
+  let parsed: any;
+  try {
+    let cleaned = result.text.trim();
+    cleaned = cleaned.replace(/^```(?:json|JSON)?\s*\n?/gm, "").replace(/\n?```\s*$/gm, "").trim();
+    parsed = JSON.parse(cleaned);
+  } catch {
+    const text = result.text;
+    const firstBrace = text.indexOf("{");
+    const lastBrace = text.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      try {
+        parsed = JSON.parse(text.substring(firstBrace, lastBrace + 1));
+      } catch {
+        throw new Error(`Failed to parse chunk ${chunk.chunk_id} output`);
+      }
+    } else {
+      throw new Error(`Chunk ${chunk.chunk_id}: no JSON in response`);
+    }
+  }
+
+  const tagItems = (arr: any) => {
+    if (!Array.isArray(arr)) return [];
+    return arr.map((item) => {
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        return { ...item, _source_chunks: [chunk.chunk_id] };
+      }
+      return item;
+    });
+  };
+
+  return {
+    chunk_id: chunk.chunk_id,
+    observed_facts: tagItems(parsed.observed_facts),
+    business_catalysts: tagItems(parsed.business_catalysts),
+    underutilized_data_assets: tagItems(parsed.underutilized_data_assets),
+    quantified_economic_pains: tagItems(parsed.quantified_economic_pains),
+    decision_points: tagItems(parsed.decision_points),
+    stakeholder_signals: tagItems(parsed.stakeholder_signals),
+    client_requested_items: tagItems(parsed.client_requested_items),
+    inferred_needs: tagItems(parsed.inferred_needs),
+    ai_native_opportunity_signals: tagItems(parsed.ai_native_opportunity_signals),
+    external_data_sources_mentioned: tagItems(parsed.external_data_sources_mentioned),
+    founder_commitment_signals: tagItems(parsed.founder_commitment_signals),
+    initial_compliance_flags: tagItems(parsed.initial_compliance_flags),
+    constraints_and_risks: tagItems(parsed.constraints_and_risks),
+    open_questions: tagItems(parsed.open_questions),
+    architecture_signals: tagItems(parsed.architecture_signals),
+    source_quotes: Array.isArray(parsed.source_quotes) ? parsed.source_quotes : [],
+    tokensInput: result.tokensInput,
+    tokensOutput: result.tokensOutput,
+  };
+}
+
 // ── 4. Merge ─────────────────────────────────────────────────────────
 
 /** Normalize a string for fuzzy dedup (lowercase, trim, collapse whitespace, take first 80 chars). */

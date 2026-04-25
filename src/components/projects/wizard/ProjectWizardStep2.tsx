@@ -428,10 +428,8 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, normali
 
             const handleAutoPdf = async () => {
               if (!onNormalizeBrief) return;
-              const result = await onNormalizeBrief();
-              if (!result?.success) return;
-              // PDF download will trigger on next render once briefing is updated.
-              // We force a small re-fetch by waiting a tick.
+              const result = await Promise.resolve(onNormalizeBrief());
+              if (!result || (result as any).success !== true) return;
               await new Promise((r) => setTimeout(r, 400));
             };
 

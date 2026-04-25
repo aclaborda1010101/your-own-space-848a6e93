@@ -180,6 +180,42 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
 
     const audit = parsed.audit ?? {};
 
+    // Step 31 — final deliverables audit
+    if (lastAction === "audit_final_deliverables" || parsed.deliverables_audit) {
+      const a = parsed.deliverables_audit ?? parsed;
+      return {
+        ok: parsed.ok,
+        passed: a.checks_passed ?? a.passed,
+        failed: a.checks_failed ?? a.failed,
+        warnings: a.warnings_count ?? a.warnings?.length,
+        verdict: a.verdict ?? a.recommendation,
+      };
+    }
+
+    // Step 30 — client proposal
+    if (lastAction === "generate_client_proposal" || parsed.client_proposal) {
+      const p = parsed.client_proposal ?? parsed;
+      return {
+        ok: parsed.ok,
+        sections_count: p.sections?.length ?? p.sections_count,
+        word_count: p.word_count,
+        banned_phrases_found: p.banned_phrases_found ?? 0,
+        version: p.version,
+      };
+    }
+
+    // Step 29 — technical PRD
+    if (lastAction === "generate_technical_prd" || parsed.technical_prd) {
+      const p = parsed.technical_prd ?? parsed;
+      return {
+        ok: parsed.ok,
+        components_count: p.components_count ?? p.components?.length,
+        sections_count: p.sections?.length ?? p.sections_count,
+        traceability_violations: p.traceability_violations ?? 0,
+        version: p.version,
+      };
+    }
+
     // Step 27 (F4b) — feasibility
     if (
       lastAction === "audit_f4b_feasibility" ||
@@ -229,6 +265,20 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
       f2_ms: parsed.f2_ms,
       f3_ms: parsed.f3_ms,
     };
+  })();
+
+  // Markdown descargable según última acción
+  const downloadableMarkdown = (() => {
+    if (!parsed) return null;
+    if (lastAction === "generate_technical_prd") {
+      const md = parsed.technical_prd?.markdown ?? parsed.markdown;
+      if (md) return { filename: "PRD-tecnico.md", content: md, label: "Descargar PRD (MD)" };
+    }
+    if (lastAction === "generate_client_proposal") {
+      const md = parsed.client_proposal?.markdown ?? parsed.markdown;
+      if (md) return { filename: "Propuesta-cliente.md", content: md, label: "Descargar Propuesta (MD)" };
+    }
+    return null;
   })();
 
   const renderActionButton = (action: WizardAction) => {

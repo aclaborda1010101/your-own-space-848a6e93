@@ -227,7 +227,8 @@ serve(async (req) => {
       // Apply normalization layer.
       const normResult = await normalizeBrief(mergedBriefing, {
         projectName, companyName, founderName, productName, sectorHint, language: "es",
-        canonicalComponents, forbiddenTopics, manualReviewAlerts,
+        companyNameOverride, canonicalComponents, canonicalCatalysts, mutexGroups,
+        forbiddenTopics, manualReviewAlerts,
       });
       let finalBriefing: any = normResult.briefing;
 

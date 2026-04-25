@@ -4979,21 +4979,48 @@ Si no hay contradicciones, devuelve: {"contradicciones": []}`;
         }
       }
 
-      await supabase
+      // Find latest version of this step and update by id (avoids ambiguity in update+limit)
+      const { data: latestRow } = await supabase
         .from("project_wizard_steps")
-        .update({
-          status: "approved",
-          approved_at: new Date().toISOString(),
-          output_data: outputData || undefined,
-        })
+        .select("id, version")
         .eq("project_id", projectId)
         .eq("step_number", dbStepNumber)
         .order("version", { ascending: false })
-        .limit(1);
+        .limit(1)
+        .maybeSingle();
 
-      await supabase.from("business_projects")
-        .update({ current_step: Math.min(stepNumber + 1, 4) })
-        .eq("id", projectId);
+      if (!latestRow) {
+        console.warn(`[approve_step] no row found for project=${projectId} dbStep=${dbStepNumber}`);
+        return new Response(JSON.stringify({ error: `No step ${dbStepNumber} to approve` }), {
+          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const updatePayload: Record<string, unknown> = {
+        status: "approved",
+        approved_at: new Date().toISOString(),
+      };
+      if (outputData !== undefined && outputData !== null) {
+        updatePayload.output_data = outputData;
+      }
+
+      const { error: updErr } = await supabase
+        .from("project_wizard_steps")
+        .update(updatePayload)
+        .eq("id", latestRow.id);
+      if (updErr) console.error(`[approve_step] update failed:`, updErr);
+
+      // Sync current_step but never go backwards (avoid breaking later phases).
+      const { data: bp } = await supabase
+        .from("business_projects")
+        .select("current_step")
+        .eq("id", projectId)
+        .maybeSingle();
+      const desired = Math.min(stepNumber + 1, 4);
+      const next = bp?.current_step && bp.current_step > desired ? bp.current_step : desired;
+      await supabase.from("business_projects").update({ current_step: next }).eq("id", projectId);
+
+      console.log(`[approve_step] approved project=${projectId} step=${stepNumber} (db=${dbStepNumber}) v${latestRow.version}`);
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

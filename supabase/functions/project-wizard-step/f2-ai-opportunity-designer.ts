@@ -499,8 +499,10 @@ function clampCandidate(raw: any, idx: number): { candidate: OpportunityCandidat
     build_complexity: pickEnum<OpportunityComplexity>(raw?.build_complexity, COMPLEXITY_VALUES, "medium"),
     business_impact: pickEnum<OpportunityImpact>(raw?.business_impact, IMPACT_VALUES, "medium"),
 
-    confidence: clampNumber(raw?.confidence, 0, 1, 0.5),
+    confidence: normalizeConfidence(raw?.confidence, evidenceStrength),
   };
+
+  return { candidate, nameDerived };
 }
 
 // ── API pública ──────────────────────────────────────────────────────

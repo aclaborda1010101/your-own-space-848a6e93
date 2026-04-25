@@ -865,6 +865,7 @@ export function backfillMandatoryOpportunities(
 }
 
 
+export interface OpportunityValidationIssue {
   code: string;
   severity: "warning" | "error";
   message: string;

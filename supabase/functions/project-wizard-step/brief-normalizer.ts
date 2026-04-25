@@ -23,6 +23,11 @@ import { checkNamingCollision } from "../_shared/component-registry-contract.ts"
 export interface CanonicalComponent {
   canonical: string;
   matchTokens: string[];
+  /**
+   * Optional inline description used when this component must be
+   * INJECTED into the brief because it was missing from extraction.
+   */
+  description?: string;
 }
 
 export interface ManualReviewAlert {
@@ -31,28 +36,46 @@ export interface ManualReviewAlert {
   source?: string;
 }
 
+export interface CanonicalCatalyst {
+  title: string;
+  description?: string;
+}
+
 export interface NormalizationContext {
   projectName: string;
   companyName: string;
   founderName?: string;
   productName?: string;
+  /**
+   * Authoritative override for client_company_name. Used when the
+   * extraction picked up a person name and `companyName` from the DB
+   * is also a person name (no real company on record).
+   */
+  companyNameOverride?: string;
   sectorHint?: string;
   language?: "es" | "en";
   /**
    * Optional canonical component list. When provided, REPLACES the default
-   * generic groups so the dedup step uses the project-specific taxonomy
-   * (e.g. AFFLUX uses AFFLUX-specific component names).
+   * generic groups so the dedup step uses the project-specific taxonomy.
    */
   canonicalComponents?: CanonicalComponent[];
   /**
+   * Pairs of canonical names that MUST NOT be fused even when token
+   * overlap is high. Each pair forbids merging the two component names.
+   */
+  mutexGroups?: Array<[string, string]>;
+  /**
+   * Catalysts that the brief MUST mention even if the LLM missed them.
+   * Inserted into business_catalysts with `_inferred_by: "normalizer_catalyst_v1"`.
+   */
+  canonicalCatalysts?: CanonicalCatalyst[];
+  /**
    * Optional list of topic regexes whose mentions should be stripped from
-   * the brief because they belong to other domains (e.g. "weather", "pollen"
-   * for a real estate project).
+   * the brief because they belong to other domains.
    */
   forbiddenTopics?: RegExp[];
   /**
-   * Optional manual review alerts to attach (e.g. ambiguous numeric signals
-   * the LLM may have conflated).
+   * Optional manual review alerts to attach.
    */
   manualReviewAlerts?: ManualReviewAlert[];
 }

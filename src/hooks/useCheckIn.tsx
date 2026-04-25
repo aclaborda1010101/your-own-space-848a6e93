@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { getTodayLocal } from "@/lib/dateUtils";
 import { useJarvisWhoopData } from "./useJarvisWhoopData";
 import { mapWhoopToCheckIn } from "@/lib/whoopToCheckIn";
+import { isAbortError } from "@/lib/isAbortError";
 
 export interface CheckInData {
   energy: number;
@@ -90,6 +91,7 @@ export const useCheckIn = () => {
         setIsRegistered(false);
       }
     } catch (error: any) {
+      if (isAbortError(error)) return;
       console.error("Error fetching check-in:", error);
     } finally {
       setLoading(false);

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { isAbortError } from "@/lib/isAbortError";
 
 export interface Challenge {
   id: string;
@@ -165,6 +166,7 @@ export const useJarvisChallenge = () => {
 
       setChallenges(challengesWithProgress);
     } catch (err) {
+      if (isAbortError(err)) return;
       console.error("Error fetching challenges:", err);
       setError("Error al cargar los retos");
     } finally {

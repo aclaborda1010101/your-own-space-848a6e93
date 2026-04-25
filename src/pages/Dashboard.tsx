@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useMemo } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -54,21 +54,20 @@ import { useNavigate } from "react-router-dom";
 const Dashboard = () => {
   const navigate = useNavigate();
   const { settings: userSettings } = useUserSettings();
-  const { checkIn, setCheckIn, registerCheckIn, refetch: refetchCheckIn, loading: checkInLoading, saving, isRegistered, prefilledFromWhoop } = useCheckIn();
+  const { checkIn, setCheckIn, registerCheckIn, loading: checkInLoading, saving, isRegistered, prefilledFromWhoop } = useCheckIn();
 
   const { 
     tasks, 
     loading: tasksLoading, 
-    refetch: refetchTasks,
     toggleComplete, 
   } = useTasks();
-  const { events, fetchEvents } = useCalendar();
+  const { events, loading: calendarLoading, connected: calendarConnected, fetchEvents } = useCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
   const { notifications } = useSmartNotifications();
-  const { challenges, loading: challengesLoading, refetch: refetchChallenges, toggleGoalCompletion, createChallenge, updateChallenge } = useJarvisChallenge();
+  const { challenges, loading: challengesLoading, toggleGoalCompletion, createChallenge, updateChallenge } = useJarvisChallenge();
   const { profile } = useUserProfile();
-  const { data: whoopData, isLoading: whoopLoading, refetch: refetchWhoopData } = useJarvisWhoopData();
-  const { history: whoopHistory, refetch: refetchWhoopHistory } = useWhoopHistory(7);
+  const { data: whoopData, isLoading: whoopLoading } = useJarvisWhoopData();
+  const { history: whoopHistory } = useWhoopHistory(7);
 
   const {
     layout, profiles, activeProfileId, isLoaded,
@@ -156,38 +155,6 @@ const Dashboard = () => {
 
   const pendingTaskCount = tasks.filter(t => !t.completed).length;
 
-  const refreshDashboardData = useCallback(async () => {
-    await Promise.allSettled([
-      Promise.resolve(refetchCheckIn()),
-      Promise.resolve(refetchTasks()),
-      Promise.resolve(fetchEvents()),
-      Promise.resolve(refetchChallenges()),
-      Promise.resolve(refetchWhoopData()),
-      Promise.resolve(refetchWhoopHistory()),
-    ]);
-  }, [refetchCheckIn, refetchTasks, fetchEvents, refetchChallenges, refetchWhoopData, refetchWhoopHistory]);
-
-  useEffect(() => {
-    void refreshDashboardData();
-  }, [refreshDashboardData]);
-
-  useEffect(() => {
-    const handleFocusRefresh = () => {
-      if (document.visibilityState === "hidden") return;
-      void refreshDashboardData();
-    };
-
-    window.addEventListener("focus", handleFocusRefresh);
-    document.addEventListener("visibilitychange", handleFocusRefresh);
-    window.addEventListener("pageshow", handleFocusRefresh);
-
-    return () => {
-      window.removeEventListener("focus", handleFocusRefresh);
-      document.removeEventListener("visibilitychange", handleFocusRefresh);
-      window.removeEventListener("pageshow", handleFocusRefresh);
-    };
-  }, [refreshDashboardData]);
-
   const renderCard = (id: DashboardCardId) => {
     const settings = layout.cardSettings[id];
     const cardSize = settings?.size || "normal";
@@ -216,7 +183,7 @@ const Dashboard = () => {
         case "publications":
           return <PublicationsCard />;
         case "agenda":
-          return <AgendaCard />;
+          return <AgendaCard events={events} loading={calendarLoading} connected={calendarConnected} fetchEvents={fetchEvents} />;
         case "challenge":
           return (
             <ChallengeCard 

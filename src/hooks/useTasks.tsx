@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
 import { recordFeedback } from "@/lib/jarvisFeedback";
+import { isAbortError } from "@/lib/isAbortError";
 
 export interface Task {
   id: string;
@@ -65,6 +66,7 @@ export const useTasks = () => {
         }))
       );
     } catch (error: any) {
+      if (isAbortError(error)) return;
       console.error("Error fetching tasks:", error);
       toast.error("Error al cargar tareas");
     } finally {

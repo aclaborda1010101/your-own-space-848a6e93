@@ -4,11 +4,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Calendar, Briefcase, Heart, Brain, Users, RefreshCw, ExternalLink, AlertCircle, ChevronDown, Apple } from "lucide-react";
-import { useICloudCalendar } from "@/hooks/useICloudCalendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import type { CalendarEvent } from "@/hooks/useCalendar";
 
-const typeConfig = {
+const typeConfig: Partial<Record<CalendarEvent["type"], { icon: typeof Briefcase; color: string; label: string }>> = {
   work: { 
     icon: Briefcase, 
     color: "bg-primary/10 text-primary border-primary/20",
@@ -31,8 +31,14 @@ const typeConfig = {
   },
 };
 
-export const AgendaCard = () => {
-  const { events, loading, connected, fetchEvents } = useICloudCalendar();
+interface AgendaCardProps {
+  events: CalendarEvent[];
+  loading: boolean;
+  connected: boolean;
+  fetchEvents: () => void | Promise<void>;
+}
+
+export const AgendaCard = ({ events, loading, connected, fetchEvents }: AgendaCardProps) => {
   const [isOpen, setIsOpen] = useState(true);
   const now = new Date();
   const currentHour = now.getHours();
@@ -112,7 +118,7 @@ export const AgendaCard = () => {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => fetchEvents()}
+              onClick={() => void fetchEvents()}
               disabled={loading}
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
             >

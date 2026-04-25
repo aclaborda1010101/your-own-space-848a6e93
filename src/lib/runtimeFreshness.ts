@@ -11,9 +11,6 @@ const BUILD_KEY = "__jarvis_build_id";
 const RELOAD_DONE = "__jarvis_reloaded";
 const PREVIEW_RESET_ATTEMPTS_KEY = "__jarvis_preview_sw_reset_attempts";
 const PREVIEW_RESET_MAX_ATTEMPTS = 2;
-// 30 minutes — short background returns must NOT trigger reloads
-const SLEEP_THRESHOLD_MS = 30 * 60 * 1000;
-
 let sleepDetectorInstalled = false;
 
 // ── Platform detection ──────────────────────────────────────────
@@ -131,33 +128,12 @@ function handleBuildChange(): boolean {
 }
 
 // ── Resume-from-sleep detector ──────────────────────────────────
-// Only fires after VERY long absences (>30 min). Uses a soft reload that
-// does NOT nuke caches or auth tokens.
+// Never reload on focus/pageshow: long-running flows and OAuth refreshes must
+// keep their in-memory state. Freshness is handled only by build-change checks.
 
 function installSleepDetector(): void {
   if (sleepDetectorInstalled) return;
   sleepDetectorInstalled = true;
-
-  let lastTick = Date.now();
-
-  window.addEventListener("pageshow", (event) => {
-    if ((event as PageTransitionEvent).persisted) {
-      navigateToFreshUrl();
-    }
-  });
-
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") {
-      const gap = Date.now() - lastTick;
-      if (gap > SLEEP_THRESHOLD_MS) {
-        // Soft reload only. Do NOT nuke caches/SW (would invalidate session refresh in flight).
-        try { window.location.reload(); } catch { /* ignore */ }
-      }
-      lastTick = Date.now();
-    }
-  });
-
-  setInterval(() => { lastTick = Date.now(); }, 10_000);
 }
 
 // ── Main entry ──────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
+import { isAbortError } from "@/lib/isAbortError";
 
 export interface ICloudEvent {
   id: string;
@@ -73,6 +74,7 @@ export const useICloudCalendar = () => {
       });
 
       if (error) {
+        if (isAbortError(error)) return [];
         console.error("iCloud fetch error:", error);
         toast({
           title: "Error al cargar eventos",
@@ -94,6 +96,7 @@ export const useICloudCalendar = () => {
 
       return fetchedEvents;
     } catch (error) {
+      if (isAbortError(error)) return [];
       console.error("iCloud fetch failed:", error);
       return [];
     } finally {

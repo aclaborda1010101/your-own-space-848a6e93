@@ -369,7 +369,7 @@ function clampComplianceFlags(arr: unknown): ComplianceFlag[] {
     .slice(0, COMPLIANCE_FLAGS.length);
 }
 
-function clampCandidate(raw: any, idx: number): OpportunityCandidate {
+function clampCandidate(raw: any, idx: number): { candidate: OpportunityCandidate; nameDerived: boolean } {
   const family = pickEnum<ComponentFamily>(raw?.recommended_component_family, FAMILY_VALUES, "non_ai_crud");
   const layer = pickEnum<RegistryLayer>(raw?.recommended_layer, LAYER_VALUES, "B_action");
 
@@ -379,9 +379,23 @@ function clampCandidate(raw: any, idx: number): OpportunityCandidate {
     ? rawId.toUpperCase()
     : `OPP-${String(idx + 1).padStart(3, "0")}`;
 
-  return {
+  // Detectar si el LLM emitió un name válido o si toca derivarlo.
+  const llmRawName = typeof raw?.name === "string" ? raw.name.trim() : "";
+  const llmHasValidName = llmRawName.length > 0 && !/^COMP-/i.test(llmRawName);
+  const finalName = llmHasValidName
+    ? truncate(llmRawName.replace(/[\r\n]+/g, " ").replace(/\s+/g, " "), LIMITS.name_chars)
+    : deriveOpportunityName(raw, idx);
+  const nameDerived = !llmHasValidName;
+
+  const evidenceStrength = pickEnum<"low" | "medium" | "high">(
+    raw?.evidence_strength,
+    new Set(["low", "medium", "high"] as const),
+    "medium",
+  );
+
+  const candidate: OpportunityCandidate = {
     opportunity_id: safeId,
-    name: truncate(raw?.name ?? "", LIMITS.name_chars),
+    name: finalName,
     description: truncate(raw?.description ?? "", LIMITS.description_chars),
 
     origin: pickEnum<OpportunityOrigin>(raw?.origin, ORIGIN_VALUES, "inferred_need"),

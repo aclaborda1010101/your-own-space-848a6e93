@@ -22,9 +22,9 @@ interface UploadedFile {
 
 interface Props {
   inputContent: string;
-  onUpdateContent: (content: string) => Promise<void>;
+  onUpdateContent: (content: string) => Promise<string | null | void>;
   onGoToExtraction: () => void;
-  onReExtract: () => void;
+  onReExtract: (freshContent?: string) => void;
   hasExistingBriefing: boolean;
   generating: boolean;
 }
@@ -52,10 +52,11 @@ export const ProjectWizardStep1Edit = ({
 
   const handleSaveAndReExtract = async () => {
     setSaving(true);
-    await onUpdateContent(draft);
+    const fresh = await onUpdateContent(draft);
     setSaving(false);
     setEditing(false);
-    onReExtract();
+    // Pasamos el contenido fresco explícitamente para evitar el race con setProject
+    onReExtract(typeof fresh === "string" ? fresh : draft);
   };
 
   const handleFileUpload = async (file: File) => {

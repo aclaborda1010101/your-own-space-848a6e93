@@ -117,7 +117,7 @@ serve(async (req) => {
     // ── Action: extract (Step 2) ─────────────────────────────────────────
 
     if (action === "extract") {
-      const { projectName, companyName, projectType, clientNeed, inputContent, inputType } = stepData;
+      const { projectName, companyName, projectType, clientNeed, inputContent, inputType, skipSampler } = stepData;
 
       const { data: latestStep2 } = await supabase
         .from("project_wizard_steps")

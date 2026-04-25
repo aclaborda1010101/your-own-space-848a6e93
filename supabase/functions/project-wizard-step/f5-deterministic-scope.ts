@@ -104,6 +104,10 @@ export interface ComplianceBlockerEntry {
   reason: string;
   owner: string;
   deadline_weeks: number;
+  /** Replicated from internal blocker so PRD/proposal can read flags from root. */
+  blocks_design: boolean;
+  blocks_internal_testing: boolean;
+  blocks_production: boolean;
 }
 
 export interface DatasetReadinessBlockerEntry {

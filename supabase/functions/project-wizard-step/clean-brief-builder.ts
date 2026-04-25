@@ -26,11 +26,25 @@ function bullet(s: string): string {
   return `- ${s}`;
 }
 
+function stripDebugPhrases(s: string): string {
+  if (!s) return s;
+  let out = s;
+  // Remove parentheticals or trailing notes that mention internal pipeline stages.
+  out = out.replace(/\s*\(\s*componente\s+can[oó]nico\s+inyectado[^)]*\)\s*/gi, "");
+  out = out.replace(/\s*componente\s+can[oó]nico\s+inyectado\s+por\s+normalizer[^.;]*[.;]?/gi, "");
+  out = out.replace(/\s*revisar\s+evidencia\s+en\s+F2\/roadmap[^.;]*[.;]?/gi, "");
+  out = out.replace(/\s*\(\s*inferido\s*\)\s*/gi, " ");
+  out = out.replace(/\s*\bnormalizer\b\s*/gi, " ");
+  out = out.replace(/\s*\bF2\/roadmap\b\s*/gi, " ");
+  out = out.replace(/\s+/g, " ").trim();
+  return out;
+}
+
 function fmtItem(item: any, opts: { showAmount?: boolean } = {}): string {
   if (!item) return "";
-  if (typeof item === "string") return item;
-  const title = clean(item.title || item.signal || item.name || item.flag || item.question || "");
-  const desc = clean(item.description || item.evidence || "");
+  if (typeof item === "string") return stripDebugPhrases(item);
+  const title = stripDebugPhrases(clean(item.title || item.signal || item.name || item.flag || item.question || ""));
+  const desc = stripDebugPhrases(clean(item.description || item.evidence || ""));
   const amount = opts.showAmount ? clean(item.amount_hint || item.data_volume_hint || "") : "";
   const unverified = item._unverified_number ? " ⚠️ *(cifra no verificada)*" : "";
   let out = title;
@@ -107,7 +121,7 @@ export function buildCleanBrief(briefing: any, ctx: { projectName: string }): Cl
   // 7. Riesgos y compliance
   const risks = listSection(v2.constraints_and_risks);
   const flags = Array.isArray(v2.initial_compliance_flags) && v2.initial_compliance_flags.length > 0
-    ? v2.initial_compliance_flags.map((f: any) => bullet(`**${clean(f.flag)}**${f.evidence ? ` — ${clean(f.evidence)}` : ""}${f._inferred_by ? " *(inferido)*" : ""}`)).join("\n")
+    ? v2.initial_compliance_flags.map((f: any) => bullet(`**${clean(f.flag)}**${f.evidence ? ` — ${stripDebugPhrases(clean(f.evidence))}` : ""}`)).join("\n")
     : "_Sin compliance flags._";
   sections.push({
     id: "riesgos",
@@ -124,22 +138,16 @@ export function buildCleanBrief(briefing: any, ctx: { projectName: string }): Cl
 
   // 9. Componentes candidatos normalizados
   const candidates = Array.isArray(v2.ai_native_opportunity_signals) ? v2.ai_native_opportunity_signals : [];
-  const merged = candidates.filter((c: any) => Array.isArray(c?._merged_from) && c._merged_from.length > 0);
   const compMd = candidates.length === 0
     ? "_Sin candidatos extraídos._"
     : candidates.slice(0, 16).map((c: any, i: number) => {
         const title = clean(c.title || c.description || `Candidato ${i + 1}`);
-        const isCanonInjected = c?._inferred_by === "normalizer_required_component_v1";
-        const merge = Array.isArray(c._merged_from) && c._merged_from.length > 0
-          ? `\n  - *Fusionado de:* ${c._merged_from.slice(0, 3).join(", ")}`
-          : "";
-        const tag = isCanonInjected ? " *(candidato F2/roadmap)*" : "";
-        return `${i + 1}. **${title}**${tag}${merge}`;
+        return `${i + 1}. **${title}**`;
       }).join("\n");
   sections.push({
     id: "candidatos",
     title: "9. Componentes candidatos normalizados",
-    markdown: compMd + (merged.length > 0 ? `\n\n_${merged.length} componente(s) son fusión de duplicados detectados._` : ""),
+    markdown: compMd,
   });
 
   // Compose final markdown.

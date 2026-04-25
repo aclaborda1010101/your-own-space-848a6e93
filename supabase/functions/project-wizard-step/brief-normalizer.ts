@@ -540,6 +540,8 @@ ${JSON.stringify({ items: capped }, null, 2)}`;
 function applyDeterministicSpanishCleanup(briefing: any, changes: NormalizationChange[]) {
   const replacements: Array<[RegExp, string]> = [
     [/\bAflu has collected\b/gi, "AFLU ha recopilado"],
+    [/\bAFLU has collected a vast amount of data\b/gi, "AFLU ha recopilado un volumen importante de datos"],
+    [/\bhas collected a vast amount of data\b/gi, "ha recopilado un volumen importante de datos"],
     [/\bCRM data\b/gi, "Datos del CRM"],
     [/\bCall recordings\b/gi, "Grabaciones de llamadas"],
     [/\bRecorded Calls\b/gi, "Grabaciones de llamadas"],
@@ -547,20 +549,33 @@ function applyDeterministicSpanishCleanup(briefing: any, changes: NormalizationC
     [/\bKnowledge graph\b/gi, "Grafo de conocimiento"],
     [/\bAutomated lead qualification and prioritization\b/gi, "Calificación y priorización automatizada de oportunidades"],
     [/\bThe client acknowledges\b/gi, "El cliente reconoce"],
-    [/\bCarlos expresses\b/gi, "Carlos expresa"],
-    [/\bCarlos wants\b/gi, "Carlos quiere"],
+    [/\bThe client seeks\b/gi, "El cliente busca"],
     [/\bThe client wants\b/gi, "El cliente quiere"],
+    [/\bCarlos expresses\b/gi, "Carlos expresa"],
+    [/\bCarlos expresa a desire\b/gi, "Carlos expresa el deseo"],
+    [/\ba desire to\b/gi, "el deseo de"],
+    [/\bCarlos wants\b/gi, "Carlos quiere"],
+    [/\bAgust[ií]n mentions\b/gi, "Agustín menciona"],
     [/\bDevelop an AI\b/gi, "Desarrollar una IA"],
     [/\bAI can listen\b/gi, "La IA puede escuchar"],
     [/\bThe current process\b/gi, "El proceso actual"],
     [/\bThere is a desire\b/gi, "Existe el objetivo"],
     [/\bThe goal is\b/gi, "El objetivo es"],
     [/\bThe effectiveness of\b/gi, "La eficacia de"],
+    [/\bThe migration of\b/gi, "La migración de"],
+    [/\bto Hubspot\b/gi, "a HubSpot"],
     [/\bDesire to automate repetitive tasks\b/gi, "Necesidad de automatizar tareas repetitivas"],
     [/\bImprove efficiency of 'zona' team\b/gi, "Mejorar la eficiencia del equipo de zona"],
     [/\bIncrease originación of assets in buildings\b/gi, "Aumentar la originación de activos en edificios"],
     [/\bImprove commercial team's effectiveness\b/gi, "Mejorar la efectividad del equipo comercial"],
     [/\bImprove Team Efficiency and Reduce Manual Effort\b/gi, "Mejorar la eficiencia del equipo y reducir el esfuerzo manual"],
+    [/\bvast amount of\b/gi, "gran volumen de"],
+    [/\bnon-response rate\b/gi, "tasa de no respuesta"],
+    [/\bin order to\b/gi, "para"],
+    [/\bsuch as\b/gi, "como"],
+    [/\bincluding\b/gi, "incluyendo"],
+    [/\bhowever\b/gi, "sin embargo"],
+    [/\bmoreover\b/gi, "además"],
   ];
 
   function walk(node: any, path: string): any {
@@ -845,20 +860,25 @@ function applyCanonicalCatalysts(briefing: any, ctx: NormalizationContext, chang
   if (catalysts.length === 0) return;
   if (!Array.isArray(v2.business_catalysts)) v2.business_catalysts = [];
 
-  const existingBlob = v2.business_catalysts
-    .map((c: any) => (typeof c === "string" ? c : `${c?.title || ""} ${c?.description || ""}`))
-    .join(" ")
-    .toLowerCase();
+  const existingTitles = v2.business_catalysts
+    .map((c: any) => (typeof c === "string" ? c : c?.title || ""))
+    .map((s: string) => s.toLowerCase().trim())
+    .filter(Boolean);
 
   const injected: any[] = [];
   for (const cat of catalysts) {
-    const titleLc = (cat.title || "").toLowerCase();
+    const titleLc = (cat.title || "").toLowerCase().trim();
     if (!titleLc) continue;
-    // crude presence check: at least 2 significant tokens of the title appear
-    const tokens = titleLc.split(/\W+/).filter((t) => t.length >= 5);
-    const hits = tokens.filter((t) => existingBlob.includes(t)).length;
-    const present = hits >= 2;
-    if (present) continue;
+    // Inject unless an existing catalyst title is essentially the same.
+    // We compare by significant tokens (≥6 chars) and require ≥4 overlap to count as duplicate.
+    const catTokens = new Set(titleLc.split(/\W+/).filter((t) => t.length >= 6));
+    const isDuplicate = existingTitles.some((existing: string) => {
+      const exTokens = new Set(existing.split(/\W+/).filter((t) => t.length >= 6));
+      let overlap = 0;
+      for (const t of catTokens) if (exTokens.has(t)) overlap++;
+      return overlap >= 4;
+    });
+    if (isDuplicate) continue;
     injected.push({
       title: cat.title,
       description: cat.description || cat.title,

@@ -294,9 +294,26 @@ export const ProjectBudgetPanel = ({
       icon={<Calculator className="w-4 h-4 text-primary" />}
       defaultOpen={true}
       badge={
-        <Badge variant="outline" className="text-[10px] px-2 py-0 border-primary/30 text-primary bg-primary/5">
-          {isClientView ? "VISTA CLIENTE" : "VISTA INTERNA"}
-        </Badge>
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline" className="text-[10px] px-2 py-0 border-primary/30 text-primary bg-primary/5">
+            {isClientView ? "VISTA CLIENTE" : "VISTA INTERNA"}
+          </Badge>
+          {budgetStatus === "approved" && (
+            <Badge variant="outline" className="text-[10px] px-2 py-0 border-emerald-500/40 text-emerald-600 bg-emerald-500/5">
+              APROBADO
+            </Badge>
+          )}
+          {budgetStatus === "editing" && (
+            <Badge variant="outline" className="text-[10px] px-2 py-0 border-amber-500/40 text-amber-600 bg-amber-500/5">
+              EDITADO
+            </Badge>
+          )}
+          {budgetStatus === "generated" && (
+            <Badge variant="outline" className="text-[10px] px-2 py-0 border-muted-foreground/30 text-muted-foreground bg-muted/30">
+              GENERADO
+            </Badge>
+          )}
+        </div>
       }
     >
       <div className="p-4 space-y-4">

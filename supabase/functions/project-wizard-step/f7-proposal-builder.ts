@@ -25,7 +25,11 @@ export type PricingModel =
 export interface CommercialTermsV1 {
   pricing_model: PricingModel;
   setup_fee?: number;
+  setup_fee_max?: number;
+  setup_fee_display?: string;
   monthly_retainer?: number;
+  monthly_retainer_max?: number;
+  monthly_retainer_display?: string;
   phase_prices?: Array<{ phase: string; price: number; description?: string }>;
   ai_usage_cost_policy?: string;
   payment_terms?: string;

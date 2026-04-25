@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { isAbortError } from "@/lib/isAbortError";
 
 export interface JarvisWhoopData {
   recovery_score: number | null;
@@ -83,6 +84,7 @@ export const useJarvisWhoopData = () => {
 
       setData(chosen);
     } catch (error) {
+      if (isAbortError(error)) return;
       console.error("Error fetching WHOOP data:", error);
       setData(null);
     } finally {

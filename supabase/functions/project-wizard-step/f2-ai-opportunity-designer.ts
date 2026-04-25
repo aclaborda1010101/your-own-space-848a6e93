@@ -237,6 +237,109 @@ function clampNumber(v: unknown, min: number, max: number, fallback: number): nu
   return Math.min(max, Math.max(min, n));
 }
 
+// ── Hardening: name derivation + confidence normalization ────────────
+
+const FAMILY_NAME_FALLBACK: Partial<Record<ComponentFamily, string>> = {
+  rag: "RAG funcional",
+  agent: "Agente especialista",
+  data_pipeline: "Pipeline de datos",
+  matching_engine: "Motor de matching",
+  prediction_engine: "Motor predictivo",
+  scoring_engine: "Motor de scoring",
+  deterministic_engine: "Motor determinista",
+  pattern_module: "Módulo de patrones",
+  soul_module: "Soul del fundador",
+  compliance_module: "Gobernanza y compliance",
+  orchestrator: "Orquestador",
+  workflow: "Workflow operativo",
+  dashboard: "Dashboard analítico",
+  form: "Formulario funcional",
+  integration: "Integración externa",
+  non_ai_crud: "Componente CRUD",
+};
+
+function firstShortSentence(s: unknown, maxWords = 10, maxChars = 90): string {
+  if (typeof s !== "string") return "";
+  const cleaned = s.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!cleaned) return "";
+  // Cortar en signo de puntuación fuerte para quedarnos con la primera frase.
+  const cut = cleaned.split(/[.!?:;]/)[0]?.trim() ?? cleaned;
+  const words = cut.split(/\s+/).slice(0, maxWords).join(" ");
+  return truncate(words, maxChars).replace(/[…]+$/, "").trim();
+}
+
+/**
+ * Deriva un nombre humano para una oportunidad cuando el LLM NO lo emitió.
+ *
+ * Orden de preferencia:
+ *   1. raw.name (si no vacío y no parece COMP-XXX)
+ *   2. raw.signal_name | raw.item | raw.title
+ *   3. Primera frase corta de raw.business_job
+ *   4. Primera frase corta de raw.description
+ *   5. Fallback por family
+ *   6. `Oportunidad N`
+ *
+ * Reglas:
+ *   - máx 10 palabras / 90 chars
+ *   - sin saltos de línea
+ *   - nunca string vacío
+ *   - nunca prefijo COMP-XXX
+ */
+export function deriveOpportunityName(raw: any, index: number): string {
+  const tryClean = (s: unknown): string => {
+    if (typeof s !== "string") return "";
+    const t = s.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+    if (!t) return "";
+    if (/^COMP-/i.test(t)) return "";
+    const words = t.split(/\s+/).slice(0, 10).join(" ");
+    return truncate(words, 90).replace(/[…]+$/, "").trim();
+  };
+
+  const candidates = [
+    tryClean(raw?.name),
+    tryClean(raw?.signal_name),
+    tryClean(raw?.item),
+    tryClean(raw?.title),
+    firstShortSentence(raw?.business_job),
+    firstShortSentence(raw?.description),
+  ];
+  for (const c of candidates) {
+    if (c && c.length > 0) return c;
+  }
+
+  const fam = typeof raw?.recommended_component_family === "string"
+    ? raw.recommended_component_family as ComponentFamily
+    : undefined;
+  if (fam && FAMILY_NAME_FALLBACK[fam]) return FAMILY_NAME_FALLBACK[fam]!;
+
+  return `Oportunidad ${index + 1}`;
+}
+
+/**
+ * Normaliza confidence a number [0..1] usando evidence_strength como ancla
+ * cuando el LLM no lo emite o lo emite como string inválido.
+ */
+export function normalizeConfidence(rawConfidence: unknown, evidenceStrength?: string): number {
+  // 1. Number directo válido
+  if (typeof rawConfidence === "number" && Number.isFinite(rawConfidence)) {
+    return Math.min(1, Math.max(0, rawConfidence));
+  }
+  // 2. String parseable
+  if (typeof rawConfidence === "string" && rawConfidence.trim().length > 0) {
+    const parsed = Number(rawConfidence);
+    if (Number.isFinite(parsed)) {
+      return Math.min(1, Math.max(0, parsed));
+    }
+  }
+  // 3. Anclado por evidence_strength
+  switch (evidenceStrength) {
+    case "high": return 0.85;
+    case "medium": return 0.65;
+    case "low": return 0.4;
+    default: return 0.6;
+  }
+}
+
 function clampStringArray(arr: unknown, max: number, charLimit = 200): string[] {
   return asArray<unknown>(arr)
     .map((x) => (typeof x === "string" ? x : ""))

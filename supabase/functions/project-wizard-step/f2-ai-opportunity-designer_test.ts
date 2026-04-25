@@ -11,6 +11,7 @@
 
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  backfillMandatoryOpportunities,
   clampOpportunityDesign,
   emptyOpportunityDesign,
   validateOpportunityDesign,
@@ -236,4 +237,152 @@ Deno.test("F2 hardening: clampOpportunityDesign emite confidence como number sie
   assertEquals(out.opportunity_candidates[0].confidence, 0.5);
   assertEquals(out.opportunity_candidates[1].confidence, 0.85); // string inválido → ancla high
   assertEquals(out.opportunity_candidates[2].confidence, 0.4);  // anclado low
+});
+
+/* ============================================================
+ * Backfill determinista — Soul + Matching activo-inversor
+ * ============================================================ */
+
+function baseDesign(candidates: any[]): any {
+  return clampOpportunityDesign({ opportunity_candidates: candidates });
+}
+
+Deno.test("F2 backfill: inyecta Soul cuando ≥2 oportunidades dependen del Soul", () => {
+  const design = baseDesign([
+    { opportunity_id: "OPP-001", name: "Asistente", soul_dependency: "consults_soul" },
+    { opportunity_id: "OPP-002", name: "Revista", soul_dependency: "requires_soul_approval" },
+  ]);
+  const out = backfillMandatoryOpportunities(design, { briefing: {}, f0Signals: {} });
+  const soul = out.opportunity_candidates.find(
+    (c) => c.recommended_component_family === "soul_module" || c.recommended_layer === "D_soul",
+  );
+  assert(soul, "Debería haber inyectado un Soul module");
+  assertEquals(soul!.recommended_component_family, "soul_module");
+  assertEquals(soul!.recommended_layer, "D_soul");
+  assert(/^OPP-\d{3,}$/.test(soul!.opportunity_id));
+  assert(out.warnings?.some((w: any) => w.code === "F2_SOUL_BACKFILLED"));
+});
+
+Deno.test("F2 backfill: NO duplica Soul si ya existe soul_module", () => {
+  const design = baseDesign([
+    { opportunity_id: "OPP-001", name: "Asistente", soul_dependency: "consults_soul" },
+    { opportunity_id: "OPP-002", name: "Revista", soul_dependency: "requires_soul_approval" },
+    { opportunity_id: "OPP-003", name: "Soul existente", recommended_component_family: "soul_module", recommended_layer: "D_soul" },
+  ]);
+  const out = backfillMandatoryOpportunities(design, { briefing: {} });
+  const souls = out.opportunity_candidates.filter(
+    (c) => c.recommended_component_family === "soul_module",
+  );
+  assertEquals(souls.length, 1);
+  assert(!out.warnings?.some((w: any) => w.code === "F2_SOUL_BACKFILLED"));
+});
+
+Deno.test("F2 backfill: inyecta Soul si founder_commitment_signals está poblado", () => {
+  const design = baseDesign([
+    { opportunity_id: "OPP-001", name: "Algo", soul_dependency: "none" },
+  ]);
+  const out = backfillMandatoryOpportunities(design, {
+    briefing: {
+      business_extraction_v2: {
+        founder_commitment_signals: [{ quote: "Alejandro firma cada decisión" }],
+      },
+    },
+  });
+  assert(out.opportunity_candidates.some((c) => c.recommended_component_family === "soul_module"));
+});
+
+Deno.test("F2 backfill: usa 'Soul de Alejandro' si aparece Alejandro en el brief", () => {
+  const design = baseDesign([
+    { opportunity_id: "OPP-001", name: "A", soul_dependency: "consults_soul" },
+    { opportunity_id: "OPP-002", name: "B", soul_dependency: "consults_soul" },
+  ]);
+  const out = backfillMandatoryOpportunities(design, {
+    briefing: { project_summary: { founder: "Alejandro Gordo" } },
+  });
+  const soul = out.opportunity_candidates.find((c) => c.recommended_component_family === "soul_module");
+  assertEquals(soul!.name, "Soul de Alejandro");
+});
+
+Deno.test("F2 backfill: usa 'Soul del fundador' si no aparece Alejandro", () => {
+  const design = baseDesign([
+    { opportunity_id: "OPP-001", name: "A", soul_dependency: "consults_soul" },
+    { opportunity_id: "OPP-002", name: "B", soul_dependency: "consults_soul" },
+  ]);
+  const out = backfillMandatoryOpportunities(design, { briefing: {} });
+  const soul = out.opportunity_candidates.find((c) => c.recommended_component_family === "soul_module");
+  assertEquals(soul!.name, "Soul del fundador");
+});
+
+Deno.test("F2 backfill: inyecta Matching activo-inversor con activos + compradores", () => {
+  const design = baseDesign([
+    { opportunity_id: "OPP-001", name: "Otra cosa" },
+  ]);
+  const out = backfillMandatoryOpportunities(design, {
+    briefing: {
+      business_extraction_v2: {
+        underutilized_data_assets: [{ description: "Catálogo de edificios y activos sin div horizontal" }],
+        decision_points: [{ description: "Necesitamos saber a quién vender antes de comprar" }],
+      },
+    },
+  });
+  const m = out.opportunity_candidates.find((c) => c.recommended_component_family === "matching_engine");
+  assert(m, "Debería haber inyectado matching_engine");
+  assertEquals(m!.dataset_readiness_required, true);
+  assertEquals(m!.human_review, "mandatory");
+  assert((m!.compliance_flags || []).includes("personal_data_processing" as any));
+  assert((m!.compliance_flags || []).includes("commercial_prioritization" as any));
+  assert((m!.compliance_flags || []).includes("human_in_the_loop_required" as any));
+  assert(/^OPP-\d{3,}$/.test(m!.opportunity_id));
+  assert(out.warnings?.some((w: any) => w.code === "F2_MATCHING_BACKFILLED"));
+});
+
+Deno.test("F2 backfill: NO duplica matching si ya existe matching_engine", () => {
+  const design = baseDesign([
+    { opportunity_id: "OPP-001", name: "Matching ya hecho", recommended_component_family: "matching_engine", recommended_layer: "C_intelligence" },
+  ]);
+  const out = backfillMandatoryOpportunities(design, {
+    briefing: { project_summary: "edificios fondos servicers compradores inversores benatar" },
+  });
+  const matches = out.opportunity_candidates.filter(
+    (c) => c.recommended_component_family === "matching_engine",
+  );
+  assertEquals(matches.length, 1);
+  assert(!out.warnings?.some((w: any) => w.code === "F2_MATCHING_BACKFILLED"));
+});
+
+Deno.test("F2 backfill: NO inyecta matching si solo hay activos pero NO compradores", () => {
+  const design = baseDesign([{ opportunity_id: "OPP-001", name: "X" }]);
+  const out = backfillMandatoryOpportunities(design, {
+    briefing: { project_summary: "tenemos un catálogo de edificios" },
+  });
+  assert(!out.opportunity_candidates.some((c) => c.recommended_component_family === "matching_engine"));
+});
+
+Deno.test("F2 backfill: NO inyecta Soul si no hay señales y todas las soul_dependency son none", () => {
+  const design = baseDesign([
+    { opportunity_id: "OPP-001", name: "A", soul_dependency: "none" },
+    { opportunity_id: "OPP-002", name: "B", soul_dependency: "none" },
+  ]);
+  const out = backfillMandatoryOpportunities(design, { briefing: { project_summary: "proyecto neutro de logística" }, f0Signals: {} });
+  assert(!out.opportunity_candidates.some((c) => c.recommended_component_family === "soul_module"));
+  assert(!out.warnings?.some((w: any) => w.code === "F2_SOUL_BACKFILLED"));
+});
+
+Deno.test("F2 backfill: IDs OPP-NNN secuenciales sin colisión", () => {
+  const design = baseDesign([
+    { opportunity_id: "OPP-005", name: "A", soul_dependency: "consults_soul" },
+    { opportunity_id: "OPP-006", name: "B", soul_dependency: "consults_soul" },
+  ]);
+  const out = backfillMandatoryOpportunities(design, {
+    briefing: {
+      business_extraction_v2: {
+        underutilized_data_assets: [{ description: "edificios" }],
+        decision_points: [{ description: "compradores inversores" }],
+      },
+    },
+  });
+  const ids = out.opportunity_candidates.map((c) => c.opportunity_id);
+  assertEquals(new Set(ids).size, ids.length, "no debe haber IDs duplicados");
+  assert(ids.includes("OPP-007"));
+  assert(ids.includes("OPP-008"));
 });

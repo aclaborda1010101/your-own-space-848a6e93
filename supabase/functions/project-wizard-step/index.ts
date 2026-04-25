@@ -419,27 +419,31 @@ serve(async (req) => {
         });
       }
 
-      const { error: insertErr } = await supabase.from("project_wizard_steps").insert({
-        project_id: pid,
-        step_number: 2,
-        step_name: action === "repair_step2_brief"
-          ? "Extracción Inteligente (Reparada + Normalizada)"
-          : "Extracción Inteligente (Normalizada)",
-        status: "review",
-        input_data: {
-          ...(latestStep2.input_data || {}),
-          retry_action: action,
-          previous_version: latestStep2.version,
-        },
-        output_data: finalBriefing,
-        model_used: "gemini-2.5-flash",
-        version: newVersion,
-        user_id: user.id,
-      });
+      // The table has a UNIQUE(project_id, step_number) constraint, so we
+      // UPDATE the existing Step 2 row in place (bumping its version) instead
+      // of inserting a new row, which would always violate the constraint.
+      const { error: updateErr } = await supabase
+        .from("project_wizard_steps")
+        .update({
+          step_name: action === "repair_step2_brief"
+            ? "Extracción Inteligente (Reparada + Normalizada)"
+            : "Extracción Inteligente (Normalizada)",
+          status: "review",
+          input_data: {
+            ...(latestStep2.input_data || {}),
+            retry_action: action,
+            previous_version: latestStep2.version,
+          },
+          output_data: finalBriefing,
+          model_used: "gemini-2.5-flash",
+          version: newVersion,
+          user_id: user.id,
+        })
+        .eq("id", latestStep2.id);
 
-      if (insertErr) {
-        console.error(`[${action}] failed to persist new version:`, insertErr);
-        return new Response(JSON.stringify({ error: `Failed to persist normalized brief: ${insertErr.message}` }), {
+      if (updateErr) {
+        console.error(`[${action}] failed to persist new version:`, updateErr);
+        return new Response(JSON.stringify({ error: `Failed to persist normalized brief: ${updateErr.message}` }), {
           status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }

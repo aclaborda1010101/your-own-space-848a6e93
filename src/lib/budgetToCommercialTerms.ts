@@ -133,21 +133,50 @@ export function budgetToCommercialTermsV1(
     };
   });
 
-  // Pricing model heuristic: usa el recomendado si existe, si no el primero
-  const primary = models.find((m) => m.recommended) || models[0];
-  let pricing_model = "fixed_project";
+  // Pricing model heuristic basado en el modelo recomendado/principal
+  const recommended = models.find((m) => m.recommended) || null;
+  const primary = recommended || models[0];
+  const visibleModels = models.filter((m) => m.visible_to_client);
+
+  let pricing_model: CommercialTermsV1["pricing_model"] = "fixed_project";
   if (primary.setup_fee != null && primary.monthly_fee != null) pricing_model = "setup_plus_monthly";
   else if (primary.monthly_fee != null) pricing_model = "subscription";
   else if (primary.setup_fee != null) pricing_model = "fixed_project";
 
+  // Aplanar el modelo principal a los campos que F7 lee directamente.
+  const setup_fee = primary.setup_fee ?? undefined;
+  const monthly_retainer = primary.monthly_fee ?? undefined;
+
+  // Otros modelos visibles → opcionales (no incluidos en el precio base).
+  const optional_addons = visibleModels
+    .filter((m) => m.id !== primary.id)
+    .map((m) => ({
+      name: m.name,
+      price: m.setup_fee ?? m.monthly_fee ?? m.unit_price ?? undefined,
+      description: m.description || undefined,
+    }));
+
   return {
+    // Flat fields consumed by F7
     pricing_model,
+    setup_fee,
+    monthly_retainer,
+    phase_prices: undefined,
+    optional_addons: optional_addons.length > 0 ? optional_addons : undefined,
+    ai_usage_cost_policy:
+      "Costes de IA/API no incluidos por defecto, facturados según consumo real.",
+    payment_terms:
+      (budget.pricing_notes && budget.pricing_notes.trim()) ||
+      "50% al inicio del proyecto y 50% contra entrega del MVP. Mensualidades, en su caso, facturadas a mes vencido.",
+    taxes: "IVA no incluido. Se aplicará el tipo vigente.",
+    currency: "EUR",
+    validity_days: 30,
+
+    // Internal audit
     selected_models: models,
     recommended_model: budget.recommended_model || null,
     development_total_eur: budget.development?.total_development_eur ?? null,
     recurring_monthly_eur: budget.recurring_monthly?.total_monthly_eur ?? null,
-    ai_usage_cost_policy:
-      "Costes de IA/API no incluidos por defecto, facturados según consumo real.",
     notes: budget.pricing_notes || "",
     risk_factors: budget.risk_factors || [],
     source: "derived_from_budget_data",

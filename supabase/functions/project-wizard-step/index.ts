@@ -282,10 +282,24 @@ serve(async (req) => {
       const projectName = sd.projectName || "";
       const companyName = sd.companyName || "";
       const founderName = sd.founderName;
+      const productName = sd.productName;
       const sectorHint = sd.sectorHint;
       const inputContent: string | undefined = sd.inputContent;
+      // Optional project-specific normalization overrides.
+      const canonicalComponents = Array.isArray(sd.canonicalComponents) ? sd.canonicalComponents : undefined;
+      const forbiddenTopicsRaw = Array.isArray(sd.forbiddenTopics) ? sd.forbiddenTopics : [];
+      const forbiddenTopics = forbiddenTopicsRaw
+        .map((p: any) => {
+          if (p instanceof RegExp) return p;
+          if (typeof p === "string" && p.length > 0) {
+            try { return new RegExp(p, "i"); } catch { return null; }
+          }
+          return null;
+        })
+        .filter(Boolean) as RegExp[];
+      const manualReviewAlerts = Array.isArray(sd.manualReviewAlerts) ? sd.manualReviewAlerts : undefined;
 
-      console.log(`[${action}] start project=${pid} hasInput=${!!inputContent}`);
+      console.log(`[${action}] start project=${pid} hasInput=${!!inputContent} canonical=${canonicalComponents?.length || 0} forbidden=${forbiddenTopics.length} alerts=${manualReviewAlerts?.length || 0}`);
 
       if (!pid) {
         return new Response(JSON.stringify({ error: "projectId required" }), {

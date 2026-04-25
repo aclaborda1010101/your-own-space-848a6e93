@@ -197,6 +197,19 @@ export const ProjectBudgetPanel = ({
   const handleSave = () => {
     if (!editData) return;
     onBudgetUpdate?.(editData);
+    // Derivar commercial_terms_v1 y persistir en localStorage para que el
+    // pipeline técnico (F7) pueda leerlo sin tocar el schema actual.
+    try {
+      const derived = budgetToCommercialTermsV1(editData);
+      if (derived) {
+        localStorage.setItem(
+          `commercial_terms_v1:${projectId}`,
+          JSON.stringify(derived)
+        );
+      }
+    } catch (e) {
+      console.warn("[ProjectBudgetPanel] failed to derive commercial_terms_v1", e);
+    }
     setEditing(false);
   };
 

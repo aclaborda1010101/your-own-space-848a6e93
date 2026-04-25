@@ -1064,6 +1064,10 @@ export async function normalizeBrief(
   // 3. Language normalization (single LLM call, non-blocking)
   const langResult = await applyLanguageNormalization(briefing, changes);
 
+  // 3b. Deterministic cleanup for recurrent English fragments that must not
+  // survive in the clean brief even if the LLM skips or misses them.
+  applyDeterministicSpanishCleanup(briefing, changes);
+
   // 4. Semantic dedup (uses canonical override from ctx if provided)
   applySemanticDedup(briefing, changes, ctx);
 

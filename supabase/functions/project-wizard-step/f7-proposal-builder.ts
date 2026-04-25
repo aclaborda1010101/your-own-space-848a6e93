@@ -631,6 +631,13 @@ const BANNED_PHRASES = [
   /\bedge function\b/i,
   /\bRLS\b/,
   /\bSQL\b/,
+  // Internal pricing leak — never in client docs.
+  /margen\s+de\s+consultor[ií]a/i,
+  /\bmargen\s+(?:del?\s+)?\d+\s*%/i,
+  /coste\s+interno/i,
+  /tarifa\s+(?:por\s+hora|interna)/i,
+  /hourly\s*rate/i,
+  /horas?\s+(?:estimadas|internas)/i,
 ];
 
 export function detectInternalJargon(markdown: string): string[] {

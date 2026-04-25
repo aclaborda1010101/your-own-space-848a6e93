@@ -78,7 +78,7 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
     if (!cnc.founder_or_decision_maker) {
       cnc.founder_or_decision_maker = personName;
     }
-    cnc.client_company_name = ctx.companyName || "";
+    cnc.client_company_name = (ctx.companyName && ctx.companyName.trim()) || "[POR CONFIRMAR]";
     changes.push({
       type: "naming_split",
       field: "client_company_name",

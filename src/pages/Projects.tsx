@@ -81,18 +81,22 @@ const Projects = () => {
     }
   };
 
-  const { data: projects = [], isLoading } = useQuery({
+  const { data: projects = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ["business_projects_list", user?.id],
     queryFn: async () => {
       if (!user) return [];
       const { data, error } = await supabase
         .from("business_projects")
         .select("id, name, company, status, current_step, estimated_value, is_public, user_id, created_at, updated_at")
-        .order("updated_at", { ascending: false });
+        .order("updated_at", { ascending: false })
+        .limit(60);
       if (error) throw error;
       return (data || []) as WizardProject[];
     },
     enabled: !!user,
+    staleTime: 2 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const { data: costs = {} } = useQuery({
@@ -101,7 +105,8 @@ const Projects = () => {
       if (!user) return {};
       const { data, error } = await supabase
         .from("project_costs")
-        .select("project_id, cost_usd");
+        .select("project_id, cost_usd")
+        .limit(1000);
       if (error) return {};
       const map: Record<string, number> = {};
       (data || []).forEach((r: any) => {
@@ -110,6 +115,9 @@ const Projects = () => {
       return map;
     },
     enabled: !!user,
+    staleTime: 5 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const activeProjects = projects.filter(p => !["ganado", "perdido"].includes(p.status));

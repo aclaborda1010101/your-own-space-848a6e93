@@ -215,10 +215,10 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0 flex-1">
-            <CardTitle className="text-base">QA · Pipeline v2 — Steps 25 / 26 / 27</CardTitle>
+            <CardTitle className="text-base">QA · Pipeline v2 — Steps 25 / 26 / 27 / 28</CardTitle>
             <CardDescription className="text-xs mt-1">
               Lanza acciones del wizard sin tocar consola. Tiempos típicos: Build Registry ~60–120s,
-              F4a ~60–180s (Flash), F4b ~120–240s (Pro).
+              F4a ~60–180s (Flash), F4b ~120–240s (Pro), F5 ~60–180s (Pro).
             </CardDescription>
           </div>
           {loading && currentAction && (
@@ -232,6 +232,7 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
           {renderActionButton("build_registry")}
           {renderActionButton("audit_f4a_gaps")}
           {renderActionButton("audit_f4b_feasibility")}
+          {renderActionButton("architect_scope")}
         </div>
       </CardHeader>
 

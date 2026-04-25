@@ -25,7 +25,11 @@ export type PricingModel =
 export interface CommercialTermsV1 {
   pricing_model: PricingModel;
   setup_fee?: number;
+  setup_fee_max?: number;
+  setup_fee_display?: string;
   monthly_retainer?: number;
+  monthly_retainer_max?: number;
+  monthly_retainer_display?: string;
   phase_prices?: Array<{ phase: string; price: number; description?: string }>;
   ai_usage_cost_policy?: string;
   payment_terms?: string;
@@ -79,7 +83,11 @@ export interface ClientProposalV1 {
     pricing_model: PricingModel;
     currency: string;
     setup_fee?: number;
+    setup_fee_max?: number;
+    setup_fee_display?: string;
     monthly_retainer?: number;
+    monthly_retainer_max?: number;
+    monthly_retainer_display?: string;
     phase_prices?: Array<{ phase: string; price: number; description?: string }>;
     optional_addons?: Array<{ name: string; price?: number; description?: string }>;
     ai_usage_cost_policy?: string;
@@ -176,6 +184,30 @@ function weeksWindowEs(raw: string | undefined | null): string {
   return raw.replace(/_/g, " ");
 }
 
+/**
+ * Limpia frases con lenguaje interno (margen, coste interno, tarifa por hora,
+ * horas estimadas, rentabilidad) que NUNCA deben aparecer en el documento cliente.
+ * Trabaja sentence-by-sentence para preservar el resto del texto.
+ */
+function scrubInternalLeak(text: string | undefined | null): string {
+  if (!text) return "";
+  const sentences = String(text).split(/(?<=[.!?])\s+/);
+  const kept = sentences.filter((s) => {
+    const lower = s.toLowerCase();
+    return !(
+      /\bmargen\b/.test(lower) ||
+      /\bmargin\b/.test(lower) ||
+      /coste\s+interno/.test(lower) ||
+      /tarifa\s+(?:por\s+hora|interna|hora)/.test(lower) ||
+      /hourly\s*rate/.test(lower) ||
+      /horas?\s+(?:estimadas|internas|de\s+consultor)/.test(lower) ||
+      /\brentabilidad\b/.test(lower) ||
+      /margen\s+de\s+consultor/.test(lower)
+    );
+  });
+  return kept.join(" ").trim();
+}
+
 export function buildClientProposal(input: F7Input): F7Output {
   const t0 = Date.now();
   const { scope, commercialTerms } = input;
@@ -184,6 +216,8 @@ export function buildClientProposal(input: F7Input): F7Output {
   const hasBudget =
     typeof commercialTerms.setup_fee === "number" ||
     typeof commercialTerms.monthly_retainer === "number" ||
+    (typeof commercialTerms.setup_fee_display === "string" && commercialTerms.setup_fee_display.trim().length > 0) ||
+    (typeof commercialTerms.monthly_retainer_display === "string" && commercialTerms.monthly_retainer_display.trim().length > 0) ||
     (commercialTerms.phase_prices?.length ?? 0) > 0;
   if (!hasBudget) {
     throw new Error("MISSING_BUDGET_AMOUNTS: la propuesta no puede generarse sin importes (setup_fee, monthly_retainer o phase_prices).");
@@ -354,17 +388,20 @@ export function buildClientProposal(input: F7Input): F7Output {
       pricing_model: commercialTerms.pricing_model,
       currency,
       setup_fee: commercialTerms.setup_fee,
+      setup_fee_max: commercialTerms.setup_fee_max,
+      setup_fee_display: commercialTerms.setup_fee_display,
       monthly_retainer: commercialTerms.monthly_retainer,
+      monthly_retainer_max: commercialTerms.monthly_retainer_max,
+      monthly_retainer_display: commercialTerms.monthly_retainer_display,
       phase_prices: commercialTerms.phase_prices,
       optional_addons: commercialTerms.optional_addons,
       ai_usage_cost_policy: commercialTerms.ai_usage_cost_policy,
       taxes: commercialTerms.taxes,
     },
-    payment_terms:
-      commercialTerms.payment_terms?.trim() ||
+    payment_terms: scrubInternalLeak(commercialTerms.payment_terms) ||
       "50% al inicio del proyecto y 50% contra entrega del MVP. Mensualidades, en su caso, facturadas a mes vencido.",
-    support_terms: commercialTerms.support_terms,
-    legal_notes: commercialTerms.legal_notes,
+    support_terms: scrubInternalLeak(commercialTerms.support_terms) || undefined,
+    legal_notes: scrubInternalLeak(commercialTerms.legal_notes) || undefined,
     next_steps: nextSteps,
   };
 
@@ -507,14 +544,27 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
   const modelLabel = PRICING_MODEL_LABEL_ES[p.budget.pricing_model] ?? p.budget.pricing_model;
   lines.push(`**Modalidad:** ${modelLabel}`);
   lines.push("");
-  if (p.budget.setup_fee !== undefined) {
-    lines.push(`- **Cuota inicial:** ${fmtMoney(p.budget.setup_fee, c)}`);
+
+  // Helper: prefiere display si está; si no, formatea el número.
+  const displaySetup = p.budget.setup_fee_display ??
+    (p.budget.setup_fee !== undefined ? fmtMoney(p.budget.setup_fee, c) : undefined);
+  const displayMonthly = p.budget.monthly_retainer_display ??
+    (p.budget.monthly_retainer !== undefined ? fmtMoney(p.budget.monthly_retainer, c) : undefined);
+
+  if (displaySetup) {
+    lines.push(`- **Cuota inicial:** ${displaySetup}`);
   }
-  if (p.budget.monthly_retainer !== undefined) {
-    lines.push(`- **Mensualidad recurrente:** ${fmtMoney(p.budget.monthly_retainer, c)}`);
+  if (displayMonthly) {
+    lines.push(`- **Mensualidad recurrente:** ${displayMonthly}`);
   }
-  // Total de referencia (orientativo a 12 meses si hay mensualidad)
-  if (p.budget.setup_fee !== undefined && p.budget.monthly_retainer !== undefined) {
+  // Total de referencia (orientativo a 12 meses) — solo si tenemos números
+  // numéricos exactos (no rangos). Si hay rango (max definido), no calculamos.
+  if (
+    p.budget.setup_fee !== undefined &&
+    p.budget.monthly_retainer !== undefined &&
+    p.budget.setup_fee_max === undefined &&
+    p.budget.monthly_retainer_max === undefined
+  ) {
     const total12 = p.budget.setup_fee + p.budget.monthly_retainer * 12;
     lines.push(`- **Total estimado primer año:** ${fmtMoney(total12, c)} _(cuota inicial + 12 mensualidades)_`);
   }
@@ -581,6 +631,13 @@ const BANNED_PHRASES = [
   /\bedge function\b/i,
   /\bRLS\b/,
   /\bSQL\b/,
+  // Internal pricing leak — never in client docs.
+  /margen\s+de\s+consultor[ií]a/i,
+  /\bmargen\s+(?:del?\s+)?\d+\s*%/i,
+  /coste\s+interno/i,
+  /tarifa\s+(?:por\s+hora|interna)/i,
+  /hourly\s*rate/i,
+  /horas?\s+(?:estimadas|internas)/i,
 ];
 
 export function detectInternalJargon(markdown: string): string[] {

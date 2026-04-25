@@ -50,7 +50,11 @@ export interface CommercialTermsModel {
   recommended: boolean;
   visible_to_client: boolean;
   setup_fee: number | null;
+  setup_fee_max: number | null;
+  setup_fee_display: string | null;
   monthly_fee: number | null;
+  monthly_fee_max: number | null;
+  monthly_fee_display: string | null;
   unit_price: number | null;
   revenue_share_pct: number | null;
   description: string;
@@ -67,7 +71,11 @@ export interface CommercialTermsV1 {
   // ── Flat fields consumed by F7 (Step 30) ──
   pricing_model: "fixed_project" | "setup_plus_monthly" | "subscription" | "phased" | "retainer" | "mixed";
   setup_fee?: number;
+  setup_fee_max?: number;
+  setup_fee_display?: string;
   monthly_retainer?: number;
+  monthly_retainer_max?: number;
+  monthly_retainer_display?: string;
   phase_prices?: Array<{ phase: string; price: number; description?: string }>;
   optional_addons?: Array<{ name: string; price?: number; description?: string }>;
   ai_usage_cost_policy: string;
@@ -96,23 +104,181 @@ function slugify(s: string): string {
     .slice(0, 60) || "model";
 }
 
-function parseEuro(v: string | number | undefined): number | null {
-  if (v == null || v === "") return null;
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  // string: keep first integer found ("23000-30000" -> 23000)
-  const m = String(v).match(/-?\d+(\.\d+)?/);
-  if (!m) return null;
-  const n = Number(m[0]);
+/**
+ * Parser robusto de importes europeos y rangos.
+ *
+ * Soporta:
+ *   - "13.500"           → { min: 13500, display: "13.500 EUR" }
+ *   - "13,500"           → { min: 13500, display: "13.500 EUR" }   (separador miles ES)
+ *   - "15.000 - 18.000"  → { min: 15000, max: 18000, display: "15.000 - 18.000 EUR" }
+ *   - "€750 - 850"       → { min: 750, max: 850, display: "750 - 850 EUR" }
+ *   - "1,250"            → { min: 1250, display: "1.250 EUR" }
+ *   - "13,5"             → { min: 13.5, display: "13,5 EUR" }      (decimal real, raro)
+ *   - "Estimado 8.500 - 12.000 (facturado por horas)" → rango 8500-12000
+ *   - número 15000       → { min: 15000, display: "15.000 EUR" }
+ *
+ * Heurística clave para resolver la ambigüedad coma/punto:
+ *   Si tras la coma o punto hay 3 dígitos y luego no-dígito (o fin) → separador de miles.
+ *   Si hay 1 o 2 dígitos tras el separador y solo hay UN separador → decimal.
+ */
+export function parseEuroAmountOrRange(
+  value: string | number | undefined | null,
+): { min?: number; max?: number; display: string } | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return null;
+    return { min: value, display: `${formatEuroNumber(value)} EUR` };
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  // Quitar símbolos de moneda al principio. Mantenemos el resto del texto
+  // para detectar rangos aunque vengan con prefijo (e.g. "Estimado 8.500 - 12.000").
+  const cleaned = raw.replace(/€|EUR|euros?/gi, " ").replace(/\s+/g, " ").trim();
+
+  // Token de número europeo: dígitos con posibles separadores . o , y un decimal.
+  // Aceptamos guion bajo opcional para tokens raros.
+  const NUMBER_TOKEN = /\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?/g;
+
+  const tokens = cleaned.match(NUMBER_TOKEN) ?? [];
+  if (tokens.length === 0) return null;
+
+  const numbers = tokens
+    .map(parseEuroToken)
+    .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+
+  if (numbers.length === 0) return null;
+
+  // Detectar rango: dos números separados por "-", "–", "—" o " a " o " to ".
+  if (numbers.length >= 2) {
+    const tok0 = tokens[0];
+    const tok1 = tokens[1];
+    if (tok0 && tok1) {
+      const idx1 = cleaned.indexOf(tok0);
+      const idx2 = cleaned.indexOf(tok1, idx1 + tok0.length);
+      const between = idx2 >= 0 ? cleaned.slice(idx1 + tok0.length, idx2) : "";
+      if (/[-–—]|(?:\s(?:a|to|hasta)\s)/i.test(between)) {
+        const a = numbers[0]!;
+        const b = numbers[1]!;
+        const min = Math.min(a, b);
+        const max = Math.max(a, b);
+        return {
+          min,
+          max,
+          display: `${formatEuroNumber(min)} - ${formatEuroNumber(max)} EUR`,
+        };
+      }
+    }
+  }
+
+  // Si no hay rango, devolvemos el primer número.
+  const single = numbers[0];
+  return { min: single, display: `${formatEuroNumber(single)} EUR` };
+}
+
+/**
+ * Convierte un token "13.500", "13,500", "1,250.50", "13,5" en number.
+ * Heurística europea: ',' suele ser miles si hay 3 dígitos exactos detrás
+ * y no es el único separador con otra interpretación.
+ */
+function parseEuroToken(tok: string): number | null {
+  if (!tok) return null;
+  const hasDot = tok.includes(".");
+  const hasComma = tok.includes(",");
+
+  // Caso 1: solo dígitos.
+  if (!hasDot && !hasComma) {
+    const n = Number(tok);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // Caso 2: ambos separadores → el último es el decimal, el otro es miles.
+  if (hasDot && hasComma) {
+    const lastDot = tok.lastIndexOf(".");
+    const lastComma = tok.lastIndexOf(",");
+    const decimalChar = lastDot > lastComma ? "." : ",";
+    const thousandsChar = decimalChar === "." ? "," : ".";
+    const normalized = tok.split(thousandsChar).join("").replace(decimalChar, ".");
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // Caso 3: solo un tipo de separador.
+  const sep = hasDot ? "." : ",";
+  const parts = tok.split(sep);
+
+  // Si hay >2 partes (e.g. "1.234.567"), claramente miles.
+  if (parts.length > 2) {
+    const n = Number(parts.join(""));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // Solo dos partes: la última define interpretación.
+  const last = parts[1];
+  if (last.length === 3) {
+    // "13.500" o "13,500" → miles.
+    const n = Number(parts.join(""));
+    return Number.isFinite(n) ? n : null;
+  }
+  if (last.length === 1 || last.length === 2) {
+    // "13,5" o "13.50" → decimal real.
+    const n = Number(`${parts[0]}.${last}`);
+    return Number.isFinite(n) ? n : null;
+  }
+  // Otros (4+ dígitos tras el separador) — improbable; tratamos como decimal.
+  const n = Number(`${parts[0]}.${last}`);
   return Number.isFinite(n) ? n : null;
 }
 
+function formatEuroNumber(n: number): string {
+  // Punto como separador de miles, sin decimales si es entero.
+  return n.toLocaleString("es-ES", {
+    maximumFractionDigits: Number.isInteger(n) ? 0 : 2,
+    useGrouping: true,
+  });
+}
+
+// Compatibilidad con código existente que llamaba a parseEuro.
+function parseEuro(v: string | number | undefined): number | null {
+  const parsed = parseEuroAmountOrRange(v);
+  return parsed?.min ?? null;
+}
+
+/**
+ * Limpia notas/payment_terms para evitar que se filtre lenguaje interno
+ * (margen, coste interno, tarifa por hora, horas estimadas) al cliente.
+ */
+function scrubInternalLeak(text: string | undefined | null): string {
+  if (!text) return "";
+  // Quitamos frases que mencionen margen / coste interno / tarifa / horas internas.
+  // Trabajamos sentence-by-sentence para no romper el resto del texto.
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  const kept = sentences.filter((s) => {
+    const lower = s.toLowerCase();
+    return !(
+      /\bmargen\b/.test(lower) ||
+      /margin/.test(lower) ||
+      /coste\s+interno/.test(lower) ||
+      /tarifa\s+(?:por\s+hora|interna|hora)/.test(lower) ||
+      /hourly\s*rate/.test(lower) ||
+      /horas?\s+(?:estimadas|internas|de\s+consultor)/.test(lower) ||
+      /rentabilidad/.test(lower)
+    );
+  });
+  return kept.join(" ").trim();
+}
+
 export function budgetToCommercialTermsV1(
-  budget: BudgetData | null | undefined
+  budget: BudgetData | null | undefined,
 ): CommercialTermsV1 | null {
   if (!budget || !budget.monetization_models?.length) return null;
 
   const models = budget.monetization_models.map<CommercialTermsModel>((m) => {
     const recommended = budget.recommended_model === m.name;
+    const setupParsed = parseEuroAmountOrRange(m.setup_price_eur);
+    const monthlyParsed = parseEuroAmountOrRange(m.monthly_price_eur);
+    const unitParsed = parseEuroAmountOrRange(m.price_range);
     return {
       id: slugify(m.name),
       name: m.name,
@@ -120,9 +286,13 @@ export function budgetToCommercialTermsV1(
       recommended,
       // Si el usuario no marca explícitamente, el recomendado es visible.
       visible_to_client: m.visible_to_client ?? recommended,
-      setup_fee: parseEuro(m.setup_price_eur),
-      monthly_fee: parseEuro(m.monthly_price_eur),
-      unit_price: parseEuro(m.price_range),
+      setup_fee: setupParsed?.min ?? null,
+      setup_fee_max: setupParsed?.max ?? null,
+      setup_fee_display: setupParsed?.display ?? null,
+      monthly_fee: monthlyParsed?.min ?? null,
+      monthly_fee_max: monthlyParsed?.max ?? null,
+      monthly_fee_display: monthlyParsed?.display ?? null,
+      unit_price: unitParsed?.min ?? null,
       revenue_share_pct: null,
       description: m.description || "",
       includes: [],
@@ -145,7 +315,11 @@ export function budgetToCommercialTermsV1(
 
   // Aplanar el modelo principal a los campos que F7 lee directamente.
   const setup_fee = primary.setup_fee ?? undefined;
+  const setup_fee_max = primary.setup_fee_max ?? undefined;
+  const setup_fee_display = primary.setup_fee_display ?? undefined;
   const monthly_retainer = primary.monthly_fee ?? undefined;
+  const monthly_retainer_max = primary.monthly_fee_max ?? undefined;
+  const monthly_retainer_display = primary.monthly_fee_display ?? undefined;
 
   // Otros modelos visibles → opcionales (no incluidos en el precio base).
   const optional_addons = visibleModels
@@ -156,18 +330,25 @@ export function budgetToCommercialTermsV1(
       description: m.description || undefined,
     }));
 
+  // Sanear notas y payment_terms para que no se filtre lenguaje interno.
+  const cleanedPricingNotes = scrubInternalLeak(budget.pricing_notes);
+  const payment_terms = cleanedPricingNotes ||
+    "50% al inicio del proyecto y 50% contra entrega del MVP. Mensualidades, en su caso, facturadas a mes vencido.";
+
   return {
     // Flat fields consumed by F7
     pricing_model,
     setup_fee,
+    setup_fee_max,
+    setup_fee_display,
     monthly_retainer,
+    monthly_retainer_max,
+    monthly_retainer_display,
     phase_prices: undefined,
     optional_addons: optional_addons.length > 0 ? optional_addons : undefined,
     ai_usage_cost_policy:
       "Costes de IA/API no incluidos por defecto, facturados según consumo real.",
-    payment_terms:
-      (budget.pricing_notes && budget.pricing_notes.trim()) ||
-      "50% al inicio del proyecto y 50% contra entrega del MVP. Mensualidades, en su caso, facturadas a mes vencido.",
+    payment_terms,
     taxes: "IVA no incluido. Se aplicará el tipo vigente.",
     currency: "EUR",
     validity_days: 30,
@@ -188,7 +369,7 @@ export function budgetToCommercialTermsV1(
  * Devuelve null si todo OK, o mensaje de error legible.
  */
 export function validateBudgetForClientProposal(
-  budget: BudgetData | null | undefined
+  budget: BudgetData | null | undefined,
 ): string | null {
   if (!budget) return "Genera el presupuesto antes de crear la propuesta cliente.";
   const models = budget.monetization_models || [];
@@ -205,7 +386,7 @@ export function validateBudgetForClientProposal(
     const setup = parseEuro(m.setup_price_eur);
     const monthly = parseEuro(m.monthly_price_eur);
     return (typeof setup === "number" && setup > 0) ||
-           (typeof monthly === "number" && monthly > 0);
+      (typeof monthly === "number" && monthly > 0);
   });
   if (withNumericPrice.length === 0) {
     return "El modelo visible para el cliente debe tener un importe numérico (cuota inicial o mensualidad). Sin importes reales no se puede generar la propuesta.";

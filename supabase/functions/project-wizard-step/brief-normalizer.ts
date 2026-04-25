@@ -900,7 +900,7 @@ function ensureCanonicalComponentsPresent(briefing: any, ctx: NormalizationConte
       description: comp.description || prior?.description || "Componente canónico principal para el roadmap AFFLUX.",
       ...(prior?._source_chunks ? { _source_chunks: prior._source_chunks } : {}),
       _evidence_count: prior?._evidence_count || 0,
-      _inferred_by: prior ? (prior._inferred_by || "normalizer_canonical_component_v1") : "normalizer_required_component_v1",
+      _inferred_by: "normalizer_canonical_component_v1",
     };
   });
   changes.push({

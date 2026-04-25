@@ -184,6 +184,30 @@ function weeksWindowEs(raw: string | undefined | null): string {
   return raw.replace(/_/g, " ");
 }
 
+/**
+ * Limpia frases con lenguaje interno (margen, coste interno, tarifa por hora,
+ * horas estimadas, rentabilidad) que NUNCA deben aparecer en el documento cliente.
+ * Trabaja sentence-by-sentence para preservar el resto del texto.
+ */
+function scrubInternalLeak(text: string | undefined | null): string {
+  if (!text) return "";
+  const sentences = String(text).split(/(?<=[.!?])\s+/);
+  const kept = sentences.filter((s) => {
+    const lower = s.toLowerCase();
+    return !(
+      /\bmargen\b/.test(lower) ||
+      /\bmargin\b/.test(lower) ||
+      /coste\s+interno/.test(lower) ||
+      /tarifa\s+(?:por\s+hora|interna|hora)/.test(lower) ||
+      /hourly\s*rate/.test(lower) ||
+      /horas?\s+(?:estimadas|internas|de\s+consultor)/.test(lower) ||
+      /\brentabilidad\b/.test(lower) ||
+      /margen\s+de\s+consultor/.test(lower)
+    );
+  });
+  return kept.join(" ").trim();
+}
+
 export function buildClientProposal(input: F7Input): F7Output {
   const t0 = Date.now();
   const { scope, commercialTerms } = input;

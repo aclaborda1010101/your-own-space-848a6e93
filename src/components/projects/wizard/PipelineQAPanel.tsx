@@ -106,6 +106,17 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
         return;
       }
 
+      const body: Record<string, unknown> = { action, projectId };
+
+      if (action === "generate_client_proposal") {
+        try {
+          body.commercial_terms = JSON.parse(commercialTerms);
+        } catch (e) {
+          setError("commercial_terms no es JSON válido. Revisa el formulario.");
+          return;
+        }
+      }
+
       const url = `${SUPABASE_URL}/functions/v1/project-wizard-step`;
       const res = await fetch(url, {
         method: "POST",
@@ -114,7 +125,7 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
           Authorization: `Bearer ${token}`,
           apikey: ANON_KEY,
         },
-        body: JSON.stringify({ action, projectId }),
+        body: JSON.stringify(body),
       });
 
       setStatus(res.status);
@@ -132,6 +143,16 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
       setLoading(false);
       setCurrentAction(null);
     }
+  };
+
+  const downloadMarkdown = (filename: string, content: string) => {
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(blobUrl);
   };
 
   const copyRaw = async () => {

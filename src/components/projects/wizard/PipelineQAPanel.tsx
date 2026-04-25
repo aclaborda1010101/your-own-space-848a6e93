@@ -415,8 +415,24 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
                 · duración {elapsed}s
               </span>
             )}
+            {downloadableMarkdown && (
+              <Button
+                onClick={() => downloadMarkdown(downloadableMarkdown.filename, downloadableMarkdown.content)}
+                variant="holo"
+                size="sm"
+                className="ml-auto h-7 text-xs"
+              >
+                <FileText className="w-3 h-3" />
+                {downloadableMarkdown.label}
+              </Button>
+            )}
             {raw && (
-              <Button onClick={copyRaw} variant="outline" size="sm" className="ml-auto h-7 text-xs">
+              <Button
+                onClick={copyRaw}
+                variant="outline"
+                size="sm"
+                className={cn("h-7 text-xs", !downloadableMarkdown && "ml-auto")}
+              >
                 {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                 {copied ? "Copiado" : "Copiar RAW"}
               </Button>

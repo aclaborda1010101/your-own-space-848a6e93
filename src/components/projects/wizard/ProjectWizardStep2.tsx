@@ -23,6 +23,7 @@ interface Props {
   generating: boolean;
   onExtract: () => void;
   onForceFullExtract?: () => void;
+  onChunkedReExtract?: () => void;
   onApprove: (editedBriefing: any) => void;
   projectId?: string;
   projectName?: string;

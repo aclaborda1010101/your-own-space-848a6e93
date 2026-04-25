@@ -77,11 +77,17 @@ export function buildCleanBrief(briefing: any, ctx: { projectName: string }): Cl
     markdown: listSection(v2.quantified_economic_pains, { showAmount: true }),
   });
 
-  // 4. Catalizadores de negocio
+  // 4. Catalizadores de negocio (canónicos primero)
+  const catalysts = Array.isArray(v2.business_catalysts) ? [...v2.business_catalysts] : [];
+  catalysts.sort((a: any, b: any) => {
+    const aCanon = a?._inferred_by === "normalizer_catalyst_v1" ? 0 : 1;
+    const bCanon = b?._inferred_by === "normalizer_catalyst_v1" ? 0 : 1;
+    return aCanon - bCanon;
+  });
   sections.push({
     id: "catalizadores",
     title: "4. Catalizadores de negocio",
-    markdown: listSection(v2.business_catalysts),
+    markdown: listSection(catalysts),
   });
 
   // 5. Necesidades explícitas

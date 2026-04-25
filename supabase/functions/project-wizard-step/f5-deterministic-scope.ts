@@ -104,6 +104,10 @@ export interface ComplianceBlockerEntry {
   reason: string;
   owner: string;
   deadline_weeks: number;
+  /** Replicated from internal blocker so PRD/proposal can read flags from root. */
+  blocks_design: boolean;
+  blocks_internal_testing: boolean;
+  blocks_production: boolean;
 }
 
 export interface DatasetReadinessBlockerEntry {
@@ -630,6 +634,9 @@ export function runDeterministicPreWarm(
         reason: b.reason,
         owner: "DPO / Responsable legal del cliente",
         deadline_weeks: 4,
+        blocks_design: b.blocks_design ?? false,
+        blocks_internal_testing: b.blocks_internal_testing ?? false,
+        blocks_production: b.blocks_production ?? true,
       })),
   );
 

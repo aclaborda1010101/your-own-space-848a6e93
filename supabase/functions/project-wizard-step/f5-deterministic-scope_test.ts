@@ -277,6 +277,20 @@ Deno.test("F5 v2: compliance blockers all have owner and deadline_weeks", () => 
   }
 });
 
+Deno.test("F5 v2.1: root compliance blockers expose blocks_design/internal_testing/production flags", () => {
+  const { scope } = runDeterministicPreWarm(REGISTRY, FEASIBILITY, GAPS);
+  assert(scope.compliance_blockers.length > 0);
+  for (const b of scope.compliance_blockers) {
+    assertEquals(typeof b.blocks_design, "boolean");
+    assertEquals(typeof b.blocks_internal_testing, "boolean");
+    assertEquals(typeof b.blocks_production, "boolean");
+    // DPIA-style compliance blockers must allow design/testing but block production
+    assertEquals(b.blocks_design, false);
+    assertEquals(b.blocks_internal_testing, false);
+    assertEquals(b.blocks_production, true);
+  }
+});
+
 Deno.test("F5 v2: Benatar (COMP-C04) still in fast_follow_f2 and Soul plan intact", () => {
   const { scope } = runDeterministicPreWarm(REGISTRY, FEASIBILITY, GAPS);
   assert(scope.fast_follow_f2.find((c) => c.source_ref === "COMP-C04"));

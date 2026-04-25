@@ -632,6 +632,12 @@ export function buildRegistryFromDesign(
   // 7. DPIA rules (recorre items, popula item.dpia_required y registry.dpia).
   registry = applyDpiaRules(registry);
 
+  // 7.b Auto-inyectar componente de gobernanza si DPIA es required y no existe
+  // ningún compliance_module / G_governance todavía.
+  const govRes = injectGovernanceIfMissing(registry, counters);
+  registry = govRes.registry;
+  if (govRes.warning) warnings.push(govRes.warning);
+
   // 8. updated_at
   registry.updated_at = new Date().toISOString();
 

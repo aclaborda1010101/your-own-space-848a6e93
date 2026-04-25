@@ -457,33 +457,58 @@ export const useProjectWizard = (projectId?: string) => {
     }
   };
 
-  // ── Normalize brief (clean naming, dedup, language, compliance) ──────
-  const normalizeBrief = async () => {
-    if (!project || !projectId) return;
-    setGenerating(true);
-    const toastId = toast.loading("Normalizando brief y generando versión limpia…");
+  // ── Normalize / repair brief (clean naming, dedup, language, retry chunks) ──
+  // Uses the global `repair_step2_brief` action which:
+  //   1. Retries failed chunks if input is available
+  //   2. Runs full normalization
+  //   3. Builds the clean brief markdown
+  //   4. Persists a NEW Step 2 version with status=review
+  const normalizeBrief = async (): Promise<{ success: boolean; cleanLength: number; version: number } | null> => {
+    if (!project || !projectId) return null;
+    setNormalizing(true);
+    const toastId = toast.loading("Limpiando y normalizando brief…");
     try {
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
-          action: "normalize_brief",
+          action: "repair_step2_brief",
           stepData: {
             projectId,
             projectName: project.name,
             companyName: project.company,
+            inputContent: project.inputContent,
+            projectType: project.projectType,
+            clientNeed: project.clientNeed,
           },
         },
       });
-      if (error) throw error;
       toast.dismiss(toastId);
-      toast.success(`Brief normalizado: ${data?.normalization_changes ?? 0} cambios aplicados.`);
+      if (error) {
+        const msg = (error as any)?.message || "Error desconocido";
+        console.error("[normalizeBrief] backend error:", error);
+        toast.error(`Normalización falló: ${msg}`);
+        return null;
+      }
+      if (!data?.success) {
+        const msg = (data as any)?.error || "Sin éxito";
+        toast.error(`Normalización falló: ${msg}`);
+        return null;
+      }
+      const cleanLen = data.clean_brief_length || 0;
+      const recovered = data.recovered_chunks || 0;
+      toast.success(
+        recovered > 0
+          ? `Brief Limpio generado (v${data.version}). ${recovered} bloque(s) recuperado(s).`
+          : `Brief Limpio generado (v${data.version}). Listo para exportar y aprobar.`,
+      );
       await loadProject();
-      return data;
+      return { success: true, cleanLength: cleanLen, version: data.version };
     } catch (e: any) {
       console.error("Normalize brief error:", e);
       toast.dismiss(toastId);
       toast.error(e.message || "Error al normalizar el brief");
+      return null;
     } finally {
-      setGenerating(false);
+      setNormalizing(false);
     }
   };
 

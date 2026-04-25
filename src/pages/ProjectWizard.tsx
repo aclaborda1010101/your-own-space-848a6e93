@@ -72,7 +72,7 @@ const ProjectWizardEdit = () => {
   const navigate = useNavigate();
   const {
     project, steps, costs, totalCost, currentStep,
-    loading, generating, chainedPhase, prdSubProgress, internalStepStatuses,
+    loading, generating, normalizing, chainedPhase, prdSubProgress, internalStepStatuses,
     runExtraction, retryFailedChunks, normalizeBrief, approveStep, navigateToStep, runGenericStep, runChainedPRD, updateStepOutputData,
     updateInputContent, updateProjectName,
     budgetData, budgetGenerating, budgetStatus, generateBudgetEstimate, updateBudgetData, approveBudget,
@@ -294,6 +294,7 @@ const ProjectWizardEdit = () => {
               inputContent={project.inputContent}
               briefing={step2Data?.outputData || null}
               generating={generating}
+              normalizing={normalizing}
               onExtract={() => runExtraction(undefined, { forceRefresh: true })}
               onForceFullExtract={() => runExtraction(undefined, { skipSampler: true, forceRefresh: true })}
               onChunkedReExtract={() => runExtraction(undefined, { chunkedExtraction: true, forceRefresh: true })}

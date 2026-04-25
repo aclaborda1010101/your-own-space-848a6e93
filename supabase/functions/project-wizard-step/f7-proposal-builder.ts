@@ -229,7 +229,7 @@ export function buildClientProposal(input: F7Input): F7Output {
   }
   if (soulRequired) {
     conditions.push(
-      `Sesiones de captura de criterio (${scope.soul_capture_plan.sessions} sesiones de ${scope.soul_capture_plan.session_duration_min} minutos) en las primeras ${scope.soul_capture_plan.weeks_window.replace(/_/g, " ")} del proyecto.`,
+      `Sesiones de captura de criterio (${scope.soul_capture_plan.sessions} sesiones de ${scope.soul_capture_plan.session_duration_min} minutos) en las primeras ${weeksWindowEs(scope.soul_capture_plan.weeks_window)} del proyecto.`,
     );
   }
   conditions.push(

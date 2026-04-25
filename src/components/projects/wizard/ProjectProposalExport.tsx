@@ -6,6 +6,7 @@ import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { FileText, Loader2, Download, FileDown, FileText as FileScope } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { validateBudgetForClientProposal } from "@/lib/budgetToCommercialTerms";
 
 interface StepData {
   stepNumber: number;
@@ -240,6 +241,8 @@ export const ProjectProposalExport = ({
   };
 
   const handleGenerate = async () => {
+    const budgetError = validateBudgetForClientProposal(budgetData);
+    if (budgetError) { toast.error(budgetError); return; }
     if (selectedModels.length === 0) {
       toast.error("Selecciona al menos un modelo de monetización");
       return;
@@ -265,6 +268,8 @@ export const ProjectProposalExport = ({
   };
 
   const handleGenerateSimple = async () => {
+    const budgetError = validateBudgetForClientProposal(budgetData);
+    if (budgetError) { toast.error(budgetError); return; }
     if (selectedModels.length === 0) {
       toast.error("Selecciona al menos un modelo de monetización");
       return;
@@ -290,6 +295,8 @@ export const ProjectProposalExport = ({
   };
 
   const handleGenerateScope = async () => {
+    const budgetError = validateBudgetForClientProposal(budgetData);
+    if (budgetError) { toast.error(budgetError); return; }
     if (selectedModels.length === 0) {
       toast.error("Selecciona al menos un modelo de monetización");
       return;

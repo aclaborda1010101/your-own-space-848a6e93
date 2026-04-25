@@ -366,6 +366,10 @@ const EN_HINT_WORDS = new Set([
   "automation", "workflow", "extensive", "potential", "rate", "response",
   "analysis", "managing", "unified", "custom", "powered", "generation",
   "marketing", "content", "copywriting", "guidance", "negotiation", "coaching",
+  "recorded", "calls", "lost", "opportunities", "qualification", "prioritization",
+  "graph", "historical", "record", "building", "deal", "owner", "owners",
+  "lead", "leads", "automated", "categorization", "profiling", "estate",
+  "real", "off-market", "specific", "what", "which", "should",
 ]);
 
 function isLikelyEnglish(s: string): boolean {
@@ -391,8 +395,9 @@ function collectTranslatableStrings(briefing: any): TranslateItem[] {
     "quantified_economic_pains", "decision_points", "client_requested_items",
     "inferred_needs", "ai_native_opportunity_signals", "constraints_and_risks",
     "open_questions", "architecture_signals", "stakeholder_signals",
+    "external_data_sources_mentioned", "initial_compliance_flags",
   ];
-  const STRING_KEYS = ["title", "description", "signal", "question", "name_or_role"];
+  const STRING_KEYS = ["title", "description", "signal", "question", "name_or_role", "evidence", "purpose", "name"];
 
   for (const field of FIELDS_TO_SCAN) {
     const arr = v2[field];

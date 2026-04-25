@@ -1,98 +1,106 @@
+# Brief Limpio v4 — corrección global del pipeline Step 2 + exportación PDF
 
-## Diagnóstico del PDF actual
+Las correcciones son **globales** (afectan a cualquier proyecto, no solo AFFLUX). El usuario aporta AFFLUX como caso de prueba.
 
-He inspeccionado el `briefing-extraído-v3_2.pdf` que has subido y el código que lo genera. Es un desastre confirmado y la causa es muy concreta:
+## Diagnóstico verificado en BD y código
 
-1. **El botón "Descargar" del Step 2** (`ProjectWizardStep2.tsx` línea 420-429) envía el **JSON crudo completo** (`editedBriefing`) a `generate-document` con `contentType="json"`.
-2. **`generate-document/index.ts` no tiene un renderer dedicado para `stepNumber === 2`**. Cae al fallback genérico (líneas 2650-2698) que, para cada array de objetos, vuelca **TODOS los campos como columnas de una tabla markdown**: `id`, `title`, `status`, `certainty`, `blocked_by`, `description`, `source_kind`, `likely_layer`, `inferred_from`, `source_chunks`, `evidence_count` → **11 columnas en A4 vertical** → tablas explotadas, una fila por página, columnas chafadas.
-3. **El `_clean_brief_md` ya existe** en el briefing normalizado (en español, 9 secciones limpias) — lo crea `clean-brief-builder.ts` después de normalizar — pero el botón lo **ignora** y manda el JSON bruto en su lugar.
-4. **Mezcla EN/ES** porque vuelca `inferred_needs` directamente del briefing pre-normalización (donde aún hay `"Unified AI platform/system"`, `"Workflow optimization and automation"`, etc.) en vez de leer la versión normalizada en castellano.
-5. **61 páginas** = volcado bruto de TODA la estructura interna (`legacy_compatibility`, `architecture_signals`, `business_extraction_v2`, `parallel_projects`, `extraction_warnings`...) que jamás debería exportarse a un PDF presentable.
+He inspeccionado `project_wizard_steps` para el proyecto AFFLUX (`6ef807d1-…`, step_number = 2, version 3, status = review):
 
-## Lo que vamos a hacer
+| Campo | Estado actual | Esperado |
+|---|---|---|
+| `_clean_brief_md` | **NO existe** | markdown limpio 3-5 páginas |
+| `_normalization_log` | **NO existe** | log con cambios aplicados |
+| `_chunked_extraction_meta` | existe | existe |
+| `client_naming_check.client_company_name` | `"Alejandro Gordo"` (mal) | nombre real de la empresa |
+| `client_naming_check.proposed_product_name` | `null` | nombre del producto |
 
-### 1. Renderer dedicado para Step 2 en `generate-document/index.ts`
+**Conclusión:** las acciones `retry_failed_chunks` y `normalize_brief` añadidas en la iteración anterior **nunca se han ejecutado** sobre este proyecto. La UI tiene los botones, pero o el usuario no los pulsó, o se ejecutaron contra una versión y se persistieron sobre otra que luego fue sobrescrita por una re-extracción.
 
-Añadir un bloque `else if (stepNumber === 2 && typeof processedContent === "object")` justo antes del fallback genérico (línea 2650), análogo al de step 100/101/102.
+Y en `supabase/functions/generate-document/index.ts`:
+- **No existe** ninguna rama `if (stepNumber === 2)`.
+- Step 2 cae al fallback genérico (línea 2650+) que serializa el JSON crudo a tablas markdown → de ahí las **61 páginas, mezcla EN/ES, "retail", FAILED CHUNKS visibles, naming incorrecto**.
+- Aunque añadiéramos `_clean_brief_md`, el generador actual **no lo lee** porque recibe el `output_data` completo y lo mete entero en el fallback.
 
-Estrategia de contenido: **dos modos**, controlados por `exportMode`:
+## Plan global — 4 ejes
 
-- **Modo `client` (default — Brief Limpio presentable, ~6-10 páginas):**
-  - Si `processedContent._clean_brief_md` existe → renderizarlo directamente con `markdownToHtml()`. Este markdown ya está limpio, en castellano, deduplicado y con 9 secciones canónicas (resumen, activos, problemas, catalizadores, necesidades, oportunidades, riesgos+compliance, preguntas abiertas, componentes candidatos).
-  - Si no existe (briefing antiguo sin normalizar) → construirlo on-the-fly llamando a una versión simplificada del builder (importar `buildCleanBrief` desde `./project-wizard-step/clean-brief-builder.ts` o portarlo a un módulo compartido).
+### 1. Generador PDF: priorizar `_clean_brief_md` para Step 2 (global)
 
-- **Modo `internal` (debug/trazabilidad — el "61 páginas" actual):**
-  - Mantener el volcado completo, pero con **maquetación corregida** (ver punto 3). Solo accesible explícitamente.
+`supabase/functions/generate-document/index.ts` — añadir rama dedicada antes del fallback genérico (~línea 2649):
 
-### 2. Cambiar el botón del Step 2 para usar `_clean_brief_md`
-
-En `ProjectWizardStep2.tsx` (línea 419-430): pasar `_clean_brief_md` con `contentType="markdown"` cuando exista, en vez del JSON entero. Mantener el JSON bruto solo si el usuario explícitamente pide "Versión interna completa" (botón secundario discreto).
-
-```tsx
-content: editedBriefing._clean_brief_md || editedBriefing,
-contentType: editedBriefing._clean_brief_md ? "markdown" : "json",
+```ts
+// ── Step 2: Brief Limpio renderer (global, todos los proyectos) ──
+if (stepNumber === 2 && typeof processedContent === "object" && processedContent !== null) {
+  const cleanMd = processedContent._clean_brief_md;
+  if (typeof cleanMd === "string" && cleanMd.trim().length > 200) {
+    // Render directo del Brief Limpio normalizado
+    htmlContent = markdownToHtml(cleanMd);
+  } else {
+    // Fallback degradado: aviso + resumen mínimo (NO volcar el JSON crudo)
+    htmlContent = markdownToHtml(buildMinimalBriefFallback(processedContent));
+  }
+}
 ```
 
-### 3. Maquetación profesional del PDF (CSS de `generate-document`)
+Donde `buildMinimalBriefFallback` extrae solo los 4-5 campos presentables (resumen, naming, top necesidades) y añade un banner: *"Brief no normalizado todavía. Pulsa 'Limpiar y normalizar' antes de exportar."* Así **nunca** se exporta JSON crudo de 61 páginas.
 
-Para que NO vuelvan a salir tablas chafadas, modificaremos los estilos en el CSS embebido (líneas 23-380):
+### 2. Auto-ejecución del pipeline limpio en `useProjectWizard`
 
-- **Tablas con muchas columnas (>5):** detectar en el renderer y emitir el HTML con `<section class="landscape-page">` que forzará `@page { size: A4 landscape; }` mediante CSS `@page :nth(...)` o un wrapper con `page-break-before: always; transform: rotate(...)` (más simple: usar la estrategia nativa Chromium de `@page` con nombres). Implementación recomendada: **named pages**:
+Hoy `retry_failed_chunks` y `normalize_brief` solo se disparan si el usuario pulsa los botones. Cambio global:
 
-  ```css
-  @page main { size: A4 portrait; margin: 18mm 16mm; }
-  @page wide { size: A4 landscape; margin: 14mm 12mm; }
-  body { page: main; }
-  .landscape-table-wrapper { page: wide; page-break-before: always; page-break-after: always; }
-  ```
+- Tras cualquier `extract` / `force_full_extract` / `chunked_re_extract` exitoso en Step 2, encadenar automáticamente:
+  1. `retry_failed_chunks` si `_chunked_extraction_meta.failed_chunks_count > 0`
+  2. `normalize_brief` siempre (genera `_clean_brief_md`, corrige naming, dedup, EN→ES, sectorial, compliance)
+- Persistir el resultado final como **una sola versión nueva** (no dos), para evitar que el usuario apruebe una versión "sucia".
+- Mostrar un toast informativo: *"Brief extraído, normalizado y limpio generado"*.
 
-- **Tablas que sí quepan en vertical:** limitar a **máximo 4-5 columnas visibles**. En el renderer del Brief Limpio nunca se generan tablas de >3 columnas (las "Necesidades", "Activos", etc. salen como bullets con título+descripción), así que esto se aplica solo al modo internal.
+Los botones manuales se mantienen como fallback para reejecutar cualquier paso.
 
-- **Padding de celdas, line-height, anti-overflow:**
-  ```css
-  table { table-layout: fixed; word-wrap: break-word; }
-  td, th { padding: 6pt 8pt; vertical-align: top; font-size: 9pt; line-height: 1.35; }
-  td { word-break: break-word; }
-  ```
+### 3. Endurecer `normalize_brief` para que el naming siempre quede bien
 
-- **Respiración general (cendal/márgenes):** subir margen de página de ~14mm a **18mm verticales / 16mm horizontales** para evitar que el contenido toque el footer "Pág X de Y".
+En `brief-normalizer.ts` → `applyNamingSplit`:
 
-- **Footer y header:** ya están en su sitio, pero ahora respiran.
+- Si `client_company_name` es claramente un **nombre de persona** (2 palabras tipo "Nombre Apellido", sin S.L./S.A./Inc/Corp), promoverlo a `founder_or_decision_maker` y dejar `client_company_name` con el `companyName` del contexto (que viene de `business_projects.company`) o marcar `[POR CONFIRMAR]`.
+- Si `proposed_product_name` está vacío y existe `business_model_summary.title` con un nombre propio único, proponerlo.
+- Registrar todos los cambios en `_normalization_log.changes` con `type: "naming_split"`.
 
-### 4. Garantía de castellano
+Esto ya estaba parcialmente, pero no se está activando porque `normalize_brief` nunca corrió. Verifico además que el heurístico cubra el caso "Alejandro Gordo".
 
-- En modo `client`, el renderer **solo** lee de `_clean_brief_md` o reconstruye desde `_normalized_briefing` (siempre post-normalización ES).
-- Antes de pasar al `markdownToHtml`, aplicar `translateForClient()` (que ya existe en el archivo) como red de seguridad por si algún campo se cuela en EN.
-- Si el briefing aún no se ha normalizado, el botón de descargar mostrará un **toast "Normaliza el brief antes de exportar"** y deshabilitará el modo client (forzando al usuario a pulsar primero "✨ Limpiar y normalizar").
+### 4. Botón "Descargar PDF" en Step 2: bloqueo + auto-trigger
 
-### 5. Resultado esperado
+En `ProjectWizardStep2.tsx` y/o `ProjectDocumentDownload`:
 
-| Antes | Después |
-|---|---|
-| 61 páginas, tablas de 11 columnas chafadas | ~6-10 páginas, layout limpio |
-| Mezcla ES/EN | 100% castellano |
-| Vuelca `source_chunks`, `evidence_count`, `inferred_from`, `_*_from` | Solo contenido de negocio |
-| Una fila por página | Listas con título + descripción legibles |
-| `legacy_compatibility`, `extraction_warnings`, `business_extraction_v2` visibles | Ocultos en cliente, disponibles en modo internal |
-| Todo vertical aunque no quepa | Páginas anchas (landscape) solo cuando una tabla lo necesita en modo internal |
+- Si `briefing._clean_brief_md` no existe, **deshabilitar** el botón de descarga y mostrar tooltip: *"Genera primero el Brief Limpio (Limpiar y normalizar)"*.
+- Alternativa más amable: el botón ofrece *"Generar Brief Limpio y descargar"* que dispara `normalize_brief` y luego descarga.
+- El payload enviado a `generate-document` para Step 2 sigue siendo el `output_data` completo (el generador ya sabe leer `_clean_brief_md`); **no enviamos el markdown desde el cliente** para que el PDF siempre refleje la última versión persistida.
+
+## Maquetación PDF (afecta global, ya parcialmente cubierto)
+
+El CSS actual ya usa Montserrat/Raleway, A4, márgenes 22/18/25/22mm, headers/footers ManIAS. Para el Brief Limpio (~3-5 páginas) **no hace falta** landscape ni tablas anchas — el `_clean_brief_md` está pensado como prosa con bullets y subtítulos H2 simples. Por tanto:
+
+- **No** introduzco named pages landscape para Step 2 (sería matar moscas a cañonazos).
+- Mantengo CSS actual.
+- Si en el futuro otro step necesitase landscape, lo añadimos aislado con `@page wide`.
+
+## Criterios de aceptación
+
+Tras este cambio, en **cualquier** proyecto:
+
+- [ ] Después de extraer Step 2, el sistema deja `_clean_brief_md` poblado automáticamente.
+- [ ] `_normalization_log.changes` muestra cambios de naming, dedup, idioma, sectorial.
+- [ ] El PDF de Step 2 tiene **3-7 páginas** (no 61), sin "FAILED CHUNKS", sin "retail", sin mezcla EN/ES, con naming correcto.
+- [ ] Si el usuario intenta descargar sin `_clean_brief_md`, el sistema o lo bloquea o lo genera al vuelo.
+- [ ] AFFLUX, al volver a extraer (o al pulsar "Limpiar y normalizar" sobre v3 actual), produce un PDF limpio con `client_company_name = "AFFLUX"` (o la empresa real del proyecto), `founder = "Alejandro Gordo"`.
 
 ## Archivos a modificar
 
-1. **`supabase/functions/generate-document/index.ts`**
-   - Añadir bloque `else if (stepNumber === 2 && ...)` antes del fallback genérico (~línea 2650).
-   - Modificar el CSS embebido (~líneas 340-380) para `@page` named pages, `table-layout: fixed`, padding aumentado.
-   - Si hace falta importar `buildCleanBrief`, añadir el import al top del archivo.
+1. `supabase/functions/generate-document/index.ts` — rama Step 2 + helper `buildMinimalBriefFallback`.
+2. `supabase/functions/project-wizard-step/brief-normalizer.ts` — endurecer `applyNamingSplit`.
+3. `src/hooks/useProjectWizard.ts` — encadenar auto-normalize tras extract.
+4. `src/components/projects/wizard/ProjectWizardStep2.tsx` — bloqueo/auto-trigger del botón download.
+5. `src/main.tsx` — bump cache-bust.
 
-2. **`src/components/projects/wizard/ProjectWizardStep2.tsx`**
-   - Línea 419-430: pasar `_clean_brief_md` (markdown) por defecto.
-   - Añadir validación: si no hay `_clean_brief_md`, mostrar toast pidiendo normalizar primero (o auto-trigger del botón "Limpiar y normalizar" antes de descargar).
-   - Opcional: añadir botón secundario discreto "Versión interna (debug)" que mande el JSON crudo en modo `internal`.
+## Lo que **no** hago
 
-3. **`supabase/functions/project-wizard-step/clean-brief-builder.ts`** (revisar)
-   - Verificar que el markdown que produce ya cubre las 9 secciones bien y está 100% en español. Ajustar wording si hace falta.
-
-## Lo que NO vamos a tocar
-
-- El pipeline de extracción/normalización (ya funciona, el brief actual está bien generado, solo está mal renderizado a PDF).
-- Otros steps (3, 4, 5, 6, 100, 101, 102) — sus renderers dedicados ya funcionan.
-- El JSON guardado en BD — sigue siendo la fuente de verdad bruta; solo cambia cómo se presenta al exportar.
+- No toco F2/F3/F4/F5 (fuera de alcance).
+- No introduzco landscape PDF (innecesario para markdown limpio).
+- No re-extraigo automáticamente proyectos viejos: el usuario los normaliza con el botón ya existente o re-extrayendo.

@@ -294,7 +294,8 @@ const ProjectWizardEdit = () => {
               inputContent={project.inputContent}
               briefing={step2Data?.outputData || null}
               generating={generating}
-              onExtract={runExtraction}
+              onExtract={() => runExtraction()}
+              onForceFullExtract={() => runExtraction(undefined, { skipSampler: true })}
               onApprove={async (editedBriefing) => {
                 await approveStep(2, editedBriefing, { autoChain: autoChainEnabled });
               }}

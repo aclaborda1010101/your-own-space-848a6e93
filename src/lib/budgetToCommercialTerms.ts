@@ -151,20 +151,24 @@ export function parseEuroAmountOrRange(
   if (numbers.length === 0) return null;
 
   // Detectar rango: dos números separados por "-", "–", "—" o " a " o " to ".
-  // Buscamos un guion o "a"/"to" entre los DOS PRIMEROS tokens detectados.
   if (numbers.length >= 2) {
-    const idx1 = cleaned.indexOf(tokens[0]);
-    const between = cleaned.slice(idx1 + tokens[0].length, cleaned.indexOf(tokens[1], idx1 + tokens[0].length));
-    if (/[-–—]|(?:\s(?:a|to|hasta)\s)/i.test(between)) {
-      const a = numbers[0];
-      const b = numbers[1];
-      const min = Math.min(a, b);
-      const max = Math.max(a, b);
-      return {
-        min,
-        max,
-        display: `${formatEuroNumber(min)} - ${formatEuroNumber(max)} EUR`,
-      };
+    const tok0 = tokens[0];
+    const tok1 = tokens[1];
+    if (tok0 && tok1) {
+      const idx1 = cleaned.indexOf(tok0);
+      const idx2 = cleaned.indexOf(tok1, idx1 + tok0.length);
+      const between = idx2 >= 0 ? cleaned.slice(idx1 + tok0.length, idx2) : "";
+      if (/[-–—]|(?:\s(?:a|to|hasta)\s)/i.test(between)) {
+        const a = numbers[0]!;
+        const b = numbers[1]!;
+        const min = Math.min(a, b);
+        const max = Math.max(a, b);
+        return {
+          min,
+          max,
+          display: `${formatEuroNumber(min)} - ${formatEuroNumber(max)} EUR`,
+        };
+      }
     }
   }
 

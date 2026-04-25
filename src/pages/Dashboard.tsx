@@ -54,21 +54,20 @@ import { useNavigate } from "react-router-dom";
 const Dashboard = () => {
   const navigate = useNavigate();
   const { settings: userSettings } = useUserSettings();
-  const { checkIn, setCheckIn, registerCheckIn, refetch: refetchCheckIn, loading: checkInLoading, saving, isRegistered, prefilledFromWhoop } = useCheckIn();
+  const { checkIn, setCheckIn, registerCheckIn, loading: checkInLoading, saving, isRegistered, prefilledFromWhoop } = useCheckIn();
 
   const { 
     tasks, 
     loading: tasksLoading, 
-    refetch: refetchTasks,
     toggleComplete, 
   } = useTasks();
   const { events } = useCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
   const { notifications } = useSmartNotifications();
-  const { challenges, loading: challengesLoading, refetch: refetchChallenges, toggleGoalCompletion, createChallenge, updateChallenge } = useJarvisChallenge();
+  const { challenges, loading: challengesLoading, toggleGoalCompletion, createChallenge, updateChallenge } = useJarvisChallenge();
   const { profile } = useUserProfile();
-  const { data: whoopData, isLoading: whoopLoading, refetch: refetchWhoopData } = useJarvisWhoopData();
-  const { history: whoopHistory, refetch: refetchWhoopHistory } = useWhoopHistory(7);
+  const { data: whoopData, isLoading: whoopLoading } = useJarvisWhoopData();
+  const { history: whoopHistory } = useWhoopHistory(7);
 
   const {
     layout, profiles, activeProfileId, isLoaded,

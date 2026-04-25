@@ -487,7 +487,10 @@ export const useProjectWizard = (projectId?: string) => {
             clientNeed: project.clientNeed,
             // Optional per-project overrides (empty for unregistered projects).
             productName: overrides.productName,
+            companyNameOverride: overrides.companyNameOverride,
             canonicalComponents: overrides.canonicalComponents,
+            canonicalCatalysts: overrides.canonicalCatalysts,
+            mutexGroups: overrides.mutexGroups,
             forbiddenTopics: overrides.forbiddenTopics,
             manualReviewAlerts: overrides.manualReviewAlerts,
           },

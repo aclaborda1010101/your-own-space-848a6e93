@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
+import { isAbortError } from "@/lib/isAbortError";
 
 export interface CalendarEvent {
   id: string;
@@ -125,6 +126,7 @@ export const useCalendar = () => {
         });
 
         if (error) {
+          if (isAbortError(error)) return;
           console.error("iCloud fetch error:", error);
           if (!isBackgroundSync) {
             toast.error("Error al cargar eventos del calendario");
@@ -155,6 +157,7 @@ export const useCalendar = () => {
         setNeedsReauth(false);
         setLastSyncTime(new Date());
       } catch (error) {
+        if (isAbortError(error)) return;
         console.error("iCloud fetch failed:", error);
         if (!isBackgroundSync) {
           toast.error("Error al cargar eventos del calendario");

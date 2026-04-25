@@ -26,11 +26,25 @@ function bullet(s: string): string {
   return `- ${s}`;
 }
 
+function stripDebugPhrases(s: string): string {
+  if (!s) return s;
+  let out = s;
+  // Remove parentheticals or trailing notes that mention internal pipeline stages.
+  out = out.replace(/\s*\(\s*componente\s+can[oó]nico\s+inyectado[^)]*\)\s*/gi, "");
+  out = out.replace(/\s*componente\s+can[oó]nico\s+inyectado\s+por\s+normalizer[^.;]*[.;]?/gi, "");
+  out = out.replace(/\s*revisar\s+evidencia\s+en\s+F2\/roadmap[^.;]*[.;]?/gi, "");
+  out = out.replace(/\s*\(\s*inferido\s*\)\s*/gi, " ");
+  out = out.replace(/\s*\bnormalizer\b\s*/gi, " ");
+  out = out.replace(/\s*\bF2\/roadmap\b\s*/gi, " ");
+  out = out.replace(/\s+/g, " ").trim();
+  return out;
+}
+
 function fmtItem(item: any, opts: { showAmount?: boolean } = {}): string {
   if (!item) return "";
-  if (typeof item === "string") return item;
-  const title = clean(item.title || item.signal || item.name || item.flag || item.question || "");
-  const desc = clean(item.description || item.evidence || "");
+  if (typeof item === "string") return stripDebugPhrases(item);
+  const title = stripDebugPhrases(clean(item.title || item.signal || item.name || item.flag || item.question || ""));
+  const desc = stripDebugPhrases(clean(item.description || item.evidence || ""));
   const amount = opts.showAmount ? clean(item.amount_hint || item.data_volume_hint || "") : "";
   const unverified = item._unverified_number ? " ⚠️ *(cifra no verificada)*" : "";
   let out = title;

@@ -20,12 +20,41 @@ import { checkNamingCollision } from "../_shared/component-registry-contract.ts"
 
 // ── Types ────────────────────────────────────────────────────────────
 
+export interface CanonicalComponent {
+  canonical: string;
+  matchTokens: string[];
+}
+
+export interface ManualReviewAlert {
+  signal: string;
+  question: string;
+  source?: string;
+}
+
 export interface NormalizationContext {
   projectName: string;
   companyName: string;
   founderName?: string;
+  productName?: string;
   sectorHint?: string;
   language?: "es" | "en";
+  /**
+   * Optional canonical component list. When provided, REPLACES the default
+   * generic groups so the dedup step uses the project-specific taxonomy
+   * (e.g. AFFLUX uses AFFLUX-specific component names).
+   */
+  canonicalComponents?: CanonicalComponent[];
+  /**
+   * Optional list of topic regexes whose mentions should be stripped from
+   * the brief because they belong to other domains (e.g. "weather", "pollen"
+   * for a real estate project).
+   */
+  forbiddenTopics?: RegExp[];
+  /**
+   * Optional manual review alerts to attach (e.g. ambiguous numeric signals
+   * the LLM may have conflated).
+   */
+  manualReviewAlerts?: ManualReviewAlert[];
 }
 
 export interface NormalizationChange {
@@ -127,6 +156,42 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
     cnc.collision_detected = false;
   }
 
+  // Authoritative product name from context (e.g. wizard input).
+  if (ctx.productName && typeof ctx.productName === "string" && ctx.productName.trim().length > 0) {
+    const desired = ctx.productName.trim();
+    if (cnc.proposed_product_name !== desired) {
+      const before = cnc.proposed_product_name;
+      cnc.proposed_product_name = desired;
+      changes.push({
+        type: "naming_split",
+        field: "proposed_product_name",
+        before,
+        after: desired,
+        reason: "Aplicado productName autoritario desde contexto.",
+      });
+    }
+  }
+
+  // Authoritative company name from context overrides extraction noise.
+  if (ctx.companyName && typeof ctx.companyName === "string" && ctx.companyName.trim().length > 0) {
+    const desiredCompany = ctx.companyName.trim();
+    // Only override if extraction looks invalid (person name, placeholder, missing).
+    const extracted = cnc.client_company_name;
+    const looksInvalid = !extracted ||
+      extracted === "[POR CONFIRMAR]" ||
+      (typeof extracted === "string" && looksLikePersonName(extracted));
+    if (looksInvalid && extracted !== desiredCompany) {
+      cnc.client_company_name = desiredCompany;
+      changes.push({
+        type: "naming_split",
+        field: "client_company_name",
+        before: extracted,
+        after: desiredCompany,
+        reason: "Aplicado companyName autoritario desde contexto.",
+      });
+    }
+  }
+
   // Diff log (compact).
   if (JSON.stringify(before) !== JSON.stringify(cnc)) {
     changes.push({ type: "naming_check_updated", before, after: { ...cnc } });
@@ -139,6 +204,14 @@ const SECTOR_REPLACEMENTS: Array<{ from: RegExp; to: string; label: string }> = 
   { from: /\bretail\s+data\b/gi, to: "real estate data", label: "retail data → real estate data" },
   { from: /\bcomercio\s+minorista\b/gi, to: "inversión inmobiliaria", label: "comercio minorista → inversión inmobiliaria" },
   { from: /\bretail\b/gi, to: "real estate off-market", label: "retail → real estate off-market" },
+];
+
+// Patterns that strongly indicate off-topic content (other domains entirely).
+// When matched in a string field of a list item, the entire item is removed.
+const DEFAULT_FORBIDDEN_TOPICS: RegExp[] = [
+  /\b(weather|pollen|allergy\s+medicine|allergy\s+season|hay\s+fever)\b/i,
+  /\b(clima|polen|alergia|fiebre\s+del\s+heno)\b/i,
+  /\bmedicamento(s)?\s+(de\s+)?alergia\b/i,
 ];
 
 function applySectorCleanup(node: any, changes: NormalizationChange[], path: string[] = []): any {
@@ -179,6 +252,51 @@ function applySectorCleanup(node: any, changes: NormalizationChange[], path: str
     return out;
   }
   return node;
+}
+
+function itemMatchesForbidden(item: any, patterns: RegExp[]): RegExp | null {
+  if (!item) return null;
+  const blob = typeof item === "string"
+    ? item
+    : Object.entries(item)
+        .filter(([k]) => !k.startsWith("_"))
+        .map(([_, v]) => (typeof v === "string" ? v : ""))
+        .join(" ");
+  for (const re of patterns) {
+    if (re.test(blob)) return re;
+  }
+  return null;
+}
+
+function applyForbiddenTopicsFilter(briefing: any, ctx: NormalizationContext, changes: NormalizationChange[]) {
+  const v2 = briefing?.business_extraction_v2;
+  if (!v2) return;
+  const patterns = [...DEFAULT_FORBIDDEN_TOPICS, ...(ctx.forbiddenTopics || [])];
+  const FIELDS = [
+    "observed_facts", "business_catalysts", "underutilized_data_assets",
+    "quantified_economic_pains", "decision_points", "client_requested_items",
+    "inferred_needs", "ai_native_opportunity_signals", "external_data_sources_mentioned",
+    "constraints_and_risks", "open_questions",
+  ];
+  for (const field of FIELDS) {
+    const arr = v2[field];
+    if (!Array.isArray(arr)) continue;
+    const kept: any[] = [];
+    for (const item of arr) {
+      const hit = itemMatchesForbidden(item, patterns);
+      if (hit) {
+        changes.push({
+          type: "forbidden_topic_removed",
+          field,
+          before: typeof item === "string" ? item : (item.title || item.description || JSON.stringify(item).slice(0, 80)),
+          reason: `Tema fuera de alcance (${hit.source}).`,
+        });
+      } else {
+        kept.push(item);
+      }
+    }
+    v2[field] = kept;
+  }
 }
 
 // ── 3. Language normalization (LLM) ──────────────────────────────────
@@ -348,23 +466,23 @@ const CANONICAL_GROUPS: Array<{ canonical: string; matchTokens: string[] }> = [
   },
 ];
 
-function tryAssignCanonical(item: any): string | null {
+function tryAssignCanonical(item: any, groups: CanonicalComponent[]): string | null {
   const text = `${item.title || ""} ${item.description || ""}`.toLowerCase();
-  for (const group of CANONICAL_GROUPS) {
-    const hits = group.matchTokens.filter((t) => text.includes(t)).length;
+  for (const group of groups) {
+    const hits = group.matchTokens.filter((t) => text.includes(t.toLowerCase())).length;
     if (hits >= 2) return group.canonical;
   }
   return null;
 }
 
-function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: string): any[] {
+function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: string, groups: CanonicalComponent[]): any[] {
   if (!Array.isArray(arr)) return arr;
 
   // 1. Group by canonical mapping first.
   const canonicalBuckets = new Map<string, any[]>();
   const remaining: any[] = [];
   for (const item of arr) {
-    const canon = tryAssignCanonical(item);
+    const canon = tryAssignCanonical(item, groups);
     if (canon) {
       const bucket = canonicalBuckets.get(canon) || [];
       bucket.push(item);
@@ -378,7 +496,22 @@ function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: 
   const merged: any[] = [];
   for (const [canonical, bucket] of canonicalBuckets.entries()) {
     if (bucket.length === 1) {
-      merged.push(bucket[0]);
+      // Single item still gets its title rewritten to the canonical form so
+      // the brief shows the project's own taxonomy rather than the LLM's
+      // arbitrary phrasing.
+      const renamed = { ...bucket[0] };
+      const before = renamed.title;
+      if (before !== canonical) {
+        renamed.title = canonical;
+        changes.push({
+          type: "candidate_rename_canonical",
+          field: fieldName,
+          before,
+          after: canonical,
+          reason: "Asignado nombre canónico del proyecto.",
+        });
+      }
+      merged.push(renamed);
       continue;
     }
     const first = { ...bucket[0] };
@@ -435,12 +568,16 @@ function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: 
   return merged;
 }
 
-function applySemanticDedup(briefing: any, changes: NormalizationChange[]) {
+function applySemanticDedup(briefing: any, changes: NormalizationChange[], ctx: NormalizationContext) {
   const v2 = briefing?.business_extraction_v2;
   if (!v2) return;
+  // Use override if provided, otherwise the generic defaults.
+  const groups = (Array.isArray(ctx.canonicalComponents) && ctx.canonicalComponents.length > 0)
+    ? ctx.canonicalComponents
+    : CANONICAL_GROUPS;
   for (const field of ["ai_native_opportunity_signals", "client_requested_items", "inferred_needs"] as const) {
     const before = Array.isArray(v2[field]) ? v2[field].length : 0;
-    v2[field] = dedupCandidates(v2[field], changes, field);
+    v2[field] = dedupCandidates(v2[field], changes, field, groups);
     const after = Array.isArray(v2[field]) ? v2[field].length : 0;
     if (before !== after) {
       changes.push({
@@ -451,6 +588,38 @@ function applySemanticDedup(briefing: any, changes: NormalizationChange[]) {
         reason: `Reducción ${before} → ${after}.`,
       });
     }
+  }
+}
+
+function applyManualReviewAlerts(briefing: any, ctx: NormalizationContext, changes: NormalizationChange[]) {
+  const v2 = briefing?.business_extraction_v2;
+  if (!v2) return;
+  const alerts = ctx.manualReviewAlerts || [];
+  if (alerts.length === 0) return;
+
+  if (!Array.isArray(v2.open_questions)) v2.open_questions = [];
+  const existing = new Set(
+    v2.open_questions
+      .map((q: any) => (typeof q === "string" ? q : (q?.question || q?.title || "")).toLowerCase().trim())
+      .filter(Boolean),
+  );
+
+  for (const alert of alerts) {
+    const key = (alert.question || "").toLowerCase().trim();
+    if (!key || existing.has(key)) continue;
+    v2.open_questions.push({
+      title: `Revisión manual: ${alert.signal}`,
+      question: alert.question,
+      _source: alert.source || "manual_review_alert",
+      _inferred_by: "normalizer_v1",
+    });
+    existing.add(key);
+    changes.push({
+      type: "manual_review_alert_added",
+      field: "open_questions",
+      after: alert.question,
+      reason: `Alerta de revisión manual: ${alert.signal}.`,
+    });
   }
 }
 
@@ -600,11 +769,14 @@ export async function normalizeBrief(
     briefing.business_extraction_v2 = applySectorCleanup(briefing.business_extraction_v2, changes, ["business_extraction_v2"]);
   }
 
+  // 2b. Off-topic / forbidden topics filter (whole-item removal).
+  applyForbiddenTopicsFilter(briefing, ctx, changes);
+
   // 3. Language normalization (single LLM call, non-blocking)
   const langResult = await applyLanguageNormalization(briefing, changes);
 
-  // 4. Semantic dedup
-  applySemanticDedup(briefing, changes);
+  // 4. Semantic dedup (uses canonical override from ctx if provided)
+  applySemanticDedup(briefing, changes, ctx);
 
   // 5. Compliance expansion
   applyComplianceExpansion(briefing, changes);
@@ -612,13 +784,18 @@ export async function normalizeBrief(
   // 6. Quote validator
   applyQuoteValidator(briefing, changes);
 
+  // 7. Manual review alerts (project-specific, optional)
+  applyManualReviewAlerts(briefing, ctx, changes);
+
   // Attach log.
   briefing._normalization_log = {
-    version: "1.0.0",
+    version: "1.1.0",
     applied_at: new Date().toISOString(),
     changes_count: changes.length,
     changes,
     language_llm_called: langResult.called,
+    canonical_components_used: (ctx.canonicalComponents || []).map((c) => c.canonical),
+    manual_review_alerts_count: (ctx.manualReviewAlerts || []).length,
   };
 
   return {

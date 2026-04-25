@@ -116,7 +116,16 @@ serve(async (req) => {
 
     // ── Action: retry_failed_chunks (Step 2 — surgical repair) ───────────
     if (action === "retry_failed_chunks") {
-      const { projectId: pid, inputContent, projectName, companyName, projectType, clientNeed, founderName, sectorHint } = body.stepData || {};
+      const { projectId: pid, inputContent, projectName, companyName, projectType, clientNeed, founderName, productName, sectorHint, canonicalComponents, forbiddenTopics: forbiddenTopicsRaw, manualReviewAlerts } = body.stepData || {};
+      const forbiddenTopics = (Array.isArray(forbiddenTopicsRaw) ? forbiddenTopicsRaw : [])
+        .map((p: any) => {
+          if (p instanceof RegExp) return p;
+          if (typeof p === "string" && p.length > 0) {
+            try { return new RegExp(p, "i"); } catch { return null; }
+          }
+          return null;
+        })
+        .filter(Boolean) as RegExp[];
       if (!pid || !inputContent) {
         return new Response(JSON.stringify({ error: "projectId and inputContent required" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -217,7 +226,8 @@ serve(async (req) => {
 
       // Apply normalization layer.
       const normResult = await normalizeBrief(mergedBriefing, {
-        projectName, companyName, founderName, sectorHint, language: "es",
+        projectName, companyName, founderName, productName, sectorHint, language: "es",
+        canonicalComponents, forbiddenTopics, manualReviewAlerts,
       });
       let finalBriefing: any = normResult.briefing;
 
@@ -245,9 +255,9 @@ serve(async (req) => {
         metadata: { recovered: recovered.length, still_failed: stillFailedList.length },
       });
 
-      await supabase.from("project_wizard_steps").insert({
-        project_id: pid,
-        step_number: 2,
+      // The (project_id, step_number) pair is UNIQUE, so we UPDATE the
+      // existing Step 2 row in place instead of inserting a duplicate.
+      await supabase.from("project_wizard_steps").update({
         step_name: "Extracción Inteligente (Chunked + Retry)",
         status: "review",
         input_data: {
@@ -260,7 +270,7 @@ serve(async (req) => {
         model_used: "gemini-2.5-flash",
         version: newVersion,
         user_id: user.id,
-      });
+      }).eq("id", latestStep2.id);
 
       return new Response(JSON.stringify({
         briefing: finalBriefing,
@@ -282,10 +292,24 @@ serve(async (req) => {
       const projectName = sd.projectName || "";
       const companyName = sd.companyName || "";
       const founderName = sd.founderName;
+      const productName = sd.productName;
       const sectorHint = sd.sectorHint;
       const inputContent: string | undefined = sd.inputContent;
+      // Optional project-specific normalization overrides.
+      const canonicalComponents = Array.isArray(sd.canonicalComponents) ? sd.canonicalComponents : undefined;
+      const forbiddenTopicsRaw = Array.isArray(sd.forbiddenTopics) ? sd.forbiddenTopics : [];
+      const forbiddenTopics = forbiddenTopicsRaw
+        .map((p: any) => {
+          if (p instanceof RegExp) return p;
+          if (typeof p === "string" && p.length > 0) {
+            try { return new RegExp(p, "i"); } catch { return null; }
+          }
+          return null;
+        })
+        .filter(Boolean) as RegExp[];
+      const manualReviewAlerts = Array.isArray(sd.manualReviewAlerts) ? sd.manualReviewAlerts : undefined;
 
-      console.log(`[${action}] start project=${pid} hasInput=${!!inputContent}`);
+      console.log(`[${action}] start project=${pid} hasInput=${!!inputContent} canonical=${canonicalComponents?.length || 0} forbidden=${forbiddenTopics.length} alerts=${manualReviewAlerts?.length || 0}`);
 
       if (!pid) {
         return new Response(JSON.stringify({ error: "projectId required" }), {
@@ -385,7 +409,8 @@ serve(async (req) => {
 
       // Normalization
       const normResult = await normalizeBrief(workingBriefing, {
-        projectName, companyName, founderName, sectorHint, language: "es",
+        projectName, companyName, founderName, productName, sectorHint, language: "es",
+        canonicalComponents, forbiddenTopics, manualReviewAlerts,
       });
       let finalBriefing: any = normResult.briefing;
 

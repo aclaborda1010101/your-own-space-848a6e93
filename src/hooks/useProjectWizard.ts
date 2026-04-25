@@ -469,6 +469,12 @@ export const useProjectWizard = (projectId?: string) => {
     setNormalizing(true);
     const toastId = toast.loading("Limpiando y normalizando brief…");
     try {
+      // Pull project-specific normalization overrides (canonical components,
+      // forbidden topics, manual review alerts). Returns {} for projects with
+      // no override registered.
+      const { getNormalizationOverrides } = await import("@/lib/normalization-overrides");
+      const overrides = getNormalizationOverrides(project.name || "", project.company || "");
+
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
           action: "repair_step2_brief",
@@ -479,6 +485,11 @@ export const useProjectWizard = (projectId?: string) => {
             inputContent: project.inputContent,
             projectType: project.projectType,
             clientNeed: project.clientNeed,
+            // Optional per-project overrides (empty for unregistered projects).
+            productName: overrides.productName,
+            canonicalComponents: overrides.canonicalComponents,
+            forbiddenTopics: overrides.forbiddenTopics,
+            manualReviewAlerts: overrides.manualReviewAlerts,
           },
         },
       });

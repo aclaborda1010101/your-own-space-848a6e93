@@ -121,16 +121,28 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
     v2.client_naming_check = {};
   }
   const cnc = v2.client_naming_check;
-
   const before = { ...cnc };
 
-  // Detect founder mistakenly placed in client_company_name.
+  // Decide the AUTHORITATIVE company name once, with priority:
+  //   1. ctx.companyNameOverride (explicit, never wrong)
+  //   2. ctx.companyName if it does NOT look like a person name
+  //   3. ctx.productName as a soft fallback
+  //   4. "[POR CONFIRMAR]"
+  const ctxCompanyIsPerson =
+    typeof ctx.companyName === "string" && looksLikePersonName(ctx.companyName);
+  const authoritativeCompany =
+    (ctx.companyNameOverride && ctx.companyNameOverride.trim()) ||
+    (ctx.companyName && !ctxCompanyIsPerson ? ctx.companyName.trim() : "") ||
+    (ctx.productName && ctx.productName.trim()) ||
+    "[POR CONFIRMAR]";
+
+  // 1. If extracted company is a person name, demote to founder.
   if (typeof cnc.client_company_name === "string" && looksLikePersonName(cnc.client_company_name)) {
     const personName = cnc.client_company_name.trim();
     if (!cnc.founder_or_decision_maker) {
       cnc.founder_or_decision_maker = personName;
     }
-    cnc.client_company_name = (ctx.companyName && ctx.companyName.trim()) || "[POR CONFIRMAR]";
+    cnc.client_company_name = authoritativeCompany;
     changes.push({
       type: "naming_split",
       field: "client_company_name",
@@ -140,20 +152,79 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
     });
   }
 
-  // Default founder if hint provided.
-  if (!cnc.founder_or_decision_maker && ctx.founderName) {
-    cnc.founder_or_decision_maker = ctx.founderName;
+  // 2. If ctx supplies a company override, ALWAYS apply it (last word).
+  if (ctx.companyNameOverride && ctx.companyNameOverride.trim()) {
+    const desired = ctx.companyNameOverride.trim();
+    if (cnc.client_company_name !== desired) {
+      const prev = cnc.client_company_name;
+      cnc.client_company_name = desired;
+      changes.push({
+        type: "naming_split",
+        field: "client_company_name",
+        before: prev,
+        after: desired,
+        reason: "Aplicado companyNameOverride autoritario desde contexto.",
+      });
+    }
+  }
+
+  // 3. If the company AND founder ended up identical (the original tie bug),
+  //    fall back to the authoritative company.
+  if (
+    cnc.client_company_name &&
+    cnc.founder_or_decision_maker &&
+    cnc.client_company_name === cnc.founder_or_decision_maker &&
+    cnc.client_company_name !== authoritativeCompany
+  ) {
+    const prev = cnc.client_company_name;
+    cnc.client_company_name = authoritativeCompany;
     changes.push({
       type: "naming_split",
-      field: "founder_or_decision_maker",
-      before: null,
-      after: ctx.founderName,
-      reason: "Aplicado founderName desde contexto.",
+      field: "client_company_name",
+      before: prev,
+      after: authoritativeCompany,
+      reason: "Empate company == founder; aplicado nombre autoritario.",
     });
   }
 
-  // Default product name to project name.
-  if (!cnc.proposed_product_name || (typeof cnc.proposed_product_name === "string" && cnc.proposed_product_name.trim().length === 0)) {
+  // 4. If founder is missing but ctx has a person-named companyName, use that.
+  if (!cnc.founder_or_decision_maker) {
+    if (ctx.founderName) {
+      cnc.founder_or_decision_maker = ctx.founderName;
+      changes.push({
+        type: "naming_split",
+        field: "founder_or_decision_maker",
+        before: null,
+        after: ctx.founderName,
+        reason: "Aplicado founderName desde contexto.",
+      });
+    } else if (ctxCompanyIsPerson && ctx.companyName) {
+      cnc.founder_or_decision_maker = ctx.companyName.trim();
+      changes.push({
+        type: "naming_split",
+        field: "founder_or_decision_maker",
+        before: null,
+        after: ctx.companyName.trim(),
+        reason: "ctx.companyName era persona; promovido a founder_or_decision_maker.",
+      });
+    }
+  }
+
+  // 5. Product name: prefer ctx.productName, else projectName.
+  if (ctx.productName && ctx.productName.trim() && cnc.proposed_product_name !== ctx.productName.trim()) {
+    const prev = cnc.proposed_product_name;
+    cnc.proposed_product_name = ctx.productName.trim();
+    changes.push({
+      type: "naming_split",
+      field: "proposed_product_name",
+      before: prev,
+      after: ctx.productName.trim(),
+      reason: "Aplicado productName autoritario desde contexto.",
+    });
+  } else if (
+    !cnc.proposed_product_name ||
+    (typeof cnc.proposed_product_name === "string" && cnc.proposed_product_name.trim().length === 0)
+  ) {
     cnc.proposed_product_name = ctx.projectName || null;
     if (cnc.proposed_product_name) {
       changes.push({
@@ -166,7 +237,7 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
     }
   }
 
-  // Re-check collision.
+  // 6. Re-check collision.
   if (cnc.client_company_name && cnc.proposed_product_name) {
     try {
       const collision = checkNamingCollision(cnc.client_company_name, cnc.proposed_product_name);
@@ -177,42 +248,6 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
     }
   } else {
     cnc.collision_detected = false;
-  }
-
-  // Authoritative product name from context (e.g. wizard input).
-  if (ctx.productName && typeof ctx.productName === "string" && ctx.productName.trim().length > 0) {
-    const desired = ctx.productName.trim();
-    if (cnc.proposed_product_name !== desired) {
-      const before = cnc.proposed_product_name;
-      cnc.proposed_product_name = desired;
-      changes.push({
-        type: "naming_split",
-        field: "proposed_product_name",
-        before,
-        after: desired,
-        reason: "Aplicado productName autoritario desde contexto.",
-      });
-    }
-  }
-
-  // Authoritative company name from context overrides extraction noise.
-  if (ctx.companyName && typeof ctx.companyName === "string" && ctx.companyName.trim().length > 0) {
-    const desiredCompany = ctx.companyName.trim();
-    // Only override if extraction looks invalid (person name, placeholder, missing).
-    const extracted = cnc.client_company_name;
-    const looksInvalid = !extracted ||
-      extracted === "[POR CONFIRMAR]" ||
-      (typeof extracted === "string" && looksLikePersonName(extracted));
-    if (looksInvalid && extracted !== desiredCompany) {
-      cnc.client_company_name = desiredCompany;
-      changes.push({
-        type: "naming_split",
-        field: "client_company_name",
-        before: extracted,
-        after: desiredCompany,
-        reason: "Aplicado companyName autoritario desde contexto.",
-      });
-    }
   }
 
   // Diff log (compact).

@@ -404,6 +404,18 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
           <Button variant="outline" size="sm" onClick={onExtract} className="gap-1.5">
             <RefreshCw className="w-3.5 h-3.5" /> Regenerar
           </Button>
+          {onNormalizeBrief && editedBriefing?.business_extraction_v2 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onNormalizeBrief}
+              disabled={generating}
+              className="gap-1.5 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/10"
+              title="Aplica deduplicación, traducción a español, corrección de naming/sector y compliance"
+            >
+              <Sparkles className="w-3.5 h-3.5" /> Limpiar y normalizar
+            </Button>
+          )}
           {projectId && editedBriefing && (
             <ProjectDocumentDownload
               projectId={projectId}

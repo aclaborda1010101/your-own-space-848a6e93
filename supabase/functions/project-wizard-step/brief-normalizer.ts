@@ -556,12 +556,18 @@ function isMutexBlocked(a: string, b: string, mutex: Array<[string, string]> | u
   return false;
 }
 
-function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: string, groups: CanonicalComponent[]): any[] {
+function dedupCandidates(
+  arr: any[],
+  changes: NormalizationChange[],
+  fieldName: string,
+  groups: CanonicalComponent[],
+  mutex: Array<[string, string]> | undefined,
+): any[] {
   if (!Array.isArray(arr)) return arr;
 
   // 1. Group by canonical mapping first.
   const canonicalBuckets = new Map<string, any[]>();
-  const remaining: any[] = [];
+  const remaining: Array<{ item: any; canon: string | null }> = [];
   for (const item of arr) {
     const canon = tryAssignCanonical(item, groups);
     if (canon) {
@@ -569,7 +575,7 @@ function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: 
       bucket.push(item);
       canonicalBuckets.set(canon, bucket);
     } else {
-      remaining.push(item);
+      remaining.push({ item, canon: null });
     }
   }
 
@@ -577,9 +583,6 @@ function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: 
   const merged: any[] = [];
   for (const [canonical, bucket] of canonicalBuckets.entries()) {
     if (bucket.length === 1) {
-      // Single item still gets its title rewritten to the canonical form so
-      // the brief shows the project's own taxonomy rather than the LLM's
-      // arbitrary phrasing.
       const renamed = { ...bucket[0] };
       const before = renamed.title;
       if (before !== canonical) {
@@ -612,16 +615,42 @@ function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: 
     });
   }
 
-  // 2. Then jaccard-dedup the remaining.
-  const tokenizedRemaining = remaining.map((it) => ({ item: it, tokens: tokenize(`${it.title || ""} ${it.description || ""}`) }));
+  // 2. Then jaccard-dedup the remaining (with mutex protection by best-canonical).
+  // For each remaining item, compute a "soft canonical" — the best-scoring
+  // group even if score < 2 — and forbid merging two items whose soft
+  // canonicals are mutex partners.
+  function softCanonical(item: any): string | null {
+    const text = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+    let best = 0;
+    let name: string | null = null;
+    for (const g of groups) {
+      const hits = g.matchTokens.filter((t) => text.includes(t.toLowerCase())).length;
+      if (hits > best) {
+        best = hits;
+        name = g.canonical;
+      }
+    }
+    return best > 0 ? name : null;
+  }
+
+  const tokenizedRemaining = remaining.map((r) => ({
+    item: r.item,
+    tokens: tokenize(`${r.item.title || ""} ${r.item.description || ""}`),
+    soft: softCanonical(r.item),
+  }));
   const used = new Array(tokenizedRemaining.length).fill(false);
 
   for (let i = 0; i < tokenizedRemaining.length; i++) {
     if (used[i]) continue;
     const group = [tokenizedRemaining[i].item];
     used[i] = true;
+    const headSoft = tokenizedRemaining[i].soft;
     for (let j = i + 1; j < tokenizedRemaining.length; j++) {
       if (used[j]) continue;
+      // Mutex protection: never merge items whose soft canonicals are partners.
+      if (headSoft && tokenizedRemaining[j].soft && isMutexBlocked(headSoft, tokenizedRemaining[j].soft!, mutex)) {
+        continue;
+      }
       const sim = jaccardSim(tokenizedRemaining[i].tokens, tokenizedRemaining[j].tokens);
       if (sim >= 0.6) {
         group.push(tokenizedRemaining[j].item);
@@ -652,13 +681,13 @@ function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: 
 function applySemanticDedup(briefing: any, changes: NormalizationChange[], ctx: NormalizationContext) {
   const v2 = briefing?.business_extraction_v2;
   if (!v2) return;
-  // Use override if provided, otherwise the generic defaults.
   const groups = (Array.isArray(ctx.canonicalComponents) && ctx.canonicalComponents.length > 0)
     ? ctx.canonicalComponents
     : CANONICAL_GROUPS;
+  const mutex = ctx.mutexGroups;
   for (const field of ["ai_native_opportunity_signals", "client_requested_items", "inferred_needs"] as const) {
     const before = Array.isArray(v2[field]) ? v2[field].length : 0;
-    v2[field] = dedupCandidates(v2[field], changes, field, groups);
+    v2[field] = dedupCandidates(v2[field], changes, field, groups, mutex);
     const after = Array.isArray(v2[field]) ? v2[field].length : 0;
     if (before !== after) {
       changes.push({

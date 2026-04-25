@@ -1341,7 +1341,7 @@ function buildFullHtml(
 
   ${signatureHtml}
 
-  <div class="cta-page">
+  ${(isClientFacing && !isDraft) ? `<div class="cta-page">
     <h2>¿Listo para dar el siguiente paso?</h2>
     <p>Contacta con nosotros para transformar tu negocio con tecnología e inteligencia artificial.</p>
     <div class="cta-contact">
@@ -1354,7 +1354,7 @@ function buildFullHtml(
         <span>Consultora Tecnológica</span>
       </div>
     </div>
-  </div>
+  </div>` : ""}
   </body>
 </html>`;
 }

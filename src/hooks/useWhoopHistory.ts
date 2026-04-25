@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { isAbortError } from "@/lib/isAbortError";
 
 export interface WhoopDayData {
   data_date: string;
@@ -85,6 +86,7 @@ export const useWhoopHistory = (days: number = 7) => {
         }))
       );
     } catch (err) {
+      if (isAbortError(err)) return;
       console.error("Error fetching WHOOP history:", err);
     } finally {
       setIsLoading(false);

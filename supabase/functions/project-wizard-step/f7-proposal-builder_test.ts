@@ -225,3 +225,82 @@ Deno.test("F7: respects Step 28 buckets — copies them as-is (1+9 / 2 / 0)", ()
   assertEquals(out.client_proposal_v1.later_phases.fast_follow.length, 2);
   assertEquals(out.client_proposal_v1.later_phases.roadmap.length, 0);
 });
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Bug #1 — Importes europeos / rangos en setup_fee_display y monthly_retainer_display
+// ───────────────────────────────────────────────────────────────────────────────
+
+Deno.test("F7: renders setup_fee_display when provided (range '15.000 - 18.000 EUR')", () => {
+  const out = buildClientProposal({
+    scope: fakeScope(),
+    source_step: { step_number: 28, version: 3, row_id: "row-28" },
+    projectName: "AFFLUX",
+    clientCompany: "AFLU / AFFLUX",
+    commercialTerms: fakeCommercial({
+      setup_fee: 15000,
+      setup_fee_max: 18000,
+      setup_fee_display: "15.000 - 18.000 EUR",
+      monthly_retainer: 750,
+      monthly_retainer_max: 850,
+      monthly_retainer_display: "750 - 850 EUR/mes",
+    }),
+  });
+  const md = renderProposalMarkdown(out.client_proposal_v1);
+  assert(md.includes("15.000 - 18.000 EUR"), `expected '15.000 - 18.000 EUR' in markdown`);
+  assert(md.includes("750 - 850 EUR/mes"), `expected '750 - 850 EUR/mes' in markdown`);
+  // Crucially: must NOT render the broken "15,5 EUR" pattern.
+  assert(!/\b15,5\s*EUR\b/.test(md), `must not render broken '15,5 EUR'`);
+  // And must NOT compute a 12-month total when ranges exist (avoid misleading numbers).
+  assert(!md.includes("Total estimado primer año"), `must not compute year total when ranges present`);
+});
+
+Deno.test("F7: when only display strings provided (no numeric), still renders budget", () => {
+  const out = buildClientProposal({
+    scope: fakeScope(),
+    source_step: { step_number: 28, version: 3, row_id: "row-28" },
+    projectName: "AFFLUX",
+    clientCompany: "AFLU / AFFLUX",
+    commercialTerms: fakeCommercial({
+      setup_fee: undefined,
+      monthly_retainer: undefined,
+      setup_fee_display: "13.500 EUR",
+    }),
+  });
+  const md = renderProposalMarkdown(out.client_proposal_v1);
+  assert(md.includes("13.500 EUR"), `expected display string`);
+});
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Bug #2 — No internal margin/cost leak in client document
+// ───────────────────────────────────────────────────────────────────────────────
+
+Deno.test("F7: scrubs 'margen de consultoría 40%' from payment_terms", () => {
+  const out = buildClientProposal({
+    scope: fakeScope(),
+    source_step: { step_number: 28, version: 3, row_id: "row-28" },
+    projectName: "AFFLUX",
+    clientCompany: "AFLU / AFFLUX",
+    commercialTerms: fakeCommercial({
+      payment_terms:
+        "50% al inicio. 50% a la entrega del MVP. El precio de setup incluye un margen de consultoría del 40%. Mensualidades a mes vencido.",
+    }),
+  });
+  const p = out.client_proposal_v1;
+  assert(!/margen/i.test(p.payment_terms), `payment_terms still leaks margin: ${p.payment_terms}`);
+  assert(/50%/.test(p.payment_terms), `payment_terms should keep the 50/50 sentence`);
+
+  const md = renderProposalMarkdown(p);
+  const jargon = detectInternalJargon(md);
+  assertEquals(jargon, [], `internal jargon detected: ${jargon.join(", ")}`);
+});
+
+Deno.test("F7: BANNED_PHRASES catches 'margen del 40%' and 'tarifa por hora'", () => {
+  const found1 = detectInternalJargon("El precio incluye un margen del 40% por consultoría.");
+  assert(found1.length >= 1, `expected to flag 'margen del 40%', got ${JSON.stringify(found1)}`);
+
+  const found2 = detectInternalJargon("Tarifa por hora interna: 80 EUR.");
+  assert(found2.length >= 1, `expected to flag 'tarifa por hora', got ${JSON.stringify(found2)}`);
+
+  const found3 = detectInternalJargon("Coste interno estimado: 8.000 EUR.");
+  assert(found3.length >= 1, `expected to flag 'coste interno'`);
+});

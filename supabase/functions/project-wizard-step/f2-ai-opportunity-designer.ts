@@ -704,6 +704,19 @@ REGLAS DURAS — INVIOLABLES:
 6. Si detectas una oportunidad que el cliente NO pidió pero claramente aporta valor, márcala con origin="unrequested_ai_insight".
 7. Si una oportunidad procesa datos personales, hace profiling, prioriza comercialmente personas físicas, o enriquece con fuentes externas, añade los compliance_flags correspondientes y human_review mínimo "recommended".
 8. NO generes SQL, NO generes PRD, NO generes prompts de otros agentes.
+9. CADA opportunity_candidate DEBE tener un campo "name" no vacío. El "name" es OBLIGATORIO. Reglas:
+   - máximo 10 palabras y 90 caracteres;
+   - corto, humano y vendible (estilo título de feature);
+   - distinto de "description";
+   - sin saltos de línea;
+   - PROHIBIDO usar prefijo COMP-XXX como name.
+   Ejemplos buenos: "Pipeline de transcripción de llamadas", "RAG de conversaciones con propietarios",
+   "Catalogador de roles de propietario", "Detector de fallecimientos y herencias",
+   "Matching activo-inversor", "Detector de compradores institucionales",
+   "Generador de revista emocional", "Soul de Alejandro", "Gobernanza RGPD y DPIA".
+   Si emites un opportunity_candidate sin "name", el output se considera inválido.
+10. "confidence" DEBE ser un número entre 0 y 1 (no un string). Calíbralo según evidence_strength:
+   high≈0.8-0.95 · medium≈0.55-0.75 · low≈0.3-0.5. NO emitas todos iguales.
 
 CATEGORÍAS A CUBRIR (no todas son obligatorias en cada caso, depende del brief):
 A. RAGs funcionales del producto (no el RAG interno del proyecto): RAG de llamadas, propietarios, compradores, documentación legal, Soul.
@@ -715,6 +728,67 @@ F. Fuentes externas (BOE, BORME, esquelas, ayuntamientos, APIs sectoriales).
 G. MoE / routing.
 H. Soul (módulos que dependen del criterio del fundador/CEO).
 I. Compliance / governance (DPIA, legal basis, human-in-the-loop, retención).
+
+CHECKLIST DE CONVERSIÓN SEÑAL → OPORTUNIDAD (CRÍTICO):
+Detecta señales en business_extraction_v2 + _f0_signals y, cuando aparezcan, emite OPORTUNIDADES SEPARADAS (no las mezcles):
+
+- Llamadas grabadas / centralita / audio / Whisper / volumen alto de llamadas
+  → "Pipeline de transcripción de llamadas" (family=data_pipeline, layer=F_integration, suggested_delivery_phase=data_foundation o MVP)
+  Y, si hay también consultas/know-how/conversaciones recurrentes:
+  → "RAG de llamadas y conversaciones" (family=rag, layer=A_knowledge)
+
+- Roles de clientes/propietarios/personas (especialmente "7 roles", segmentación de propietarios, tipos de cliente)
+  → "Catalogador de roles de propietario" (family=agent, layer=B_action, priority=P0_critical o P1_high)
+
+- Notas comerciales / notas de venta / CRM notes / seguimiento post-interacción
+  → "Analizador de notas comerciales" (family=agent, layer=B_action)
+
+- Llamadas comerciales con equipo junior / guiones / objeciones / preparación o seguimiento
+  → "Asistente pre/post llamada" (family=agent o workflow, layer=B_action)
+
+- Fallecimientos / herencias / esquelas / Registro Civil / BOE / eventos vitales
+  → "Detector de fallecimientos y herencias" (family=pattern_module o deterministic_engine, layer=C_intelligence)
+  compliance_flags MÍNIMAS: personal_data_processing, external_data_enrichment, legal_basis_required, human_in_the_loop_required.
+  human_review: mandatory o mandatory_with_veto. NO clasificar como simple agent B_action.
+
+- Catálogo de activos + compradores/inversores/fondos / "saber a quién vender antes de comprar"
+  → "Matching activo-inversor" (family=matching_engine, layer=C_intelligence)
+  dataset_readiness_required=true, sin fórmula, minimum_dataset_needed describiendo histórico de matches/compradores/activos/conversiones.
+  human_review: mandatory si afecta priorización comercial.
+
+- Compradores institucionales / fondos / servicers / "Benatar" / BORME / CNAE / licencias / ayuntamiento
+  → "Detector de compradores institucionales" (family=pattern_module o data_pipeline, layer=C_intelligence o F_integration)
+  suggested_external_sources: incluir BORME, CNAE, licencias, ayuntamiento, noticias, CRM de inversores cuando aparezcan.
+
+- Revista / libro / copy / marketing emocional / puntos de dolor por rol
+  → "Generador de revista emocional por rol" (family=agent, layer=B_action, soul_dependency=consults_soul o requires_soul_approval)
+
+- Founder/CEO con criterio diferencial / know-how / "Soul" / dificultad de seguimiento / capturar criterio
+  → "Soul del fundador" (family=soul_module, layer=D_soul, human_review=recommended o mandatory, priority=P0_critical o P1_high si varios componentes dependen)
+
+- Datos personales / profiling / priorización comercial / enrichment externo / DNI / llamadas / scoring
+  → "Gobernanza RGPD y DPIA" (family=compliance_module, layer=G_governance, origin=compliance_required, priority=P0_critical o P1_high)
+
+REGLA GENERAL DE NO-FUSIÓN (F2):
+NO mezcles oportunidades con jobs distintos. Específicamente:
+- "Pipeline de transcripción" y "RAG de llamadas" son componentes distintos.
+- "Matching activo-inversor" y "Detector de compradores institucionales" son componentes distintos.
+- "Soul" y "Generador de revista emocional" son componentes distintos.
+
+COVERAGE GUARD (OBLIGATORIO):
+Para CADA elemento detectado en:
+- business_catalysts
+- underutilized_data_assets
+- quantified_economic_pains
+- decision_points
+- founder_commitment_signals
+- initial_compliance_flags
+
+debe ocurrir UNA de estas dos cosas:
+(a) está cubierto por al menos una opportunity_candidate (vía business_catalysts_covered / data_assets_activated / economic_pains_addressed o evidencia equivalente);
+(b) aparece en coverage_analysis.*_without_opportunity con una razón clara.
+
+NUNCA dejes señales críticas sin cubrir silenciosamente.
 
 ENUMS PERMITIDAS (úsalas literalmente):
 - origin: client_requested | inferred_need | unrequested_ai_insight | business_catalyst_activation | data_asset_activation | sector_pattern | technical_dependency | compliance_required

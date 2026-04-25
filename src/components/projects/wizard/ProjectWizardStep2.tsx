@@ -21,11 +21,12 @@ interface Props {
   inputContent: string;
   briefing: any;
   generating: boolean;
+  normalizing?: boolean;
   onExtract: () => void;
   onForceFullExtract?: () => void;
   onChunkedReExtract?: () => void;
   onRetryFailedChunks?: () => void;
-  onNormalizeBrief?: () => void;
+  onNormalizeBrief?: () => Promise<{ success: boolean; cleanLength: number; version: number } | null> | void;
   onApprove: (editedBriefing: any) => void;
   projectId?: string;
   projectName?: string;
@@ -162,7 +163,7 @@ const BriefItemList = ({ items, colorScheme, showComponentType }: {
   );
 };
 
-export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtract, onForceFullExtract, onChunkedReExtract, onRetryFailedChunks, onNormalizeBrief, onApprove, projectId, projectName, company, version = 1 }: Props) => {
+export const ProjectWizardStep2 = ({ inputContent, briefing, generating, normalizing = false, onExtract, onForceFullExtract, onChunkedReExtract, onRetryFailedChunks, onNormalizeBrief, onApprove, projectId, projectName, company, version = 1 }: Props) => {
   const [editedBriefing, setEditedBriefing] = useState<any>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);

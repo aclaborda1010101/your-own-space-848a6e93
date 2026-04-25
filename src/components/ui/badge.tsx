@@ -9,6 +9,9 @@ import { cn } from "@/lib/utils";
  * - New "holo" variant for data chips (lime glow)
  * - New "accent" variant for cian holographic info
  * - "solid" kept as the old bg-primary behaviour if you need it
+ *
+ * Forwards refs so it can be used inside Radix `asChild` slots
+ * (TooltipTrigger, Collapsible, etc.) without React warnings.
  */
 const badgeVariants = cva(
   "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wider transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
@@ -39,8 +42,11 @@ const badgeVariants = cva(
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
 
-function Badge({ className, variant, ...props }: BadgeProps) {
-  return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
-}
+const Badge = React.forwardRef<HTMLDivElement, BadgeProps>(
+  ({ className, variant, ...props }, ref) => (
+    <div ref={ref} className={cn(badgeVariants({ variant }), className)} {...props} />
+  ),
+);
+Badge.displayName = "Badge";
 
 export { Badge, badgeVariants };

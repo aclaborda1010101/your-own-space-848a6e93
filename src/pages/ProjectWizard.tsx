@@ -75,7 +75,8 @@ const ProjectWizardEdit = () => {
     loading, generating, chainedPhase, prdSubProgress, internalStepStatuses,
     runExtraction, approveStep, navigateToStep, runGenericStep, runChainedPRD, updateStepOutputData,
     updateInputContent, updateProjectName,
-    budgetData, budgetGenerating, generateBudgetEstimate, updateBudgetData,
+    budgetData, budgetGenerating, budgetStatus, generateBudgetEstimate, updateBudgetData, approveBudget,
+    proposalData, proposalGenerating, generateClientProposal,
   } = useProjectWizard(id);
 
   const [pricingMode, setPricingMode] = useState<'none' | 'custom' | 'full'>('none');

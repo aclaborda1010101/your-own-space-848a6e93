@@ -11,11 +11,11 @@
  * Pure function — no IO, no LLM. Easy to unit-test.
  */
 
-const SAMPLER_BUDGET = 52_000;
+const SAMPLER_BUDGET = 42_000;
 const SAMPLER_TRIGGER = 90_000;
-const HEAD_CHARS = 18_000;
-const TAIL_CHARS = 14_000;
-const WINDOW_RADIUS = 1_000;
+const HEAD_CHARS = 14_000;
+const TAIL_CHARS = 11_000;
+const WINDOW_RADIUS = 800;
 
 /** Keyword groups — ordered by priority (most critical first). */
 const KEYWORD_PRIORITY_GROUPS: string[][] = [

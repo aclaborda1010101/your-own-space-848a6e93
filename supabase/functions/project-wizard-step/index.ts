@@ -117,7 +117,12 @@ serve(async (req) => {
     // ── Action: extract (Step 2) ─────────────────────────────────────────
 
     if (action === "extract") {
-      const { projectName, companyName, projectType, clientNeed, inputContent, inputType, skipSampler } = stepData;
+      const {
+        projectName, companyName, projectType, clientNeed, inputContent, inputType,
+        skipSampler,
+        forceRefresh,         // NEW: bypass cache to always re-run extraction
+        chunkedExtraction,    // NEW: opt-in chunked map-reduce mode
+      } = stepData;
 
       const { data: latestStep2 } = await supabase
         .from("project_wizard_steps")
@@ -128,7 +133,9 @@ serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-      if (latestStep2 && isValidStep2Briefing(latestStep2.output_data)) {
+      // Reuse cached Step 2 ONLY when no override flag is set.
+      const userOverride = forceRefresh === true || skipSampler === true || chunkedExtraction === true;
+      if (latestStep2 && isValidStep2Briefing(latestStep2.output_data) && !userOverride) {
         console.log(`[wizard][extract] reusing existing Step 2 v${latestStep2.version} for ${projectId}`);
         return new Response(JSON.stringify({
           briefing: latestStep2.output_data,
@@ -137,6 +144,9 @@ serve(async (req) => {
         }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
+      }
+      if (userOverride && latestStep2) {
+        console.log(`[wizard][extract] forcing re-extraction (forceRefresh=${forceRefresh} skipSampler=${skipSampler} chunked=${chunkedExtraction}) for ${projectId}`);
       }
 
       // ── Transcript filter (Step 1.5) ────────────────────────────────────

@@ -17,8 +17,6 @@ import { ProjectDocumentsPanel } from "@/components/projects/wizard/ProjectDocum
 import { ProjectActivityTimeline } from "@/components/projects/wizard/ProjectActivityTimeline";
 import { ProjectBudgetPanel } from "@/components/projects/wizard/ProjectBudgetPanel";
 import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiveSummaryPanel";
-import { ProjectLaunchPanel } from "@/components/projects/wizard/ProjectLaunchPanel";
-import { ProjectSaaSEvaluationPanel } from "@/components/projects/wizard/ProjectSaaSEvaluationPanel";
 import { ProjectProposalExport } from "@/components/projects/wizard/ProjectProposalExport";
 import { ChainedPRDProgress } from "@/components/projects/wizard/ChainedPRDProgress";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
@@ -343,12 +341,6 @@ const ProjectWizardEdit = () => {
         </div>
       </CollapsibleCard>
 
-      {/* SaaS Evaluation — right after pipeline */}
-      <ProjectSaaSEvaluationPanel
-        projectId={id!}
-        projectName={project.name}
-        company={project.company || ""}
-      />
 
       {/* Publish to Expert Forge — after PRD (step 3) approved */}
       {steps.find(s => s.stepNumber === 3)?.status === "approved" && (() => {
@@ -450,18 +442,6 @@ const ProjectWizardEdit = () => {
         />
       )}
 
-      {/* Launch panel — after proposal */}
-      <ProjectLaunchPanel
-        projectId={id!}
-        projectName={project.name}
-        company={project.company || ""}
-        steps={steps.map(s => ({
-          stepNumber: s.stepNumber,
-          outputData: s.outputData,
-          status: s.status,
-          version: s.version || 1,
-        }))}
-      />
 
       {/* Documents panel */}
       <ProjectDocumentsPanel

@@ -199,11 +199,16 @@ export function validateBudgetForClientProposal(
     return "Marca al menos un modelo como visible para el cliente.";
   }
 
-  const withPrice = visibles.filter(
-    (m) => m.setup_price_eur || m.monthly_price_eur || m.price_range
-  );
-  if (withPrice.length === 0) {
-    return "El modelo visible no tiene precio (setup, mensual o rango).";
+  // Debe haber al menos un modelo visible con un importe NUMÉRICO real
+  // (no string vacío, no rango sin número).
+  const withNumericPrice = visibles.filter((m) => {
+    const setup = parseEuro(m.setup_price_eur);
+    const monthly = parseEuro(m.monthly_price_eur);
+    return (typeof setup === "number" && setup > 0) ||
+           (typeof monthly === "number" && monthly > 0);
+  });
+  if (withNumericPrice.length === 0) {
+    return "El modelo visible para el cliente debe tener un importe numérico (cuota inicial o mensualidad). Sin importes reales no se puede generar la propuesta.";
   }
 
   return null;

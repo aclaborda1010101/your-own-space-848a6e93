@@ -1059,8 +1059,13 @@ export const useProjectWizard = (projectId?: string) => {
     updateInputContent,
     budgetData,
     budgetGenerating,
+    budgetStatus,
+    approveBudget,
     generateBudgetEstimate,
     updateBudgetData,
+    proposalData,
+    proposalGenerating,
+    generateClientProposal,
     updateProjectName,
   };
 };

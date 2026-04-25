@@ -122,3 +122,118 @@ Deno.test("F2: clampOpportunityDesign trunca strings largos", () => {
   assert(c.name.length < 5000, "name debe truncarse");
   assert(c.description.length < 5000, "description debe truncarse");
 });
+
+// ── Hardening F2: name derivation + confidence normalization ─────────
+
+import {
+  deriveOpportunityName,
+  normalizeConfidence,
+} from "./f2-ai-opportunity-designer.ts";
+
+Deno.test("F2 hardening: deriveOpportunityName usa raw.name si es válido", () => {
+  const out = deriveOpportunityName({ name: "Pipeline de transcripción de llamadas" }, 0);
+  assertEquals(out, "Pipeline de transcripción de llamadas");
+});
+
+Deno.test("F2 hardening: deriveOpportunityName rechaza name con prefijo COMP-", () => {
+  const out = deriveOpportunityName(
+    { name: "COMP-A01", description: "Sistema RAG sobre llamadas grabadas" },
+    0,
+  );
+  assert(!out.startsWith("COMP-"), `Nunca debe empezar por COMP-: ${out}`);
+  assert(out.length > 0);
+});
+
+Deno.test("F2 hardening: deriveOpportunityName cae a business_job si name vacío", () => {
+  const out = deriveOpportunityName(
+    { name: "", business_job: "Detectar fallecimientos en BOE y esquelas para alertar al equipo." },
+    3,
+  );
+  assert(out.toLowerCase().includes("detectar"), `Debe usar business_job: ${out}`);
+  assert(out.split(/\s+/).length <= 10);
+  assert(out.length <= 90);
+});
+
+Deno.test("F2 hardening: deriveOpportunityName cae a description si no hay name ni business_job", () => {
+  const out = deriveOpportunityName(
+    { description: "Motor de matching activo-inversor que cruza catálogo y compradores potenciales." },
+    1,
+  );
+  assert(out.toLowerCase().includes("motor"), `Debe usar description: ${out}`);
+});
+
+Deno.test("F2 hardening: deriveOpportunityName cae a fallback por family", () => {
+  const out = deriveOpportunityName({ recommended_component_family: "soul_module" }, 0);
+  assertEquals(out, "Soul del fundador");
+});
+
+Deno.test("F2 hardening: deriveOpportunityName último fallback es 'Oportunidad N'", () => {
+  const out = deriveOpportunityName({}, 4);
+  assertEquals(out, "Oportunidad 5");
+});
+
+Deno.test("F2 hardening: clampOpportunityDesign nunca deja name vacío", () => {
+  const out = clampOpportunityDesign({
+    opportunity_candidates: [
+      { opportunity_id: "OPP-001", name: "", description: "RAG sobre llamadas grabadas." },
+      { opportunity_id: "OPP-002", description: "Motor de scoring de propietarios." },
+      { opportunity_id: "OPP-003", recommended_component_family: "soul_module" },
+    ],
+  });
+  for (const c of out.opportunity_candidates) {
+    assert(c.name.length > 0, `name vacío en ${c.opportunity_id}`);
+    assert(!c.name.startsWith("COMP-"), `name no debe ser COMP-: ${c.name}`);
+  }
+});
+
+Deno.test("F2 hardening: clampOpportunityDesign emite warning F2_NAME_DERIVED cuando deriva", () => {
+  const out = clampOpportunityDesign({
+    opportunity_candidates: [
+      { opportunity_id: "OPP-001", name: "Buen nombre" },
+      { opportunity_id: "OPP-002", description: "Sin name." },
+    ],
+  });
+  const derivedWarnings = out.warnings.filter((w) => w.code === "F2_NAME_DERIVED");
+  assertEquals(derivedWarnings.length, 1);
+  assertEquals((derivedWarnings[0] as any).opportunity_id, "OPP-002");
+});
+
+Deno.test("F2 hardening: normalizeConfidence acepta number 0..1", () => {
+  assertEquals(normalizeConfidence(0.7), 0.7);
+  assertEquals(normalizeConfidence(0), 0);
+  assertEquals(normalizeConfidence(1), 1);
+});
+
+Deno.test("F2 hardening: normalizeConfidence parsea string numérico", () => {
+  assertEquals(normalizeConfidence("0.5"), 0.5);
+  assertEquals(normalizeConfidence("0.85"), 0.85);
+});
+
+Deno.test("F2 hardening: normalizeConfidence ancla por evidence_strength cuando falta", () => {
+  assertEquals(normalizeConfidence(undefined, "high"), 0.85);
+  assertEquals(normalizeConfidence(undefined, "medium"), 0.65);
+  assertEquals(normalizeConfidence(undefined, "low"), 0.4);
+  assertEquals(normalizeConfidence(null), 0.6);
+});
+
+Deno.test("F2 hardening: normalizeConfidence clampa fuera de rango", () => {
+  assertEquals(normalizeConfidence(1.5), 1);
+  assertEquals(normalizeConfidence(-0.3), 0);
+});
+
+Deno.test("F2 hardening: clampOpportunityDesign emite confidence como number siempre", () => {
+  const out = clampOpportunityDesign({
+    opportunity_candidates: [
+      { opportunity_id: "OPP-001", name: "A", confidence: "0.5", evidence_strength: "medium" },
+      { opportunity_id: "OPP-002", name: "B", confidence: "abc", evidence_strength: "high" },
+      { opportunity_id: "OPP-003", name: "C", evidence_strength: "low" },
+    ],
+  });
+  for (const c of out.opportunity_candidates) {
+    assertEquals(typeof c.confidence, "number", `${c.opportunity_id} confidence no es number`);
+    assert(c.confidence >= 0 && c.confidence <= 1);
+  }
+  assertEquals(out.opportunity_candidates[0].confidence, 0.5);
+  assertEquals(out.opportunity_candidates[1].confidence, 0.85); // string inválido → ancla high
+  assertEquals(out.opportunity_candidates[2].confidence, 0.4);  // anclado low
+});

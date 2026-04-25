@@ -116,7 +116,7 @@ serve(async (req) => {
 
     // ── Action: retry_failed_chunks (Step 2 — surgical repair) ───────────
     if (action === "retry_failed_chunks") {
-      const { projectId: pid, inputContent, projectName, companyName, projectType, clientNeed, founderName, productName, sectorHint, canonicalComponents, forbiddenTopics: forbiddenTopicsRaw, manualReviewAlerts } = body.stepData || {};
+      const { projectId: pid, inputContent, projectName, companyName, projectType, clientNeed, founderName, productName, sectorHint, companyNameOverride, canonicalComponents, canonicalCatalysts, mutexGroups, forbiddenTopics: forbiddenTopicsRaw, manualReviewAlerts } = body.stepData || {};
       const forbiddenTopics = (Array.isArray(forbiddenTopicsRaw) ? forbiddenTopicsRaw : [])
         .map((p: any) => {
           if (p instanceof RegExp) return p;

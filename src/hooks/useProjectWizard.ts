@@ -1386,12 +1386,32 @@ export const useProjectWizard = (projectId?: string) => {
 
       if (!step28Check?.id) {
         toast.info("Generando alcance previo (Step 28). Puede tardar varios minutos…");
+        const prereqStepNumbers: Record<string, number> = {
+          build_registry: 25,
+          audit_f4a_gaps: 26,
+          audit_f4b_feasibility: 27,
+          architect_scope: 28,
+        };
         for (const prereq of ["build_registry", "audit_f4a_gaps", "audit_f4b_feasibility", "architect_scope"]) {
           const { data: prereqData, error: prereqErr } = await supabase.functions.invoke("project-wizard-step", {
             body: { action: prereq, projectId },
           });
           if (prereqErr) throw new Error(`Falló paso previo "${prereq}": ${prereqErr.message || prereqErr}`);
           if (prereqData?.error) throw new Error(`${prereq}: ${prereqData.error}`);
+
+          // Hard verification: el step debe existir en BBDD antes de continuar.
+          const expectedStep = prereqStepNumbers[prereq];
+          const { data: verify } = await supabase
+            .from("project_wizard_steps")
+            .select("id")
+            .eq("project_id", projectId)
+            .eq("step_number", expectedStep)
+            .order("version", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (!verify?.id) {
+            throw new Error(`El paso previo "${prereq}" (Step ${expectedStep}) no se persistió. Aborto antes de generar la propuesta.`);
+          }
         }
       }
 
@@ -1402,7 +1422,8 @@ export const useProjectWizard = (projectId?: string) => {
           stepData: {
             commercial_terms_v1,
             projectName: project.name,
-            companyName: project.company,
+            clientCompany: (project as any).client_company || project.name,
+            decisionMakerName: (project as any).decision_maker_name || project.company,
           },
         },
       });

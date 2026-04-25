@@ -416,7 +416,8 @@ serve(async (req) => {
       // Normalization
       const normResult = await normalizeBrief(workingBriefing, {
         projectName, companyName, founderName, productName, sectorHint, language: "es",
-        canonicalComponents, forbiddenTopics, manualReviewAlerts,
+        companyNameOverride, canonicalComponents, canonicalCatalysts, mutexGroups,
+        forbiddenTopics, manualReviewAlerts,
       });
       let finalBriefing: any = normResult.briefing;
 

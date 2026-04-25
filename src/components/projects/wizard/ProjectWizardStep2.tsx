@@ -22,6 +22,7 @@ interface Props {
   briefing: any;
   generating: boolean;
   onExtract: () => void;
+  onForceFullExtract?: () => void;
   onApprove: (editedBriefing: any) => void;
   projectId?: string;
   projectName?: string;

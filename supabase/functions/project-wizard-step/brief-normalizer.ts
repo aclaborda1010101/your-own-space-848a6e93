@@ -738,6 +738,81 @@ function applyManualReviewAlerts(briefing: any, ctx: NormalizationContext, chang
   }
 }
 
+// ── 4b. Canonical catalysts injection ────────────────────────────────
+
+function applyCanonicalCatalysts(briefing: any, ctx: NormalizationContext, changes: NormalizationChange[]) {
+  const v2 = briefing?.business_extraction_v2;
+  if (!v2) return;
+  const catalysts = ctx.canonicalCatalysts || [];
+  if (catalysts.length === 0) return;
+  if (!Array.isArray(v2.business_catalysts)) v2.business_catalysts = [];
+
+  const existingBlob = v2.business_catalysts
+    .map((c: any) => (typeof c === "string" ? c : `${c?.title || ""} ${c?.description || ""}`))
+    .join(" ")
+    .toLowerCase();
+
+  const injected: any[] = [];
+  for (const cat of catalysts) {
+    const titleLc = (cat.title || "").toLowerCase();
+    if (!titleLc) continue;
+    // crude presence check: at least 2 significant tokens of the title appear
+    const tokens = titleLc.split(/\W+/).filter((t) => t.length >= 5);
+    const hits = tokens.filter((t) => existingBlob.includes(t)).length;
+    const present = hits >= 2;
+    if (present) continue;
+    injected.push({
+      title: cat.title,
+      description: cat.description || cat.title,
+      _inferred_by: "normalizer_catalyst_v1",
+    });
+    changes.push({
+      type: "catalyst_injected_canonical",
+      field: "business_catalysts",
+      after: cat.title,
+      reason: "Catalizador canónico ausente; inyectado por normalizer.",
+    });
+  }
+  if (injected.length > 0) {
+    // place canonical-injected first so they highlight in the clean brief.
+    v2.business_catalysts = [...injected, ...v2.business_catalysts];
+  }
+}
+
+// ── 4c. Ensure canonical components are present ──────────────────────
+
+function ensureCanonicalComponentsPresent(briefing: any, ctx: NormalizationContext, changes: NormalizationChange[]) {
+  const v2 = briefing?.business_extraction_v2;
+  if (!v2) return;
+  const components = ctx.canonicalComponents || [];
+  if (components.length === 0) return;
+  if (!Array.isArray(v2.ai_native_opportunity_signals)) v2.ai_native_opportunity_signals = [];
+
+  const presentNames = new Set(
+    v2.ai_native_opportunity_signals
+      .map((s: any) => (typeof s === "string" ? s : (s?.title || "")).toLowerCase().trim())
+      .filter(Boolean),
+  );
+
+  for (const comp of components) {
+    const lc = comp.canonical.toLowerCase().trim();
+    if (presentNames.has(lc)) continue;
+    v2.ai_native_opportunity_signals.push({
+      title: comp.canonical,
+      description: comp.description || `${comp.canonical} (componente canónico inyectado por normalizer; revisar evidencia en F2/roadmap).`,
+      _inferred_by: "normalizer_required_component_v1",
+      _evidence_count: 0,
+    });
+    presentNames.add(lc);
+    changes.push({
+      type: "canonical_component_injected",
+      field: "ai_native_opportunity_signals",
+      after: comp.canonical,
+      reason: "Componente canónico ausente tras dedup; inyectado como candidato F2/roadmap.",
+    });
+  }
+}
+
 // ── 5. Compliance flag expansion ─────────────────────────────────────
 
 interface FlagRule {
@@ -892,6 +967,12 @@ export async function normalizeBrief(
 
   // 4. Semantic dedup (uses canonical override from ctx if provided)
   applySemanticDedup(briefing, changes, ctx);
+
+  // 4b. Inject canonical catalysts that the LLM missed.
+  applyCanonicalCatalysts(briefing, ctx, changes);
+
+  // 4c. Ensure every required canonical component is present.
+  ensureCanonicalComponentsPresent(briefing, ctx, changes);
 
   // 5. Compliance expansion
   applyComplianceExpansion(briefing, changes);

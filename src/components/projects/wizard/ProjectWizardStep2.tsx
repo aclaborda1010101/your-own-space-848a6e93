@@ -22,6 +22,7 @@ interface Props {
   briefing: any;
   generating: boolean;
   onExtract: () => void;
+  onForceFullExtract?: () => void;
   onApprove: (editedBriefing: any) => void;
   projectId?: string;
   projectName?: string;
@@ -158,7 +159,7 @@ const BriefItemList = ({ items, colorScheme, showComponentType }: {
   );
 };
 
-export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtract, onApprove, projectId, projectName, company, version = 1 }: Props) => {
+export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtract, onForceFullExtract, onApprove, projectId, projectName, company, version = 1 }: Props) => {
   const [editedBriefing, setEditedBriefing] = useState<any>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);
@@ -632,12 +633,27 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
                       <Badge variant="destructive" className="text-[10px] h-5">{editedBriefing.extraction_warnings.length}</Badge>
                     </div>
                     <div className="px-4 pb-4 space-y-1.5">
-                      {editedBriefing.extraction_warnings.map((w: any, i: number) => (
-                        <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-background/50">
-                          <Info className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" />
-                          <p className="text-sm text-foreground/80">{typeof w === "string" ? w : w.message || w.description || JSON.stringify(w)}</p>
-                        </div>
-                      ))}
+                      {editedBriefing.extraction_warnings.map((w: any, i: number) => {
+                        const isLongInput = typeof w === "object" && w?.type === "long_input_sampled";
+                        return (
+                          <div key={i} className="flex flex-col gap-2 p-2 rounded-lg bg-background/50">
+                            <div className="flex items-start gap-2">
+                              <Info className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" />
+                              <p className="text-sm text-foreground/80">{typeof w === "string" ? w : w.message || w.description || JSON.stringify(w)}</p>
+                            </div>
+                            {isLongInput && w?.can_force_full && onForceFullExtract && (
+                              <button
+                                type="button"
+                                disabled={generating}
+                                onClick={onForceFullExtract}
+                                className="self-start text-xs px-2.5 py-1 rounded-md border border-destructive/40 text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                              >
+                                Forzar contenido completo (sin muestreo)
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </Card>
                 )}

@@ -22,9 +22,9 @@ interface UploadedFile {
 
 interface Props {
   inputContent: string;
-  onUpdateContent: (content: string) => Promise<void>;
+  onUpdateContent: (content: string) => Promise<string | null | void>;
   onGoToExtraction: () => void;
-  onReExtract: () => void;
+  onReExtract: (freshContent?: string) => void;
   hasExistingBriefing: boolean;
   generating: boolean;
 }
@@ -52,10 +52,11 @@ export const ProjectWizardStep1Edit = ({
 
   const handleSaveAndReExtract = async () => {
     setSaving(true);
-    await onUpdateContent(draft);
+    const fresh = await onUpdateContent(draft);
     setSaving(false);
     setEditing(false);
-    onReExtract();
+    // Pasamos el contenido fresco explícitamente para evitar el race con setProject
+    onReExtract(typeof fresh === "string" ? fresh : draft);
   };
 
   const handleFileUpload = async (file: File) => {
@@ -163,7 +164,7 @@ export const ProjectWizardStep1Edit = ({
                 Ir a Extracción <ArrowRight className="w-4 h-4" />
               </Button>
             ) : (
-              <Button onClick={onReExtract} className="gap-2 shadow-lg shadow-primary/20" disabled={generating}>
+              <Button onClick={() => onReExtract()} className="gap-2 shadow-lg shadow-primary/20" disabled={generating}>
                 <Sparkles className="w-4 h-4" /> Extraer briefing
               </Button>
             )}

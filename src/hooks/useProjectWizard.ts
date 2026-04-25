@@ -292,8 +292,8 @@ export const useProjectWizard = (projectId?: string) => {
 
   // ── Update input content (Step 1 re-edit) ─────────────────────────────
 
-  const updateInputContent = async (newContent: string) => {
-    if (!projectId || !user) return;
+  const updateInputContent = async (newContent: string): Promise<string | null> => {
+    if (!projectId || !user) return null;
     try {
       await supabase
         .from("business_projects")
@@ -302,17 +302,29 @@ export const useProjectWizard = (projectId?: string) => {
 
       setProject(prev => prev ? { ...prev, inputContent: newContent } : prev);
       toast.success("Material de entrada actualizado");
+      return newContent;
     } catch (e: any) {
       console.error("Error updating input content:", e);
       toast.error("Error al actualizar el material");
+      return null;
     }
   };
 
   // ── Run extraction (Step 2) ──────────────────────────────────────────
+  // `overrideInput` evita el race con setProject: el Step 1 nos pasa el
+  // texto recién guardado en lugar de leerlo del state que aún no se ha
+  // re-renderizado.
+  // `skipSampler` permite forzar el contenido completo (sin muestreo)
+  // cuando el usuario lo pide explícitamente desde la alerta del briefing.
 
-  const runExtraction = async () => {
+  const runExtraction = async (
+    overrideInput?: string,
+    options?: { skipSampler?: boolean },
+  ) => {
     if (!project || !projectId) return;
+    const inputContent = overrideInput ?? project.inputContent;
     setGenerating(true);
+    const toastId = toast.loading("Re-extrayendo briefing…");
     try {
       await clearSubsequentSteps(2);
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
@@ -324,18 +336,21 @@ export const useProjectWizard = (projectId?: string) => {
             companyName: project.company,
             projectType: project.projectType,
             clientNeed: project.clientNeed,
-            inputContent: project.inputContent,
+            inputContent,
             inputType: project.inputType,
+            skipSampler: options?.skipSampler === true,
           },
         },
       });
 
       if (error) throw error;
+      toast.dismiss(toastId);
       toast.success("Briefing extraído correctamente");
       await loadProject();
       return data;
     } catch (e: any) {
       console.error("Extraction error:", e);
+      toast.dismiss(toastId);
       toast.error(e.message || "Error en la extracción");
     } finally {
       setGenerating(false);

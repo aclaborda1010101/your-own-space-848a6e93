@@ -117,7 +117,7 @@ serve(async (req) => {
     // ── Action: extract (Step 2) ─────────────────────────────────────────
 
     if (action === "extract") {
-      const { projectName, companyName, projectType, clientNeed, inputContent, inputType } = stepData;
+      const { projectName, companyName, projectType, clientNeed, inputContent, inputType, skipSampler } = stepData;
 
       const { data: latestStep2 } = await supabase
         .from("project_wizard_steps")
@@ -159,12 +159,25 @@ serve(async (req) => {
       // ── Smart sampler (preserves raw, prevents 504 on long inputs) ──
       // Raw `inputContent` is NEVER mutated. We derive a sampled version that
       // is what F0 / transcript filter / F1 actually consume.
-      const prepared = prepareLongInputForExtract(inputContent || "");
+      // `skipSampler` permite forzar el contenido completo cuando el usuario
+      // lo pide explícitamente desde la alerta del briefing.
+      const prepared = skipSampler === true
+        ? {
+            content: inputContent || "",
+            wasSampled: false,
+            originalChars: (inputContent || "").length,
+            sampledChars: (inputContent || "").length,
+            strategy: "skip_sampler_user_override",
+            preservedWindows: [] as Array<{ keyword: string; start: number; end: number }>,
+          }
+        : prepareLongInputForExtract(inputContent || "");
       if (prepared.wasSampled) {
         console.log(
           `[wizard][sampler] long input sampled: ${prepared.originalChars} → ${prepared.sampledChars} chars, ` +
           `windows=${prepared.preservedWindows.length}, keywords=${prepared.preservedWindows.map((w) => w.keyword).join(",")}`,
         );
+      } else if (skipSampler === true) {
+        console.log(`[wizard][sampler] SKIPPED by user override — sending full ${prepared.originalChars} chars to LLM`);
       }
       const extractInputContent = prepared.content;
 
@@ -675,13 +688,20 @@ REGLAS PARA deep_patterns:
 
         // 6. Sampler traceability — record that the LLM saw a sampled input.
         if (prepared.wasSampled) {
+          const uniqueKeywords = Array.from(new Set(prepared.preservedWindows.map((w) => w.keyword)));
           appendExtractionWarning(briefing, {
             type: "long_input_sampled",
-            message: "Input was sampled before LLM extraction to avoid Edge Function timeout.",
+            message:
+              `Material muy largo (${prepared.originalChars.toLocaleString("es-ES")} caracteres). ` +
+              `Se enviaron al LLM ${prepared.sampledChars.toLocaleString("es-ES")} caracteres preservando cabeza, cola y ` +
+              `${prepared.preservedWindows.length} ventanas alrededor de palabras clave (${uniqueKeywords.slice(0, 6).join(", ")}` +
+              `${uniqueKeywords.length > 6 ? ", …" : ""}). Si el material recién añadido es prioritario, ` +
+              `puedes reextraer con la opción "Forzar contenido completo" desde esta misma alerta.`,
             original_chars: prepared.originalChars,
             sampled_chars: prepared.sampledChars,
             strategy: prepared.strategy,
-            preserved_keywords: prepared.preservedWindows.map((w) => w.keyword),
+            preserved_keywords: uniqueKeywords,
+            can_force_full: true,
           });
         }
       }

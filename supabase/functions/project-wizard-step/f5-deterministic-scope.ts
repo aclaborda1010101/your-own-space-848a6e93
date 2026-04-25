@@ -634,6 +634,9 @@ export function runDeterministicPreWarm(
         reason: b.reason,
         owner: "DPO / Responsable legal del cliente",
         deadline_weeks: 4,
+        blocks_design: b.blocks_design ?? false,
+        blocks_internal_testing: b.blocks_internal_testing ?? false,
+        blocks_production: b.blocks_production ?? true,
       })),
   );
 

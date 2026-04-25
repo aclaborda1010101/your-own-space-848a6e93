@@ -159,12 +159,25 @@ serve(async (req) => {
       // ── Smart sampler (preserves raw, prevents 504 on long inputs) ──
       // Raw `inputContent` is NEVER mutated. We derive a sampled version that
       // is what F0 / transcript filter / F1 actually consume.
-      const prepared = prepareLongInputForExtract(inputContent || "");
+      // `skipSampler` permite forzar el contenido completo cuando el usuario
+      // lo pide explícitamente desde la alerta del briefing.
+      const prepared = skipSampler === true
+        ? {
+            content: inputContent || "",
+            wasSampled: false,
+            originalChars: (inputContent || "").length,
+            sampledChars: (inputContent || "").length,
+            strategy: "skip_sampler_user_override",
+            preservedWindows: [] as Array<{ keyword: string; start: number; end: number }>,
+          }
+        : prepareLongInputForExtract(inputContent || "");
       if (prepared.wasSampled) {
         console.log(
           `[wizard][sampler] long input sampled: ${prepared.originalChars} → ${prepared.sampledChars} chars, ` +
           `windows=${prepared.preservedWindows.length}, keywords=${prepared.preservedWindows.map((w) => w.keyword).join(",")}`,
         );
+      } else if (skipSampler === true) {
+        console.log(`[wizard][sampler] SKIPPED by user override — sending full ${prepared.originalChars} chars to LLM`);
       }
       const extractInputContent = prepared.content;
 

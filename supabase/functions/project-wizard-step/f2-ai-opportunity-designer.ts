@@ -612,7 +612,259 @@ export function clampOpportunityDesign(raw: any): AiOpportunityDesignV1 {
   };
 }
 
-export interface OpportunityValidationIssue {
+/* ============================================================
+ * BACKFILL DETERMINISTA POST-CLAMP
+ * Garantiza que F2 nunca emita un design sin Soul cuando hay
+ * señales claras de founder/CEO o múltiples soul_dependency, ni
+ * sin Matching activo-inversor cuando coexisten señales de
+ * activos y compradores/inversores.
+ * ============================================================ */
+
+export interface F2BackfillContext {
+  briefing?: any;
+  f0Signals?: any;
+  companyName?: string;
+  projectName?: string;
+}
+
+const SOUL_KEYWORDS = [
+  "alejandro", "founder", "fundador", "ceo", "soul", "know-how", "know how",
+  "criterio", "criterio del fundador", "criterio del ceo", "seguimiento",
+];
+
+const ASSET_KEYWORDS = [
+  "activo", "activos", "edificio", "edificios", "inmueble", "inmuebles",
+  "fondo", "fondos", "servicer", "servicers", "banco", "bancos",
+  "oportunidad inmobiliaria", "catálogo", "cartera",
+];
+
+const BUYER_KEYWORDS = [
+  "comprador", "compradores", "inversor", "inversores",
+  "dapper", "linkedin", "crm de inversores", "crm inversores",
+  "vender antes de comprar", "matching", "benatar", "a quién vender",
+  "a quien vender",
+];
+
+function flattenToLowerString(obj: any): string {
+  if (obj === null || obj === undefined) return "";
+  if (typeof obj === "string") return obj.toLowerCase();
+  if (typeof obj === "number" || typeof obj === "boolean") return String(obj);
+  try {
+    return JSON.stringify(obj).toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function nextOppId(existing: OpportunityCandidate[]): string {
+  let max = 0;
+  for (const c of existing) {
+    const m = /^OPP-(\d+)$/.exec(c.opportunity_id || "");
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > max) max = n;
+    }
+  }
+  const next = max + 1;
+  return `OPP-${String(next).padStart(3, "0")}`;
+}
+
+function hasSoulComponent(design: AiOpportunityDesignV1): boolean {
+  return design.opportunity_candidates.some(
+    (c) =>
+      c.recommended_component_family === "soul_module" ||
+      c.recommended_layer === "D_soul",
+  );
+}
+
+function hasMatchingComponent(design: AiOpportunityDesignV1): boolean {
+  return design.opportunity_candidates.some(
+    (c) =>
+      c.recommended_component_family === "matching_engine" ||
+      /matching\s+activo[\s-]+inversor/i.test(c.name || ""),
+  );
+}
+
+function shouldInjectSoul(
+  design: AiOpportunityDesignV1,
+  ctx: F2BackfillContext,
+): boolean {
+  if (hasSoulComponent(design)) return false;
+
+  const soulDeps = design.opportunity_candidates.filter(
+    (c) =>
+      c.soul_dependency === "consults_soul" ||
+      c.soul_dependency === "requires_soul_approval" ||
+      c.soul_dependency === "soul_owned",
+  );
+  if (soulDeps.length >= 2) return true;
+
+  const founderSignals = ctx.briefing?.business_extraction_v2?.founder_commitment_signals;
+  if (Array.isArray(founderSignals) && founderSignals.length > 0) return true;
+  if (founderSignals && typeof founderSignals === "object" && Object.keys(founderSignals).length > 0) {
+    return true;
+  }
+
+  const haystack = [
+    flattenToLowerString(ctx.briefing),
+    flattenToLowerString(ctx.f0Signals),
+    (ctx.companyName || "").toLowerCase(),
+    (ctx.projectName || "").toLowerCase(),
+  ].join(" \n ");
+
+  return SOUL_KEYWORDS.some((k) => haystack.includes(k));
+}
+
+function shouldInjectMatching(
+  design: AiOpportunityDesignV1,
+  ctx: F2BackfillContext,
+): boolean {
+  if (hasMatchingComponent(design)) return false;
+
+  const haystack = [
+    flattenToLowerString(ctx.briefing),
+    flattenToLowerString(ctx.f0Signals),
+    flattenToLowerString(design.opportunity_candidates),
+  ].join(" \n ");
+
+  const hasAsset = ASSET_KEYWORDS.some((k) => haystack.includes(k));
+  const hasBuyer = BUYER_KEYWORDS.some((k) => haystack.includes(k));
+  return hasAsset && hasBuyer;
+}
+
+function buildSoulOpportunity(id: string, ctx: F2BackfillContext): OpportunityCandidate {
+  const haystack = [
+    flattenToLowerString(ctx.briefing),
+    flattenToLowerString(ctx.f0Signals),
+    (ctx.companyName || "").toLowerCase(),
+    (ctx.projectName || "").toLowerCase(),
+  ].join(" \n ");
+  const name = haystack.includes("alejandro") ? "Soul de Alejandro" : "Soul del fundador";
+  return {
+    opportunity_id: id,
+    name,
+    description:
+      "Módulo que captura y operacionaliza el criterio estratégico del fundador para que agentes y módulos lo consulten de forma consistente.",
+    business_job:
+      "Capturar el criterio del fundador y exponerlo como servicio interno consumible por el resto de componentes IA.",
+    business_justification:
+      "Múltiples componentes dependen del criterio del fundador (soul_dependency≠none) o el brief revela know-how diferencial difícil de codificar manualmente.",
+    origin: "inferred_need" as any,
+    recommended_component_family: "soul_module" as any,
+    recommended_layer: "D_soul" as any,
+    suggested_phase: "F2_ai_opportunity_designer" as any,
+    suggested_delivery_phase: "MVP" as any,
+    priority: "P0_critical" as any,
+    business_impact: "transformational" as any,
+    build_complexity: "medium" as any,
+    confidence: 0.85,
+    evidence_strength: "medium" as any,
+    soul_dependency: "none" as any,
+    human_review: "mandatory" as any,
+    dataset_readiness_required: false,
+    compliance_flags: [],
+    suggested_external_sources: [],
+    suggested_rags: [],
+    suggested_agents: [],
+    suggested_forms: [],
+    required_data: [],
+    business_catalysts_covered: [],
+    data_assets_activated: [],
+    economic_pains_addressed: [],
+    source_quotes: [],
+  } as OpportunityCandidate;
+}
+
+function buildMatchingOpportunity(id: string): OpportunityCandidate {
+  return {
+    opportunity_id: id,
+    name: "Matching activo-inversor",
+    description:
+      "Motor que recomienda qué inversores/compradores encajan mejor con cada activo del catálogo, basándose en histórico de operaciones, preferencias declaradas y feedback comercial.",
+    business_job:
+      "Priorizar comercialmente qué inversor contactar para cada activo, reduciendo el tiempo de comercialización.",
+    business_justification:
+      "Existen tanto un catálogo de activos como un universo de compradores/inversores; el matching bidireccional acelera la venta y aprovecha datos ya disponibles.",
+    origin: "unrequested_ai_insight" as any,
+    recommended_component_family: "matching_engine" as any,
+    recommended_layer: "C_intelligence" as any,
+    suggested_phase: "F2_ai_opportunity_designer" as any,
+    suggested_delivery_phase: "F2" as any,
+    priority: "P1_high" as any,
+    business_impact: "high" as any,
+    build_complexity: "high" as any,
+    confidence: 0.8,
+    evidence_strength: "medium" as any,
+    soul_dependency: "consults_soul" as any,
+    human_review: "mandatory" as any,
+    dataset_readiness_required: true,
+    dataset_readiness_reason:
+      "Requiere histórico de activos presentados, inversores contactados, visitas, ofertas, cierres y feedback comercial para validar el matching.",
+    minimum_dataset_needed:
+      "Histórico de activos, inversores, visitas, ofertas, cierres y feedback comercial (≥6 meses).",
+    compliance_flags: [
+      "personal_data_processing",
+      "commercial_prioritization",
+      "human_in_the_loop_required",
+    ] as any,
+    suggested_external_sources: [],
+    suggested_rags: [],
+    suggested_agents: [],
+    suggested_forms: [],
+    required_data: [],
+    business_catalysts_covered: [],
+    data_assets_activated: [],
+    economic_pains_addressed: [],
+    source_quotes: [],
+  } as OpportunityCandidate;
+}
+
+/**
+ * Helper puro: ejecutar SIEMPRE después de `clampOpportunityDesign`
+ * y antes de devolver/persistir el design.
+ * No muta el input; devuelve un nuevo objeto.
+ */
+export function backfillMandatoryOpportunities(
+  design: AiOpportunityDesignV1,
+  context: F2BackfillContext = {},
+): AiOpportunityDesignV1 {
+  if (!design || !Array.isArray(design.opportunity_candidates)) return design;
+
+  const candidates = [...design.opportunity_candidates];
+  const warnings = [...(design.warnings || [])];
+
+  if (shouldInjectSoul(design, context)) {
+    const id = nextOppId(candidates);
+    candidates.push(buildSoulOpportunity(id, context));
+    warnings.push({
+      code: "F2_SOUL_BACKFILLED",
+      severity: "info",
+      message:
+        "Soul opportunity was backfilled because multiple opportunities depend on founder/CEO criterion or founder signals were detected.",
+    } as any);
+  }
+
+  // Recompute on a refreshed snapshot so matching guard sees the just-added Soul if relevant.
+  const refreshed: AiOpportunityDesignV1 = { ...design, opportunity_candidates: candidates };
+  if (shouldInjectMatching(refreshed, context)) {
+    const id = nextOppId(candidates);
+    candidates.push(buildMatchingOpportunity(id));
+    warnings.push({
+      code: "F2_MATCHING_BACKFILLED",
+      severity: "info",
+      message:
+        "Matching activo-inversor opportunity was backfilled because asset and buyer/investor signals were both present.",
+    } as any);
+  }
+
+  return {
+    ...design,
+    opportunity_candidates: candidates,
+    warnings,
+  };
+}
+
+
   code: string;
   severity: "warning" | "error";
   message: string;

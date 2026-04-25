@@ -34,7 +34,7 @@ Deno.test("input-sampler: long input preserves head, tail and keyword windows", 
   const r = prepareLongInputForExtract(raw);
   assertEquals(r.wasSampled, true);
   assertEquals(r.originalChars, raw.length);
-  assert(r.content.length <= 72_000, `content ${r.content.length} should be near budget (with markers)`);
+  assert(r.content.length <= 56_000, `content ${r.content.length} should be near budget (with markers)`);
   assert(r.content.includes("[INPUT LARGO MUESTREADO PARA EXTRACT]"));
   assert(r.content.includes("[INICIO DEL MATERIAL]"));
   assert(r.content.includes("[VENTANAS PRESERVADAS POR KEYWORDS]"));
@@ -68,7 +68,7 @@ Deno.test("input-sampler: overlapping keyword windows do not blow the budget", (
   const r = prepareLongInputForExtract(raw);
   assertEquals(r.wasSampled, true);
   // sampledChars must respect the budget
-  assert(r.sampledChars <= 70_000, `sampledChars=${r.sampledChars} exceeded budget`);
+  assert(r.sampledChars <= 54_000, `sampledChars=${r.sampledChars} exceeded budget`);
   // We must have at least preserved one window from the cluster
   assert(r.preservedWindows.length >= 1);
 });

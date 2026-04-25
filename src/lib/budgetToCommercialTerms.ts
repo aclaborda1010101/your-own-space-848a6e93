@@ -64,12 +64,23 @@ export interface CommercialTermsModel {
 }
 
 export interface CommercialTermsV1 {
-  pricing_model: string;
+  // ── Flat fields consumed by F7 (Step 30) ──
+  pricing_model: "fixed_project" | "setup_plus_monthly" | "subscription" | "phased" | "retainer" | "mixed";
+  setup_fee?: number;
+  monthly_retainer?: number;
+  phase_prices?: Array<{ phase: string; price: number; description?: string }>;
+  optional_addons?: Array<{ name: string; price?: number; description?: string }>;
+  ai_usage_cost_policy: string;
+  payment_terms: string;
+  taxes?: string;
+  currency: string;
+  validity_days: number;
+
+  // ── Internal audit / debugging only — never rendered to client ──
   selected_models: CommercialTermsModel[];
   recommended_model: string | null;
   development_total_eur: number | null;
   recurring_monthly_eur: number | null;
-  ai_usage_cost_policy: string;
   notes: string;
   risk_factors: string[];
   source: "derived_from_budget_data";

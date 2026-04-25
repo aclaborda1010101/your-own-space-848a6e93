@@ -1,161 +1,107 @@
-# Plan — desbloquear Brief Limpio, aprobación y avance a PRD/MVP de forma global
 
-## Diagnóstico verificado
+## Diagnóstico (verificado en BD y código)
 
-En el proyecto actual AFFLUX (`6ef807d1-...`) la base de datos muestra:
+Step 2 v5 de AFFLUX (`status=review`, `_clean_brief_md` presente, 71 cambios registrados) sigue con estos problemas:
 
-- Step 2 existe solo como `version = 3`, `status = review`.
-- No existe `output_data._clean_brief_md`.
-- No existe `output_data._normalization_log`.
-- Sigue habiendo `failed_chunks = [CHUNK-003]`.
-- `business_projects.company = "Alejandro Gordo"`, por eso la normalización no puede inferir bien empresa vs fundador si usa `companyName` como fuente.
-- `business_projects.current_step = 3`, pero Step 2 no está aprobado y no hay Step 3 generado. Esto deja la UI en un estado incoherente: parece que se avanzó, pero no hay base real para PRD/MVP.
+- `business_projects.company = "Alejandro Gordo"` → el normalizador recibe `companyName="Alejandro Gordo"`, lo detecta como persona, lo mueve a `founder_or_decision_maker`, pero al rellenar `client_company_name` vuelve a poner `ctx.companyName` (= "Alejandro Gordo"). Empate. Por eso la portada sigue mal.
+- `CANONICAL_GROUPS` por defecto y los `matchTokens` de AFFLUX comparten términos genéricos (`call`, `llamada`, `coach`, `agent`...) → fusiona "Catalogador de propietarios" con "Revista emocional", "Notas comerciales" con "Asistente pre/post llamada", etc.
+- Los catalizadores de `business_catalysts` no se inyectan canónicamente, así que "fallecimiento/herencia" puede no aparecer aunque exista en otras secciones.
+- `open_questions` y `client_requested_items` aún incluyen frases en inglés porque `client_requested_items` no está en la lista de campos a traducir y la tirada del LLM se topa con cap de 60.
+- AFFLUX overrides ya cubre 12 componentes canónicos pero falta el 13 ("Centralizador documental y organización de datos") y la alerta "71" (existe pero el `manual_review_alerts_count` está a 1, conviene revisar texto).
 
-Además, los logs recientes de `project-wizard-step` no muestran llamadas a `normalize_brief` ni `retry_failed_chunks`, lo que confirma que el botón no está dejando una versión nueva persistida.
+Todo es **arreglable con una pasada editorial determinista** sobre el Step 2 actual. No se re-extrae, no se tocan chunks, no se tocan F2/F3/F5/PRD.
 
-## Objetivo global
+## Cambios propuestos (globales, no específicos de AFFLUX)
 
-Que cualquier proyecto con Step 2 crudo pueda repararse sin quedarse bloqueado:
+### 1. `supabase/functions/project-wizard-step/brief-normalizer.ts`
 
-1. `Limpiar y normalizar` debe generar y persistir `_clean_brief_md` sí o sí, o mostrar un error real accionable.
-2. El PDF no debe quedar bloqueado para siempre por faltar `_clean_brief_md`; debe poder generar el Brief Limpio al vuelo.
-3. `Aprobar briefing` debe aprobar la última versión real de Step 2 y desbloquear/generar PRD correctamente.
-4. El sistema debe corregir estados incoherentes (`current_step=3` sin Step 2 aprobado / sin Step 3).
-5. Las correcciones serán globales, no específicas de AFFLUX.
+**a) `applyNamingSplit` — fix definitivo del empate persona/empresa**
+- Si `ctx.companyName` también pasa `looksLikePersonName(...)`, NO usarlo como `client_company_name`. En su lugar:
+  - usar `ctx.productName` (si existe) como company por defecto **o** `[POR CONFIRMAR]`.
+  - mover `ctx.companyName` a `founder_or_decision_maker` si está vacío.
+- Cuando `ctx.productName` esté presente y `client_company_name` siga siendo el mismo string que el founder, sustituir `client_company_name` por `productName` (caso AFFLUX donde la empresa real se llama AFLU/AFFLUX y no está en BD).
 
-## Cambios propuestos
+**b) `applySemanticDedup` — separación canónica estricta**
+- Cuando se usan `ctx.canonicalComponents`, exigir **score mínimo + desempate**: para cada candidato, calcular hits contra TODOS los grupos y asignar al de **mayor score** (no al primero con ≥2). Si hay empate entre grupos distintos, no fusionar (dejar el ítem en su propio bucket renombrado al ganador único o al original).
+- Añadir lista de pares mutuamente exclusivos (`mutexGroups`) en el `NormalizationContext` para impedir fusiones cruzadas conocidas:
+  - "Catalogador de propietarios en 7 roles" ↔ "Generador de revista emocional"
+  - "Analizador de notas comerciales" ↔ "Asistente pre/post llamada"
+  - "Matching activo-inversor" ↔ "Detector de compradores institucionales"
+  - "Soul de Alejandro" ↔ "RAG de conocimiento"
 
-### 1. Backend: convertir normalización en operación robusta y persistente
+**c) Inyección de catalizadores canónicos**
+- Nueva función `applyCanonicalCatalysts(briefing, ctx)` que, si `ctx.canonicalCatalysts` está definido, garantiza que cada catalizador aparezca en `business_catalysts` (añade items faltantes con `_inferred_by: "normalizer_catalyst_v1"`).
+- Permite resolver el problema "fallecimiento/herencia debe estar en catalizadores".
 
-En `supabase/functions/project-wizard-step/index.ts`:
+**d) Traducción más amplia**
+- Añadir `client_requested_items`, `underutilized_data_assets`, `inferred_needs` y `external_data_sources_mentioned` a `FIELDS_TO_SCAN`.
+- Subir cap de `capped` de 60 a 120.
+- Añadir más palabras EN al `EN_HINT_WORDS` (`recorded`, `calls`, `lost`, `opportunities`, `qualification`, `prioritization`, `graph`, `historical`, `record`, `building`, `deal`).
 
-- Reforzar `normalize_brief` para que:
-  - Acepte `projectId` tanto en `body.projectId` como en `stepData.projectId`.
-  - Lea siempre la última versión Step 2.
-  - Si hay chunks fallidos, no falle silenciosamente: los registra en `_normalization_log.pending_failed_chunks` y aun así genera un brief limpio provisional sin volcar debug.
-  - Inserte una nueva versión `step_number=2`, `status=review`, con `_clean_brief_md`, `_clean_brief_sections` y `_normalization_log`.
-  - Devuelva `success: true`, `version`, `clean_brief_length`, `normalization_changes`.
+**e) Inyección de componentes obligatorios**
+- Nueva función `ensureCanonicalComponentsPresent(briefing, ctx)`: tras el dedup, comprueba que cada `ctx.canonicalComponents[*].canonical` aparezca al menos una vez en `ai_native_opportunity_signals`. Si falta, inserta un placeholder con `_inferred_by: "normalizer_required_component_v1"` para que aparezca en el "Brief Limpio" como candidato F2/roadmap.
 
-- Añadir logs explícitos:
-  - `[normalize_brief] start`
-  - `[normalize_brief] loaded step2 vX`
-  - `[normalize_brief] saved step2 vY clean_len=...`
-  - `[normalize_brief] error ...`
+### 2. `src/lib/normalization-overrides.ts`
 
-Esto permitirá saber si el botón realmente ejecutó o dónde falla.
+**a) Tipo extendido**: añadir `companyNameOverride?`, `canonicalCatalysts?`, `mutexGroups?`.
 
-### 2. Backend: acción única de reparación del Step 2
+**b) AFFLUX overrides actualizados**:
+- `companyNameOverride: "AFLU"` (con `productName: "AFFLUX"` ya existente).
+- `matchTokens` afinados (eliminar términos demasiado genéricos compartidos, p. ej. quitar `call`/`llamada` del grupo "revista emocional" y de "Soul").
+- `canonicalCatalysts`:
+  - "Fallecimiento de propietario, herencia o cambio sucesorio como disparador de venta"
+  - "Detección de compradores institucionales activos (tipo Benatar)"
+  - "Desajuste entre oferta de edificios completos y demanda inversora"
+  - "Baja respuesta y fricción comercial como catalizador de automatización"
+- `mutexGroups`: las 4 parejas listadas arriba.
+- Añadir 13.º componente canónico: "Centralizador documental y organización de datos".
+- Confirmar texto exacto de la alerta "71".
 
-Añadir una acción global nueva en `project-wizard-step`:
+### 3. `supabase/functions/project-wizard-step/index.ts`
 
-`action: "repair_step2_brief"`
+- En la rama `repair_step2_brief`/`normalize_brief`, propagar `companyNameOverride`, `canonicalCatalysts` y `mutexGroups` al `NormalizationContext`.
+- (No tocar lógica de chunks ni de PRD.)
 
-Flujo:
+### 4. `supabase/functions/project-wizard-step/clean-brief-builder.ts`
 
-```text
-latest Step 2
-  -> si hay failed chunks e inputContent disponible: retry_failed_chunks
-  -> normalize_brief
-  -> buildCleanBrief
-  -> guardar nueva versión review
-  -> devolver briefing limpio
-```
+- Sección 9 "Componentes candidatos normalizados": si un ítem viene de `_inferred_by: "normalizer_required_component_v1"`, marcarlo como `*(candidato F2/roadmap)*` para no engañar sobre evidencia.
+- Sección 4 "Catalizadores": ordenar primero los `_inferred_by: "normalizer_catalyst_v1"` para que destaquen los canónicos.
+- Sección 7 "Compliance flags": forzar bullets limpios (ya lo hace) y traducir `evidence` que siga en inglés (re-aplicar `isLikelyEnglish` con un mini glosario fijo si la traducción LLM no llegó).
 
-Uso:
+### 5. `src/hooks/useProjectWizard.ts`
 
-- El botón `Limpiar y normalizar` llamará a esta acción, no solo a `normalize_brief`.
-- El botón PDF podrá llamar a esta acción si falta `_clean_brief_md`.
-- Será global para proyectos antiguos o estados intermedios.
+- En `normalizeBrief()` enviar también los nuevos campos del override (`companyNameOverride`, `canonicalCatalysts`, `mutexGroups`).
+- (Opcional) Si `companyNameOverride` está definido, mostrar un toast informativo: *"Se aplicará el nombre de empresa autoritativo: AFLU"*.
 
-Si el retry falla, la acción no bloquea todo: genera Brief Limpio provisional, sin mostrar `FAILED CHUNKS` en PDF, y marca el pendiente en el log interno.
+### 6. `src/main.tsx`
 
-### 3. Frontend: botón `Limpiar y normalizar` con estado propio y actualización inmediata
+- Bump de `cache-bust` para forzar rebuild de la preview.
 
-En `src/hooks/useProjectWizard.ts`:
+## Acción inmediata tras el merge
 
-- Separar `normalizing` de `generating`, para que la UI no parezca que “no hace nada”.
-- `normalizeBrief()` pasará a llamar a `repair_step2_brief`.
-- Tras respuesta exitosa:
-  - actualizar `steps` localmente con el `briefing` devuelto;
-  - llamar a `loadProject()`;
-  - mostrar toast claro: `Brief Limpio generado. PDF y aprobación desbloqueados.`
-- Si falla, mostrar el mensaje real del backend, no un error genérico.
+El usuario pulsa **"Limpiar y normalizar"** una vez. Eso ejecuta `repair_step2_brief` con los nuevos overrides, genera la v6 del Step 2 con:
 
-En `src/components/projects/wizard/ProjectWizardStep2.tsx`:
+- Cliente: **AFLU** · Decisor: **Alejandro Gordo** · Producto: **AFFLUX**
+- 13 componentes canónicos sin fusiones cruzadas erróneas
+- Catalizadores incluyendo fallecimiento/herencia
+- Frases en inglés traducidas (incluyendo `client_requested_items` y `open_questions`)
+- Alerta manual "71" presente
+- PDF resultante 8-10 páginas
 
-- Añadir estado visual en el botón:
-  - `Limpiando...`
-  - spinner
-  - disabled solo mientras está ejecutando.
-- Mostrar una caja de estado:
-  - `Brief crudo pendiente de normalizar`
-  - `Brief Limpio listo`
-  - `Hay chunks pendientes, se generará versión limpia provisional`
+## Criterio de aceptación
 
-### 4. PDF: auto-reparar antes de exportar si falta el Brief Limpio
+- BD: `output_data.business_extraction_v2.client_naming_check.client_company_name = "AFLU"` (no "Alejandro Gordo").
+- BD: `output_data._normalization_log.changes` contiene `naming_split` con `after: "AFLU"`.
+- `_clean_brief_md` no contiene las frases EN del listado del usuario.
+- Sección 9 contiene los 13 nombres canónicos, sin fusiones entre catalogador↔revista, notas↔llamada, matching↔detector institucional, Soul↔RAG.
+- Sección 4 contiene "Fallecimiento de propietario..." como bullet.
+- Sección 8 contiene la alerta "Revisar señal 71".
+- `_clean_brief_md.length` < 12.000 chars (~8 páginas A4).
+- No se ha tocado Step 3+.
 
-En `ProjectDocumentDownload` o en Step 2:
+## Fuera de alcance (explícitamente)
 
-- Para `stepNumber === 2`, si falta `_clean_brief_md`, el botón no debe quedarse muerto.
-- Cambiar de `PDF (genera primero)` deshabilitado a:
-  - `Generar Brief Limpio y PDF`
-- Al hacer clic:
-  - llamar a `repair_step2_brief`;
-  - actualizar contenido local;
-  - invocar `generate-document` con el Step 2 ya limpio.
-
-En `supabase/functions/generate-document/index.ts`:
-
-- Mantener la rama Step 2 que prioriza `_clean_brief_md`.
-- Si no existe, usar fallback mínimo de 1-2 páginas, nunca JSON crudo ni tablas enormes.
-- El PDF final debe salir en castellano, corto, con estructura de Brief Limpio.
-
-### 5. Aprobación Step 2 y avance a PRD: corregir incoherencias
-
-En `useProjectWizard.ts` / `approveStep`:
-
-- Antes de aprobar Step 2:
-  - si falta `_clean_brief_md`, ejecutar `repair_step2_brief` automáticamente;
-  - aprobar la versión limpia recién creada, no la versión cruda anterior.
-- Corregir el estado local para que no ocurra `current_step=3` sin Step 2 aprobado.
-- Después de aprobar Step 2:
-  - navegar a Step 3;
-  - lanzar `runChainedPRD` si auto-chain está activado;
-  - si auto-chain está apagado, dejar visible el botón `Generar PRD Técnico`.
-
-En `project-wizard-step` acción `approve_step`:
-
-- Evitar `.update(...).order(...).limit(1)` como patrón ambiguo.
-- Buscar explícitamente el `id` de la última versión del step y actualizar por `id`.
-- Para Step 2, si hay varias versiones, aprobar solo la última.
-
-### 6. Reparación de datos del proyecto actual AFFLUX
-
-Una vez aprobado el plan y ya en modo edición:
-
-- Ejecutar la reparación sobre AFFLUX usando el mismo flujo global (`repair_step2_brief`).
-- Corregir `business_projects.current_step` si sigue incoherente.
-- No hardcodear AFFLUX en el código. Solo usar AFFLUX como caso de saneamiento puntual tras desplegar la lógica global.
-
-### 7. Warning React de `ProjectDocumentDownload`
-
-El warning actual indica que `ProjectDocumentDownload` recibe refs desde un wrapper tipo Radix/Tooltip/Collapsible.
-
-- Convertir `ProjectDocumentDownload` a `React.forwardRef<HTMLButtonElement, Props>`.
-- Pasar el ref al `<Button>` interno.
-
-No parece la causa principal del bloqueo, pero limpia ruido y evita fallos de interacción con componentes `asChild`.
-
-### 8. Cache-bust de preview
-
-Actualizar `src/main.tsx` con nuevo `// cache-bust: ...` para forzar que la preview cargue el bundle nuevo inmediatamente.
-
-## Criterios de aceptación
-
-- Al pulsar `Limpiar y normalizar`, aparece spinner/estado y se guarda una nueva versión Step 2 con `_clean_brief_md`.
-- El botón PDF deja de estar muerto: si falta limpieza, la genera y luego exporta.
-- PDF Step 2: 3-7 páginas, en castellano, sin `FAILED CHUNKS`, sin JSON crudo, sin tablas gigantes.
-- `Aprobar briefing` no aprueba la versión cruda si falta Brief Limpio; primero repara y luego aprueba.
-- Tras aprobar Step 2, se puede generar PRD y avanzar hacia MVP.
-- El estado `current_step` queda coherente con los steps aprobados/generados.
-- La solución aplica a todos los proyectos, no solo a AFFLUX.
+- No re-extraer.
+- No tocar `chunked-extractor.ts`.
+- No tocar PRD, propuesta, F2/F3/F4/F5.
+- No cambiar `business_projects.company` automáticamente (lo dejamos al user; el override es la fuente de verdad para el brief).

@@ -23,6 +23,11 @@ import { checkNamingCollision } from "../_shared/component-registry-contract.ts"
 export interface CanonicalComponent {
   canonical: string;
   matchTokens: string[];
+  /**
+   * Optional inline description used when this component must be
+   * INJECTED into the brief because it was missing from extraction.
+   */
+  description?: string;
 }
 
 export interface ManualReviewAlert {
@@ -31,28 +36,46 @@ export interface ManualReviewAlert {
   source?: string;
 }
 
+export interface CanonicalCatalyst {
+  title: string;
+  description?: string;
+}
+
 export interface NormalizationContext {
   projectName: string;
   companyName: string;
   founderName?: string;
   productName?: string;
+  /**
+   * Authoritative override for client_company_name. Used when the
+   * extraction picked up a person name and `companyName` from the DB
+   * is also a person name (no real company on record).
+   */
+  companyNameOverride?: string;
   sectorHint?: string;
   language?: "es" | "en";
   /**
    * Optional canonical component list. When provided, REPLACES the default
-   * generic groups so the dedup step uses the project-specific taxonomy
-   * (e.g. AFFLUX uses AFFLUX-specific component names).
+   * generic groups so the dedup step uses the project-specific taxonomy.
    */
   canonicalComponents?: CanonicalComponent[];
   /**
+   * Pairs of canonical names that MUST NOT be fused even when token
+   * overlap is high. Each pair forbids merging the two component names.
+   */
+  mutexGroups?: Array<[string, string]>;
+  /**
+   * Catalysts that the brief MUST mention even if the LLM missed them.
+   * Inserted into business_catalysts with `_inferred_by: "normalizer_catalyst_v1"`.
+   */
+  canonicalCatalysts?: CanonicalCatalyst[];
+  /**
    * Optional list of topic regexes whose mentions should be stripped from
-   * the brief because they belong to other domains (e.g. "weather", "pollen"
-   * for a real estate project).
+   * the brief because they belong to other domains.
    */
   forbiddenTopics?: RegExp[];
   /**
-   * Optional manual review alerts to attach (e.g. ambiguous numeric signals
-   * the LLM may have conflated).
+   * Optional manual review alerts to attach.
    */
   manualReviewAlerts?: ManualReviewAlert[];
 }
@@ -98,16 +121,28 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
     v2.client_naming_check = {};
   }
   const cnc = v2.client_naming_check;
-
   const before = { ...cnc };
 
-  // Detect founder mistakenly placed in client_company_name.
+  // Decide the AUTHORITATIVE company name once, with priority:
+  //   1. ctx.companyNameOverride (explicit, never wrong)
+  //   2. ctx.companyName if it does NOT look like a person name
+  //   3. ctx.productName as a soft fallback
+  //   4. "[POR CONFIRMAR]"
+  const ctxCompanyIsPerson =
+    typeof ctx.companyName === "string" && looksLikePersonName(ctx.companyName);
+  const authoritativeCompany =
+    (ctx.companyNameOverride && ctx.companyNameOverride.trim()) ||
+    (ctx.companyName && !ctxCompanyIsPerson ? ctx.companyName.trim() : "") ||
+    (ctx.productName && ctx.productName.trim()) ||
+    "[POR CONFIRMAR]";
+
+  // 1. If extracted company is a person name, demote to founder.
   if (typeof cnc.client_company_name === "string" && looksLikePersonName(cnc.client_company_name)) {
     const personName = cnc.client_company_name.trim();
     if (!cnc.founder_or_decision_maker) {
       cnc.founder_or_decision_maker = personName;
     }
-    cnc.client_company_name = (ctx.companyName && ctx.companyName.trim()) || "[POR CONFIRMAR]";
+    cnc.client_company_name = authoritativeCompany;
     changes.push({
       type: "naming_split",
       field: "client_company_name",
@@ -117,20 +152,79 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
     });
   }
 
-  // Default founder if hint provided.
-  if (!cnc.founder_or_decision_maker && ctx.founderName) {
-    cnc.founder_or_decision_maker = ctx.founderName;
+  // 2. If ctx supplies a company override, ALWAYS apply it (last word).
+  if (ctx.companyNameOverride && ctx.companyNameOverride.trim()) {
+    const desired = ctx.companyNameOverride.trim();
+    if (cnc.client_company_name !== desired) {
+      const prev = cnc.client_company_name;
+      cnc.client_company_name = desired;
+      changes.push({
+        type: "naming_split",
+        field: "client_company_name",
+        before: prev,
+        after: desired,
+        reason: "Aplicado companyNameOverride autoritario desde contexto.",
+      });
+    }
+  }
+
+  // 3. If the company AND founder ended up identical (the original tie bug),
+  //    fall back to the authoritative company.
+  if (
+    cnc.client_company_name &&
+    cnc.founder_or_decision_maker &&
+    cnc.client_company_name === cnc.founder_or_decision_maker &&
+    cnc.client_company_name !== authoritativeCompany
+  ) {
+    const prev = cnc.client_company_name;
+    cnc.client_company_name = authoritativeCompany;
     changes.push({
       type: "naming_split",
-      field: "founder_or_decision_maker",
-      before: null,
-      after: ctx.founderName,
-      reason: "Aplicado founderName desde contexto.",
+      field: "client_company_name",
+      before: prev,
+      after: authoritativeCompany,
+      reason: "Empate company == founder; aplicado nombre autoritario.",
     });
   }
 
-  // Default product name to project name.
-  if (!cnc.proposed_product_name || (typeof cnc.proposed_product_name === "string" && cnc.proposed_product_name.trim().length === 0)) {
+  // 4. If founder is missing but ctx has a person-named companyName, use that.
+  if (!cnc.founder_or_decision_maker) {
+    if (ctx.founderName) {
+      cnc.founder_or_decision_maker = ctx.founderName;
+      changes.push({
+        type: "naming_split",
+        field: "founder_or_decision_maker",
+        before: null,
+        after: ctx.founderName,
+        reason: "Aplicado founderName desde contexto.",
+      });
+    } else if (ctxCompanyIsPerson && ctx.companyName) {
+      cnc.founder_or_decision_maker = ctx.companyName.trim();
+      changes.push({
+        type: "naming_split",
+        field: "founder_or_decision_maker",
+        before: null,
+        after: ctx.companyName.trim(),
+        reason: "ctx.companyName era persona; promovido a founder_or_decision_maker.",
+      });
+    }
+  }
+
+  // 5. Product name: prefer ctx.productName, else projectName.
+  if (ctx.productName && ctx.productName.trim() && cnc.proposed_product_name !== ctx.productName.trim()) {
+    const prev = cnc.proposed_product_name;
+    cnc.proposed_product_name = ctx.productName.trim();
+    changes.push({
+      type: "naming_split",
+      field: "proposed_product_name",
+      before: prev,
+      after: ctx.productName.trim(),
+      reason: "Aplicado productName autoritario desde contexto.",
+    });
+  } else if (
+    !cnc.proposed_product_name ||
+    (typeof cnc.proposed_product_name === "string" && cnc.proposed_product_name.trim().length === 0)
+  ) {
     cnc.proposed_product_name = ctx.projectName || null;
     if (cnc.proposed_product_name) {
       changes.push({
@@ -143,7 +237,7 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
     }
   }
 
-  // Re-check collision.
+  // 6. Re-check collision.
   if (cnc.client_company_name && cnc.proposed_product_name) {
     try {
       const collision = checkNamingCollision(cnc.client_company_name, cnc.proposed_product_name);
@@ -154,42 +248,6 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
     }
   } else {
     cnc.collision_detected = false;
-  }
-
-  // Authoritative product name from context (e.g. wizard input).
-  if (ctx.productName && typeof ctx.productName === "string" && ctx.productName.trim().length > 0) {
-    const desired = ctx.productName.trim();
-    if (cnc.proposed_product_name !== desired) {
-      const before = cnc.proposed_product_name;
-      cnc.proposed_product_name = desired;
-      changes.push({
-        type: "naming_split",
-        field: "proposed_product_name",
-        before,
-        after: desired,
-        reason: "Aplicado productName autoritario desde contexto.",
-      });
-    }
-  }
-
-  // Authoritative company name from context overrides extraction noise.
-  if (ctx.companyName && typeof ctx.companyName === "string" && ctx.companyName.trim().length > 0) {
-    const desiredCompany = ctx.companyName.trim();
-    // Only override if extraction looks invalid (person name, placeholder, missing).
-    const extracted = cnc.client_company_name;
-    const looksInvalid = !extracted ||
-      extracted === "[POR CONFIRMAR]" ||
-      (typeof extracted === "string" && looksLikePersonName(extracted));
-    if (looksInvalid && extracted !== desiredCompany) {
-      cnc.client_company_name = desiredCompany;
-      changes.push({
-        type: "naming_split",
-        field: "client_company_name",
-        before: extracted,
-        after: desiredCompany,
-        reason: "Aplicado companyName autoritario desde contexto.",
-      });
-    }
   }
 
   // Diff log (compact).
@@ -308,6 +366,10 @@ const EN_HINT_WORDS = new Set([
   "automation", "workflow", "extensive", "potential", "rate", "response",
   "analysis", "managing", "unified", "custom", "powered", "generation",
   "marketing", "content", "copywriting", "guidance", "negotiation", "coaching",
+  "recorded", "calls", "lost", "opportunities", "qualification", "prioritization",
+  "graph", "historical", "record", "building", "deal", "owner", "owners",
+  "lead", "leads", "automated", "categorization", "profiling", "estate",
+  "real", "off-market", "specific", "what", "which", "should",
 ]);
 
 function isLikelyEnglish(s: string): boolean {
@@ -333,8 +395,9 @@ function collectTranslatableStrings(briefing: any): TranslateItem[] {
     "quantified_economic_pains", "decision_points", "client_requested_items",
     "inferred_needs", "ai_native_opportunity_signals", "constraints_and_risks",
     "open_questions", "architecture_signals", "stakeholder_signals",
+    "external_data_sources_mentioned", "initial_compliance_flags",
   ];
-  const STRING_KEYS = ["title", "description", "signal", "question", "name_or_role"];
+  const STRING_KEYS = ["title", "description", "signal", "question", "name_or_role", "evidence", "purpose", "name"];
 
   for (const field of FIELDS_TO_SCAN) {
     const arr = v2[field];
@@ -384,7 +447,7 @@ async function applyLanguageNormalization(
   if (items.length === 0) return { tokensInput: 0, tokensOutput: 0, called: false };
 
   // Cap to avoid massive prompts.
-  const capped = items.slice(0, 60);
+  const capped = items.slice(0, 120);
 
   const systemPrompt = `Eres traductor técnico ES↔EN. Recibes una lista JSON de strings en inglés (o mezcla) extraídas de un briefing de proyecto. Tradúcelas a ESPAÑOL NEUTRO TÉCNICO.
 
@@ -466,21 +529,50 @@ const CANONICAL_GROUPS: Array<{ canonical: string; matchTokens: string[] }> = [
   },
 ];
 
+/**
+ * Pick the canonical group with the HIGHEST score (≥2 hits). When there is
+ * a tie between distinct canonical names, return null so the candidate is
+ * NOT force-merged into an arbitrary bucket.
+ */
 function tryAssignCanonical(item: any, groups: CanonicalComponent[]): string | null {
   const text = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+  let bestScore = 0;
+  let bestCanonical: string | null = null;
+  let tied = false;
   for (const group of groups) {
     const hits = group.matchTokens.filter((t) => text.includes(t.toLowerCase())).length;
-    if (hits >= 2) return group.canonical;
+    if (hits < 2) continue;
+    if (hits > bestScore) {
+      bestScore = hits;
+      bestCanonical = group.canonical;
+      tied = false;
+    } else if (hits === bestScore && group.canonical !== bestCanonical) {
+      tied = true;
+    }
   }
-  return null;
+  return tied ? null : bestCanonical;
 }
 
-function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: string, groups: CanonicalComponent[]): any[] {
+function isMutexBlocked(a: string, b: string, mutex: Array<[string, string]> | undefined): boolean {
+  if (!mutex || mutex.length === 0) return false;
+  for (const [x, y] of mutex) {
+    if ((a === x && b === y) || (a === y && b === x)) return true;
+  }
+  return false;
+}
+
+function dedupCandidates(
+  arr: any[],
+  changes: NormalizationChange[],
+  fieldName: string,
+  groups: CanonicalComponent[],
+  mutex: Array<[string, string]> | undefined,
+): any[] {
   if (!Array.isArray(arr)) return arr;
 
   // 1. Group by canonical mapping first.
   const canonicalBuckets = new Map<string, any[]>();
-  const remaining: any[] = [];
+  const remaining: Array<{ item: any; canon: string | null }> = [];
   for (const item of arr) {
     const canon = tryAssignCanonical(item, groups);
     if (canon) {
@@ -488,7 +580,7 @@ function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: 
       bucket.push(item);
       canonicalBuckets.set(canon, bucket);
     } else {
-      remaining.push(item);
+      remaining.push({ item, canon: null });
     }
   }
 
@@ -496,9 +588,6 @@ function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: 
   const merged: any[] = [];
   for (const [canonical, bucket] of canonicalBuckets.entries()) {
     if (bucket.length === 1) {
-      // Single item still gets its title rewritten to the canonical form so
-      // the brief shows the project's own taxonomy rather than the LLM's
-      // arbitrary phrasing.
       const renamed = { ...bucket[0] };
       const before = renamed.title;
       if (before !== canonical) {
@@ -531,16 +620,42 @@ function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: 
     });
   }
 
-  // 2. Then jaccard-dedup the remaining.
-  const tokenizedRemaining = remaining.map((it) => ({ item: it, tokens: tokenize(`${it.title || ""} ${it.description || ""}`) }));
+  // 2. Then jaccard-dedup the remaining (with mutex protection by best-canonical).
+  // For each remaining item, compute a "soft canonical" — the best-scoring
+  // group even if score < 2 — and forbid merging two items whose soft
+  // canonicals are mutex partners.
+  function softCanonical(item: any): string | null {
+    const text = `${item.title || ""} ${item.description || ""}`.toLowerCase();
+    let best = 0;
+    let name: string | null = null;
+    for (const g of groups) {
+      const hits = g.matchTokens.filter((t) => text.includes(t.toLowerCase())).length;
+      if (hits > best) {
+        best = hits;
+        name = g.canonical;
+      }
+    }
+    return best > 0 ? name : null;
+  }
+
+  const tokenizedRemaining = remaining.map((r) => ({
+    item: r.item,
+    tokens: tokenize(`${r.item.title || ""} ${r.item.description || ""}`),
+    soft: softCanonical(r.item),
+  }));
   const used = new Array(tokenizedRemaining.length).fill(false);
 
   for (let i = 0; i < tokenizedRemaining.length; i++) {
     if (used[i]) continue;
     const group = [tokenizedRemaining[i].item];
     used[i] = true;
+    const headSoft = tokenizedRemaining[i].soft;
     for (let j = i + 1; j < tokenizedRemaining.length; j++) {
       if (used[j]) continue;
+      // Mutex protection: never merge items whose soft canonicals are partners.
+      if (headSoft && tokenizedRemaining[j].soft && isMutexBlocked(headSoft, tokenizedRemaining[j].soft!, mutex)) {
+        continue;
+      }
       const sim = jaccardSim(tokenizedRemaining[i].tokens, tokenizedRemaining[j].tokens);
       if (sim >= 0.6) {
         group.push(tokenizedRemaining[j].item);
@@ -571,13 +686,13 @@ function dedupCandidates(arr: any[], changes: NormalizationChange[], fieldName: 
 function applySemanticDedup(briefing: any, changes: NormalizationChange[], ctx: NormalizationContext) {
   const v2 = briefing?.business_extraction_v2;
   if (!v2) return;
-  // Use override if provided, otherwise the generic defaults.
   const groups = (Array.isArray(ctx.canonicalComponents) && ctx.canonicalComponents.length > 0)
     ? ctx.canonicalComponents
     : CANONICAL_GROUPS;
+  const mutex = ctx.mutexGroups;
   for (const field of ["ai_native_opportunity_signals", "client_requested_items", "inferred_needs"] as const) {
     const before = Array.isArray(v2[field]) ? v2[field].length : 0;
-    v2[field] = dedupCandidates(v2[field], changes, field, groups);
+    v2[field] = dedupCandidates(v2[field], changes, field, groups, mutex);
     const after = Array.isArray(v2[field]) ? v2[field].length : 0;
     if (before !== after) {
       changes.push({

@@ -1499,6 +1499,66 @@ function parseAIJson(raw: string): any {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// Step 2 fallback (degraded) — used when _clean_brief_md is missing.
+// Renders a 1-page warning with minimal naming + top needs, NEVER the full JSON.
+// ══════════════════════════════════════════════════════════════════════
+
+function escMd(s: any): string {
+  if (s === null || s === undefined) return "";
+  return String(s).trim().replace(/\|/g, "\\|");
+}
+
+function buildMinimalBriefFallback(briefing: any, projectName: string): string {
+  const v2 = briefing?.business_extraction_v2 || {};
+  const naming = v2.client_naming_check || {};
+  const bms = v2.business_model_summary || {};
+  const lines: string[] = [];
+
+  lines.push(`# Brief — ${escMd(projectName) || "Proyecto"}`);
+  lines.push("");
+  lines.push("> ⚠️ **Brief no normalizado.**");
+  lines.push("> Este documento se ha generado sin el paso de normalización (Brief Limpio).");
+  lines.push("> Para obtener un brief presentable de 3-7 páginas, vuelve al wizard, paso 2,");
+  lines.push("> y pulsa **\"Limpiar y normalizar\"** antes de exportar.");
+  lines.push("");
+  lines.push("## Identificación");
+  lines.push("");
+  if (naming.client_company_name) lines.push(`- **Empresa cliente:** ${escMd(naming.client_company_name)}`);
+  if (naming.founder_or_decision_maker) lines.push(`- **Decisor:** ${escMd(naming.founder_or_decision_maker)}`);
+  if (naming.proposed_product_name) lines.push(`- **Producto propuesto:** ${escMd(naming.proposed_product_name)}`);
+  if (lines[lines.length - 1] === "") lines.push("- _Sin datos de naming._");
+  lines.push("");
+
+  if (bms.title || bms.context) {
+    lines.push("## Resumen del modelo");
+    lines.push("");
+    if (bms.title) lines.push(`**${escMd(bms.title)}**`);
+    if (bms.context) lines.push(escMd(bms.context));
+    lines.push("");
+  }
+
+  const needs = Array.isArray(v2.client_requested_items) ? v2.client_requested_items.slice(0, 8) : [];
+  if (needs.length > 0) {
+    lines.push("## Necesidades explícitas (top 8)");
+    lines.push("");
+    for (const n of needs) {
+      const t = escMd(n?.title || n?.description || "");
+      if (t) lines.push(`- ${t}`);
+    }
+    lines.push("");
+  }
+
+  const meta = briefing?._chunked_extraction_meta;
+  if (meta?.failed_chunks_count > 0 || (Array.isArray(meta?.failed_chunks) && meta.failed_chunks.length > 0)) {
+    const n = meta.failed_chunks_count || meta.failed_chunks.length;
+    lines.push(`> 🔧 Hay **${n} bloque(s) fallido(s)** sin recuperar. Pulsa "Reintentar bloques fallidos" en el wizard.`);
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // Main handler
 // ══════════════════════════════════════════════════════════════════════
 
@@ -2645,6 +2705,17 @@ Devuelve SOLO el JSON.`;
       }
 
       htmlContent = parts.join("\n");
+    }
+    // ── Step 2: Brief Limpio renderer (global, todos los proyectos) ──
+    // Prioriza _clean_brief_md (markdown normalizado, 3-7 páginas).
+    // Si no existe, NO vuelca el JSON crudo (61 páginas): muestra fallback degradado.
+    else if (stepNumber === 2 && typeof processedContent === "object" && processedContent !== null) {
+      const cleanMd = (processedContent as any)._clean_brief_md;
+      if (typeof cleanMd === "string" && cleanMd.trim().length > 200) {
+        htmlContent = markdownToHtml(cleanMd);
+      } else {
+        htmlContent = markdownToHtml(buildMinimalBriefFallback(processedContent, projectName || ""));
+      }
     }
     // Convert content to HTML (non-budget steps)
     else if (contentType === "markdown" || typeof processedContent === "string") {

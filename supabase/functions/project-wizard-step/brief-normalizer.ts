@@ -46,13 +46,18 @@ export interface NormalizationResult {
 
 // ── 1. Naming split ──────────────────────────────────────────────────
 
-const PERSON_NAME_RE = /^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(\s[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){0,2}$/;
-const COMPANY_SUFFIX_RE = /\b(S\.L\.|S\.A\.|SLU|SAU|Ltd|LLC|Inc|GmbH|AG|BV|S\.r\.l\.|Sociedad|Limited)\b/i;
+// Acepta: "Nombre Apellido", "Nombre Apellido Apellido", "Nombre de la Cruz",
+// "Juan-Carlos Pérez", "María José García-López".
+const PERSON_NAME_RE = /^[A-ZÁÉÍÓÚÑ][a-záéíóúñ-]+(\s(?:de|del|la|las|los|y|van|von|da|du|de la|de los)?\s?[A-ZÁÉÍÓÚÑ][a-záéíóúñ-]+){1,3}$/;
+const COMPANY_SUFFIX_RE = /\b(S\.?L\.?U?|S\.?A\.?U?|SLU|SAU|Ltd|LLC|Inc|GmbH|AG|BV|S\.?r\.?l\.?|Sociedad|Limited|Corp|Corporation|Group|Holdings?|Studios?|Lab(?:s)?|Tech)\b/i;
+const PERSON_TITLE_PREFIX_RE = /^(Sr\.?|Sra\.?|Don|Dña\.?|Mr\.?|Mrs\.?|Ms\.?|Dr\.?|Prof\.?)\s+/i;
 
 function looksLikePersonName(s: string): boolean {
   if (!s || typeof s !== "string") return false;
-  const trimmed = s.trim();
+  let trimmed = s.trim().replace(PERSON_TITLE_PREFIX_RE, "");
   if (COMPANY_SUFFIX_RE.test(trimmed)) return false;
+  // Si contiene caracteres típicos de empresa, descartar.
+  if (/[&@#%]|\d/.test(trimmed)) return false;
   return PERSON_NAME_RE.test(trimmed);
 }
 
@@ -73,7 +78,7 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
     if (!cnc.founder_or_decision_maker) {
       cnc.founder_or_decision_maker = personName;
     }
-    cnc.client_company_name = ctx.companyName || "";
+    cnc.client_company_name = (ctx.companyName && ctx.companyName.trim()) || "[POR CONFIRMAR]";
     changes.push({
       type: "naming_split",
       field: "client_company_name",

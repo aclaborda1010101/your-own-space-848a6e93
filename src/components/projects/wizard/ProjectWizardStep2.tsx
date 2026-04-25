@@ -416,18 +416,31 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtra
               <Sparkles className="w-3.5 h-3.5" /> Limpiar y normalizar
             </Button>
           )}
-          {projectId && editedBriefing && (
-            <ProjectDocumentDownload
-              projectId={projectId}
-              stepNumber={2}
-              content={editedBriefing}
-              contentType="json"
-              projectName={projectName || ""}
-              company={company}
-              version={version}
-              size="sm"
-            />
-          )}
+          {projectId && editedBriefing && (() => {
+            const hasCleanBrief = typeof editedBriefing._clean_brief_md === "string"
+              && editedBriefing._clean_brief_md.trim().length > 200;
+            return (
+              <div className="flex flex-col items-end gap-1">
+                <ProjectDocumentDownload
+                  projectId={projectId}
+                  stepNumber={2}
+                  content={editedBriefing}
+                  contentType="json"
+                  projectName={projectName || ""}
+                  company={company}
+                  version={version}
+                  size="sm"
+                  disabled={!hasCleanBrief}
+                  label={hasCleanBrief ? "PDF Brief Limpio" : "PDF (genera primero)"}
+                />
+                {!hasCleanBrief && (
+                  <span className="text-[10px] text-muted-foreground">
+                    Pulsa "Limpiar y normalizar" antes de exportar
+                  </span>
+                )}
+              </div>
+            );
+          })()}
           <Button size="sm" onClick={handleApprove} className="gap-1.5 shadow-sm">
             <Check className="w-3.5 h-3.5" /> Aprobar briefing
           </Button>

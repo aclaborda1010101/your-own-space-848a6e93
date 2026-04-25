@@ -845,20 +845,25 @@ function applyCanonicalCatalysts(briefing: any, ctx: NormalizationContext, chang
   if (catalysts.length === 0) return;
   if (!Array.isArray(v2.business_catalysts)) v2.business_catalysts = [];
 
-  const existingBlob = v2.business_catalysts
-    .map((c: any) => (typeof c === "string" ? c : `${c?.title || ""} ${c?.description || ""}`))
-    .join(" ")
-    .toLowerCase();
+  const existingTitles = v2.business_catalysts
+    .map((c: any) => (typeof c === "string" ? c : c?.title || ""))
+    .map((s: string) => s.toLowerCase().trim())
+    .filter(Boolean);
 
   const injected: any[] = [];
   for (const cat of catalysts) {
-    const titleLc = (cat.title || "").toLowerCase();
+    const titleLc = (cat.title || "").toLowerCase().trim();
     if (!titleLc) continue;
-    // crude presence check: at least 2 significant tokens of the title appear
-    const tokens = titleLc.split(/\W+/).filter((t) => t.length >= 5);
-    const hits = tokens.filter((t) => existingBlob.includes(t)).length;
-    const present = hits >= 2;
-    if (present) continue;
+    // Inject unless an existing catalyst title is essentially the same.
+    // We compare by significant tokens (≥6 chars) and require ≥4 overlap to count as duplicate.
+    const catTokens = new Set(titleLc.split(/\W+/).filter((t) => t.length >= 6));
+    const isDuplicate = existingTitles.some((existing: string) => {
+      const exTokens = new Set(existing.split(/\W+/).filter((t) => t.length >= 6));
+      let overlap = 0;
+      for (const t of catTokens) if (exTokens.has(t)) overlap++;
+      return overlap >= 4;
+    });
+    if (isDuplicate) continue;
     injected.push({
       title: cat.title,
       description: cat.description || cat.title,

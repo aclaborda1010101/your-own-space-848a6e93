@@ -863,7 +863,226 @@ REGLAS PARA deep_patterns:
       });
     }
 
-    // ── Action: generate_scope (Step 3) ──────────────────────────────────
+    // ── Action: audit_f4a_gaps (Pipeline v2 — F4a, slot step 26) ──────────
+    // Read-only audit. Reads Step 2 + Step 25, emits registry_gap_audit_v1.
+    if (action === "audit_f4a_gaps") {
+      const { runF4aGapAudit } = await import("./f4a-registry-gap-audit.ts");
+
+      // 1. Load latest Step 2 briefing
+      const { data: step2Row } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 2)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+      const briefing = step2Row?.output_data;
+      if (!briefing || typeof briefing !== "object") {
+        return new Response(JSON.stringify({ error: "No Step 2 briefing found. Run extract first." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // 2. Load latest Step 25 registry
+      const { data: step25Row } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 25)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+      const step25Output = step25Row?.output_data;
+      if (!step25Output || typeof step25Output !== "object") {
+        return new Response(JSON.stringify({ error: "No Step 25 registry found. Run build_registry first." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // 3. Project context
+      const { data: projectRow } = await supabase
+        .from("business_projects")
+        .select("name, company")
+        .eq("id", projectId)
+        .single();
+      const ctx = {
+        projectName: stepData?.projectName ?? projectRow?.name ?? undefined,
+        companyName: stepData?.companyName ?? projectRow?.company ?? "Cliente",
+      };
+
+      // 4. Run F4a (Gemini Flash @ 0.2 with deterministic pre-warm)
+      const f4aResult = await runF4aGapAudit(briefing, step25Output, ctx);
+      const auditOutput: Record<string, unknown> = {
+        registry_gap_audit_v1: f4aResult.registry_gap_audit_v1,
+        audit_meta: f4aResult.audit_meta,
+      };
+
+      // 5. Contract validation (Step 26) — hard-block approved_for_scope
+      const validation26 = runAllValidators(26, auditOutput, JSON.stringify(auditOutput));
+      const errors26 = validation26.violations.filter((v) => v.severity === "error");
+      if (errors26.length > 0) {
+        console.error("[F4a] Hard-blocked by validator:", errors26.map((e) => e.detail).join("; "));
+        return new Response(JSON.stringify({
+          error: "F4a output rejected by audit guard",
+          violations: errors26,
+        }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (Object.keys(validation26.flags).length > 0) {
+        auditOutput._contract_validation = validation26.flags;
+      }
+
+      // 6. Persist as step 26 (does NOT touch step 25 / registry)
+      const { data: existing26 } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 26)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const newVersion26 = existing26 ? existing26.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existing26?.id || undefined,
+        project_id: projectId,
+        step_number: 26,
+        step_name: "Pipeline v2 — Registry Gap Audit (F4a)",
+        status: "review",
+        input_data: { source_steps: [2, 25] },
+        output_data: auditOutput,
+        model_used: "gemini-2.5-flash",
+        version: newVersion26,
+        user_id: user.id,
+      });
+
+      return new Response(JSON.stringify({
+        ok: true,
+        version: newVersion26,
+        gaps_count: f4aResult.registry_gap_audit_v1.gaps.length,
+        deterministic_pre_detections: f4aResult.audit_meta.deterministic_pre_detections,
+        llm_added_gaps: f4aResult.audit_meta.llm_added_gaps,
+        llm_rejected_pre_detections: f4aResult.audit_meta.llm_rejected_pre_detections,
+        f4a_ms: f4aResult.audit_meta.f4a_ms,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ── Action: audit_f4b_feasibility (Pipeline v2 — F4b, slot step 27) ───
+    // Read-only audit. Reads Step 25 + Step 26, emits registry_feasibility_audit_v1.
+    if (action === "audit_f4b_feasibility") {
+      const { runF4bFeasibilityAudit } = await import("./f4b-feasibility-audit.ts");
+
+      // 1. Load latest Step 25 registry
+      const { data: step25Row } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 25)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+      const step25Output = step25Row?.output_data;
+      if (!step25Output || typeof step25Output !== "object") {
+        return new Response(JSON.stringify({ error: "No Step 25 registry found. Run build_registry first." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // 2. Load latest Step 26 gap audit
+      const { data: step26Row } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 26)
+        .order("version", { ascending: false })
+        .limit(1)
+        .single();
+      const step26Output = step26Row?.output_data;
+      if (!step26Output || typeof step26Output !== "object") {
+        return new Response(JSON.stringify({ error: "No Step 26 gap audit found. Run audit_f4a_gaps first." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // 3. Project context
+      const { data: projectRow } = await supabase
+        .from("business_projects")
+        .select("name, company")
+        .eq("id", projectId)
+        .single();
+      const ctx = {
+        projectName: stepData?.projectName ?? projectRow?.name ?? undefined,
+        companyName: stepData?.companyName ?? projectRow?.company ?? "Cliente",
+      };
+
+      // 4. Run F4b (Gemini Pro @ 0.1 with deterministic pre-warm — the brake)
+      const f4bResult = await runF4bFeasibilityAudit(step25Output, step26Output, ctx);
+      const auditOutput: Record<string, unknown> = {
+        registry_feasibility_audit_v1: f4bResult.registry_feasibility_audit_v1,
+        audit_meta: f4bResult.audit_meta,
+      };
+
+      // 5. Contract validation (Step 27) — hard-block approved_for_scope
+      const validation27 = runAllValidators(27, auditOutput, JSON.stringify(auditOutput));
+      const errors27 = validation27.violations.filter((v) => v.severity === "error");
+      if (errors27.length > 0) {
+        console.error("[F4b] Hard-blocked by validator:", errors27.map((e) => e.detail).join("; "));
+        return new Response(JSON.stringify({
+          error: "F4b output rejected by audit guard",
+          violations: errors27,
+        }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (Object.keys(validation27.flags).length > 0) {
+        auditOutput._contract_validation = validation27.flags;
+      }
+
+      // 6. Persist as step 27 (does NOT touch step 25 or 26)
+      const { data: existing27 } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 27)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const newVersion27 = existing27 ? existing27.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existing27?.id || undefined,
+        project_id: projectId,
+        step_number: 27,
+        step_name: "Pipeline v2 — Feasibility Audit (F4b)",
+        status: "review",
+        input_data: { source_steps: [25, 26] },
+        output_data: auditOutput,
+        model_used: "gemini-2.5-pro",
+        version: newVersion27,
+        user_id: user.id,
+      });
+
+      return new Response(JSON.stringify({
+        ok: true,
+        version: newVersion27,
+        component_reviews_count: f4bResult.registry_feasibility_audit_v1.component_reviews.length,
+        gap_reviews_count: f4bResult.registry_feasibility_audit_v1.gap_reviews.length,
+        top_project_risks_count: f4bResult.registry_feasibility_audit_v1.top_project_risks.length,
+        recommended_next_step: f4bResult.registry_feasibility_audit_v1.recommended_next_step,
+        recommended_next_step_reason: f4bResult.registry_feasibility_audit_v1.recommended_next_step_reason,
+        deterministic_pre_verdicts: f4bResult.audit_meta.deterministic_pre_verdicts,
+        deterministic_pre_risks: f4bResult.audit_meta.deterministic_pre_risks,
+        llm_added_reviews: f4bResult.audit_meta.llm_added_reviews,
+        llm_rejected_pre_verdicts: f4bResult.audit_meta.llm_rejected_pre_verdicts,
+        llm_added_risks: f4bResult.audit_meta.llm_added_risks,
+        f4b_ms: f4bResult.audit_meta.f4b_ms,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
 
     if (action === "generate_scope") {
       const { briefingJson, contactName, currentDate, attachmentsContent } = stepData;

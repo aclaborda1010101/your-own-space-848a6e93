@@ -533,6 +533,14 @@ export function runAllValidators(
     allViolations.push(...approvalResult.violations);
   }
 
+  // 8. F4a/F4b audit-only guard (steps 26 & 27) — hard-block approved_for_scope
+  //    in any nested field and forbid registry mutation payloads.
+  if ((stepNumber === 26 || stepNumber === 27) && outputData) {
+    const auditResult = validateAuditNoApproval(stepNumber, outputData);
+    Object.assign(allFlags, auditResult.flags);
+    allViolations.push(...auditResult.violations);
+  }
+
   // Add validation metadata
   if (allViolations.length > 0) {
     allFlags.validation_ran = true;
@@ -760,6 +768,95 @@ export function validateRegistryNoApproval(outputData: any): ValidationResult {
 
   if (violations.length > 0) {
     flags.f3_approved_for_scope_violations = violations.length;
+  }
+
+  return {
+    valid: violations.length === 0,
+    violations,
+    flags,
+  };
+}
+
+/**
+ * Steps 26 & 27 — F4a/F4b audit-only guard.
+ * F4a (Step 26) and F4b (Step 27) are READ-ONLY audits. They MUST NOT:
+ *   1. Emit a `component_registry` payload (would imply mutation).
+ *   2. Emit `ai_opportunity_design_v1` (belongs to F2/Step 25).
+ *   3. Mark anything with status === "approved_for_scope" (belongs to F5+).
+ *
+ * Hard-blocked: any of the above produce severity "error" violations and the
+ * caller (index.ts) MUST refuse to persist the output.
+ *
+ * Allowed: narrative mentions of "approved_for_scope" inside `reason` /
+ * `mitigation` text are tolerated. Only structural status fields are blocked.
+ */
+export function validateAuditNoApproval(
+  stepNumber: number,
+  outputData: any,
+): ValidationResult {
+  const violations: ValidationViolation[] = [];
+  const flags: Record<string, any> = {};
+  if (!outputData || typeof outputData !== "object") {
+    return { valid: true, violations, flags };
+  }
+
+  const stepLabel = stepNumber === 26 ? "F4a (Step 26)" : "F4b (Step 27)";
+
+  // 1. Forbid registry mutation payloads at top level.
+  if (outputData.component_registry !== undefined) {
+    violations.push({
+      type: "forbidden_key",
+      severity: "error",
+      detail: `[${stepLabel}_FORBIDDEN_REGISTRY_MUTATION] ${stepLabel} cannot emit \`component_registry\` — it is a read-only audit. Move registry changes to F5.`,
+    });
+  }
+  if (outputData.ai_opportunity_design_v1 !== undefined) {
+    violations.push({
+      type: "forbidden_key",
+      severity: "error",
+      detail: `[${stepLabel}_FORBIDDEN_DESIGN_MUTATION] ${stepLabel} cannot emit \`ai_opportunity_design_v1\` — that belongs to F2/Step 25.`,
+    });
+  }
+
+  // 2. Inspect structural status fields for "approved_for_scope".
+  const checkApprovedField = (path: string, value: unknown) => {
+    if (typeof value === "string" && value.trim().toLowerCase() === "approved_for_scope") {
+      violations.push({
+        type: "forbidden_key",
+        severity: "error",
+        detail: `[${stepLabel}_APPROVED_FOR_SCOPE_FORBIDDEN] ${stepLabel} cannot use status "approved_for_scope" at ${path}. Approval belongs to F5+ scope architect.`,
+      });
+    }
+  };
+
+  // 2a. F4a — registry_gap_audit_v1.gaps[].suggested_component_candidate
+  if (stepNumber === 26) {
+    const gaps = outputData?.registry_gap_audit_v1?.gaps;
+    if (Array.isArray(gaps)) {
+      gaps.forEach((g: any, i: number) => {
+        const cand = g?.suggested_component_candidate;
+        if (cand && typeof cand === "object") {
+          checkApprovedField(`gaps[${i}].suggested_component_candidate.priority`, cand.priority);
+          checkApprovedField(`gaps[${i}].suggested_component_candidate.status`, (cand as any).status);
+        }
+      });
+    }
+  }
+
+  // 2b. F4b — registry_feasibility_audit_v1.component_reviews[]
+  if (stepNumber === 27) {
+    const reviews = outputData?.registry_feasibility_audit_v1?.component_reviews;
+    if (Array.isArray(reviews)) {
+      reviews.forEach((r: any, i: number) => {
+        checkApprovedField(`component_reviews[${i}].recommended_status`, r?.recommended_status);
+        checkApprovedField(`component_reviews[${i}].current_status`, r?.current_status);
+        checkApprovedField(`component_reviews[${i}].feasibility_verdict`, r?.feasibility_verdict);
+      });
+    }
+  }
+
+  if (violations.length > 0) {
+    flags[`${stepNumber === 26 ? "f4a" : "f4b"}_audit_violations`] = violations.length;
   }
 
   return {

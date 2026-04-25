@@ -319,12 +319,22 @@ export const useProjectWizard = (projectId?: string) => {
 
   const runExtraction = async (
     overrideInput?: string,
-    options?: { skipSampler?: boolean },
+    options?: {
+      skipSampler?: boolean;
+      forceRefresh?: boolean;
+      chunkedExtraction?: boolean;
+    },
   ) => {
     if (!project || !projectId) return;
     const inputContent = overrideInput ?? project.inputContent;
     setGenerating(true);
-    const toastId = toast.loading("Re-extrayendo briefing…");
+    const isChunked = options?.chunkedExtraction === true
+      || (inputContent || "").length > 90_000;
+    const toastId = toast.loading(
+      isChunked
+        ? "Extracción por bloques en curso (puede tardar 1-3 min)…"
+        : "Re-extrayendo briefing…",
+    );
     try {
       await clearSubsequentSteps(2);
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
@@ -339,13 +349,19 @@ export const useProjectWizard = (projectId?: string) => {
             inputContent,
             inputType: project.inputType,
             skipSampler: options?.skipSampler === true,
+            forceRefresh: options?.forceRefresh === true,
+            chunkedExtraction: options?.chunkedExtraction === true,
           },
         },
       });
 
       if (error) throw error;
       toast.dismiss(toastId);
-      toast.success("Briefing extraído correctamente");
+      toast.success(
+        isChunked
+          ? "Briefing extraído por bloques (extracción completa)"
+          : "Briefing extraído correctamente",
+      );
       await loadProject();
       return data;
     } catch (e: any) {

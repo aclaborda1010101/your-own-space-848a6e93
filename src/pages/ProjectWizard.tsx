@@ -83,7 +83,19 @@ const ProjectWizardEdit = () => {
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState("");
   const [forgeOpen, setForgeOpen] = useState(false);
+  const [autoChainEnabled, setAutoChainEnabled] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const v = window.localStorage.getItem(`wizard-autochain-${id}`);
+    return v === null ? true : v === "1";
+  });
   const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const toggleAutoChain = (next: boolean) => {
+    setAutoChainEnabled(next);
+    if (typeof window !== "undefined" && id) {
+      window.localStorage.setItem(`wizard-autochain-${id}`, next ? "1" : "0");
+    }
+  };
 
   if (loading) {
     return (

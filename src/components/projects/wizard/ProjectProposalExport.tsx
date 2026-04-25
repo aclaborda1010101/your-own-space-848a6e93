@@ -1,17 +1,15 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { FileText, Loader2, Download, FileDown, FileText as FileScope } from "lucide-react";
+import { FileText, Loader2, Download, Sparkles, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { validateBudgetForClientProposal } from "@/lib/budgetToCommercialTerms";
 
-interface StepData {
-  stepNumber: number;
-  outputData: any;
-  status: string;
+interface ProposalData {
+  proposalMarkdown?: string;
+  client_proposal_v1?: any;
+  proposal_meta?: any;
   version?: number;
 }
 
@@ -19,305 +17,77 @@ interface ProjectProposalExportProps {
   projectId: string;
   projectName: string;
   company: string;
-  steps: StepData[];
-  budgetData: any;
+  budgetStatus: "pending" | "generated" | "editing" | "approved";
+  proposalData: ProposalData | null;
+  proposalGenerating: boolean;
+  onGenerate: () => Promise<any>;
 }
 
-// ══════════════════════════════════════════════════════════════
-// PRD simplification — strip ALL technical content for client
-// ══════════════════════════════════════════════════════════════
-
-function simplifyPrd(prdMarkdown: string): string {
-  if (!prdMarkdown) return "";
-
-  // 1. Strip [[INTERNAL_ONLY]]...[[/INTERNAL_ONLY]] blocks first
-  let text = prdMarkdown.replace(
-    /\[\[INTERNAL_ONLY\]\][\s\S]*?\[\[\/INTERNAL_ONLY\]\]/g,
-    ""
-  );
-
-  // 2. Strip [HIPÓTESIS] / [HIPOTESIS] tags
-  text = text.replace(/\[HIP[OÓ]TESIS\]/gi, "");
-
-  // 3. Strip [[PENDING:*]] and [[NEEDS_CLARIFICATION:*]] tags
-  text = text.replace(/\[\[PENDING:[^\]]*\]\]/g, "________________");
-  text = text.replace(/\[\[NEEDS_CLARIFICATION:[^\]]*\]\]/g, "[Por confirmar]");
-  text = text.replace(/\[\[NO_APLICA:[^\]]*\]\]/g, "");
-
-  // 4. Remove ALL code blocks (```anything ... ```)
-  text = text.replace(/```[\s\S]*?```/g, "");
-
-  // 5. Remove all mentions of "Lovable"
-  text = text.replace(/\bLovable[\s.-]*(?:dev|ready|Build|Blueprint)?\b/gi, "");
-  text = text.replace(/copy[\s-]*paste\s+en\s+Lovable/gi, "");
-
-  // 6. Split by headings and filter technical sections
-  const lines = text.split("\n");
-  const result: string[] = [];
-  let skip = false;
-
-  const skipPatterns = [
-    /SQL/i, /Edge\s*Function/i, /migration/i, /Blueprint/i,
-    /Esquema\s*SQL/i, /CREATE\s*TABLE/i, /cadencia/i, /cron/i,
-    /Low[\s-]*Level/i, /Checklist\s*P[012]/i,
-    /RLS/i, /Row[\s.-]*Level[\s.-]*Security/i,
-    /hook/i, /useState|useEffect/i,
-    /PostgreSQL/i, /trigger\b/i, /\bschema\b/i,
-    /Mermaid/i, /Deno/i, /TypeScript/i,
-    /catálogo.*variables/i, /interface\s+\w+/i,
-    /API\s*endpoint/i, /Supabase/i,
-    /LOVABLE/i, /Blueprint\s*Lovable/i,
-    /Signal\s*Object/i, /Processing\s*Cloud/i,
-  ];
-
-  for (const line of lines) {
-    const isHeading = /^#{1,3}\s/.test(line);
-    if (isHeading) {
-      skip = skipPatterns.some((p) => p.test(line));
-    }
-    if (!skip) {
-      result.push(line);
-    } else if (isHeading && !skipPatterns.some((p) => p.test(line))) {
-      skip = false;
-      result.push(line);
-    }
-  }
-
-  return result.join("\n");
-}
-
-// ══════════════════════════════════════════════════════════════
-// Sanitize aiOpportunities — remove internal metadata
-// ══════════════════════════════════════════════════════════════
-
-function sanitizeAiOpportunities(data: any): any {
-  if (!data || typeof data !== "object") return data;
-
-  // Remove top-level internal keys
-  const internalKeys = new Set([
-    "parse_error", "raw_response", "raw_text", "_score",
-    "_internal", "_debug", "_meta", "_tokens",
-  ]);
-
-  const cleaned: any = {};
-  for (const [key, value] of Object.entries(data)) {
-    if (key.startsWith("_") || internalKeys.has(key)) continue;
-    cleaned[key] = value;
-  }
-
-  // If it has opportunities array, clean each item too
-  if (Array.isArray(cleaned.opportunities)) {
-    cleaned.opportunities = cleaned.opportunities.map((opp: any) => {
-      const cleanOpp: any = {};
-      for (const [k, v] of Object.entries(opp)) {
-        if (!k.startsWith("_") && !internalKeys.has(k)) {
-          cleanOpp[k] = v;
-        }
-      }
-      return cleanOpp;
-    });
-  }
-
-  return cleaned;
-}
-
-// ══════════════════════════════════════════════════════════════
-// Sanitize budget — remove internal pricing fields
-// ══════════════════════════════════════════════════════════════
-
-function sanitizeBudgetForClient(
-  budgetData: any,
-  selectedModels: number[]
-): any {
-  const models = budgetData?.monetization_models || [];
-
-  const filteredModels = models
-    .filter((_: any, i: number) => selectedModels.includes(i))
-    .map((m: any) => {
-      const { your_margin_pct, _score, ...rest } = m;
-      return rest;
-    });
-
-  // Strip ALL internal fields from development
-  const {
-    your_cost_eur,
-    margin_pct,
-    hourly_rate_eur,
-    total_hours,
-    ...devRest
-  } = budgetData.development || {};
-
-  return {
-    development: devRest,
-    recurring_monthly: budgetData.recurring_monthly,
-    monetization_models: filteredModels,
-    recommended_model: budgetData.recommended_model,
-  };
-}
-
+/**
+ * F7 Client Proposal — único entregable de cliente.
+ *
+ * - Llama a `project-wizard-step` con action `generate_client_proposal`.
+ * - El backend deriva la propuesta desde Step 28 (scope) + commercial_terms_v1
+ *   (que viene desde el frontend, derivado de budgetData).
+ * - El PDF se renderiza pasando `proposal_markdown` (ya limpio) a la edge
+ *   function `generate-document`. No usa los sanitizadores legacy 100/101/102.
+ */
 export const ProjectProposalExport = ({
   projectId,
   projectName,
   company,
-  steps,
-  budgetData,
+  budgetStatus,
+  proposalData,
+  proposalGenerating,
+  onGenerate,
 }: ProjectProposalExportProps) => {
-  const [generating, setGenerating] = useState(false);
-  const [generatingSimple, setGeneratingSimple] = useState(false);
-  const [generatingScope, setGeneratingScope] = useState(false);
-  const [selectedModels, setSelectedModels] = useState<number[]>(
-    budgetData?.monetization_models?.map((_: any, i: number) => i) || []
-  );
+  const [downloading, setDownloading] = useState(false);
 
-  const models = budgetData?.monetization_models || [];
+  const canGenerate = budgetStatus === "approved";
+  const hasProposal = !!proposalData?.proposalMarkdown;
+  const jargonWarnings: string[] =
+    proposalData?.proposal_meta?.internal_jargon_warnings || [];
 
-  const toggleModel = (idx: number) => {
-    setSelectedModels((prev) =>
-      prev.includes(idx) ? prev.filter((i) => i !== idx) : [...prev, idx]
-    );
-  };
-
-  const buildPayload = (stepNumber: number) => {
-    const step2 = steps.find((s) => s.stepNumber === 2);
-    const step3 = steps.find((s) => s.stepNumber === 3);
-    const step4 = steps.find((s) => s.stepNumber === 4);
-    const step5 = steps.find((s) => s.stepNumber === 5);
-
-    const scope =
-      step3?.outputData?.document ||
-      (typeof step3?.outputData === "string" ? step3.outputData : "");
-
-    const aiOpportunities = sanitizeAiOpportunities(step4?.outputData || null);
-
-    const prdRaw =
-      step5?.outputData?.document ||
-      (typeof step5?.outputData === "string" ? step5.outputData : "");
-    const techSummary = simplifyPrd(prdRaw);
-
-    // Briefing: "fotografía inicial" del cliente (paso 2)
-    // Enviamos el output crudo (sin simplificar) — el backend lo resume y limpia.
-    const briefing = step2?.outputData || null;
-
-    // PRD completo en crudo para step 102 (pipeline 3 pasadas).
-    // Lo necesitamos sin simplificar porque la pasada A debe ver TODO el detalle funcional.
-    const prdFullRaw = stepNumber === 102 ? prdRaw : undefined;
-
-    const budget = sanitizeBudgetForClient(budgetData, selectedModels);
-
-    return {
-      projectId,
-      stepNumber,
-      content: {
-        scope,
-        // Pass aiOpportunities to both step 100 (full) and step 102 (scope doc)
-        aiOpportunities: stepNumber === 100 || stepNumber === 102 ? aiOpportunities : undefined,
-        techSummary,
-        // Briefing y PRD crudo solo se usan en step 102 (Documento de Alcance)
-        briefing: stepNumber === 102 ? briefing : undefined,
-        prdFullRaw,
-        budget,
-      },
-      contentType: "json",
-      projectName: projectName || "Proyecto",
-      company,
-      date: new Date().toISOString().split("T")[0],
-      version: "v1",
-      exportMode: "client",
-    };
-  };
-
-  const downloadFile = async (data: any, defaultName: string) => {
-    if (!data?.url) throw new Error("No download URL returned");
-    const response = await fetch(data.url);
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = data.fileName || defaultName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
-  };
-
-  const handleGenerate = async () => {
-    const budgetError = validateBudgetForClientProposal(budgetData);
-    if (budgetError) { toast.error(budgetError); return; }
-    if (selectedModels.length === 0) {
-      toast.error("Selecciona al menos un modelo de monetización");
+  const handleDownloadPdf = async () => {
+    if (!proposalData?.proposalMarkdown) {
+      toast.error("Genera la propuesta antes de descargar el PDF");
       return;
     }
-    setGenerating(true);
+    setDownloading(true);
     try {
-      const payload = buildPayload(100);
-      const { data, error } = await supabase.functions.invoke(
-        "generate-document",
-        { body: payload }
-      );
+      // Renderizamos el markdown YA LIMPIO por F7. generate-document solo
+      // actúa como renderizador PDF — sin sanitizadores legacy de propuesta.
+      const { data, error } = await supabase.functions.invoke("generate-document", {
+        body: {
+          projectId,
+          stepNumber: 30,
+          content: proposalData.proposalMarkdown,
+          contentType: "markdown",
+          projectName: projectName || "Proyecto",
+          company,
+          date: new Date().toISOString().split("T")[0],
+          version: `v${proposalData.version || 1}`,
+          exportMode: "client",
+        },
+      });
       if (error) throw error;
-      await downloadFile(data, `propuesta-${projectName || "proyecto"}.pdf`);
-      toast.success("Propuesta completa descargada");
+      if (!data?.url) throw new Error("No download URL returned");
+      const response = await fetch(data.url);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = data.fileName || `propuesta-${projectName || "proyecto"}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      toast.success("Propuesta cliente descargada");
     } catch (err: any) {
-      console.error("Proposal export error:", err);
-      toast.error(
-        "Error al generar propuesta: " + (err.message || "Error desconocido")
-      );
+      console.error("Proposal PDF download error:", err);
+      toast.error("Error al generar PDF: " + (err.message || "Error desconocido"));
     } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleGenerateSimple = async () => {
-    const budgetError = validateBudgetForClientProposal(budgetData);
-    if (budgetError) { toast.error(budgetError); return; }
-    if (selectedModels.length === 0) {
-      toast.error("Selecciona al menos un modelo de monetización");
-      return;
-    }
-    setGeneratingSimple(true);
-    try {
-      const payload = buildPayload(101);
-      const { data, error } = await supabase.functions.invoke(
-        "generate-document",
-        { body: payload }
-      );
-      if (error) throw error;
-      await downloadFile(data, `propuesta-comercial-${projectName || "proyecto"}.pdf`);
-      toast.success("Propuesta comercial descargada");
-    } catch (err: any) {
-      console.error("Commercial proposal export error:", err);
-      toast.error(
-        "Error al generar propuesta: " + (err.message || "Error desconocido")
-      );
-    } finally {
-      setGeneratingSimple(false);
-    }
-  };
-
-  const handleGenerateScope = async () => {
-    const budgetError = validateBudgetForClientProposal(budgetData);
-    if (budgetError) { toast.error(budgetError); return; }
-    if (selectedModels.length === 0) {
-      toast.error("Selecciona al menos un modelo de monetización");
-      return;
-    }
-    setGeneratingScope(true);
-    try {
-      const payload = buildPayload(102);
-      const { data, error } = await supabase.functions.invoke(
-        "generate-document",
-        { body: payload }
-      );
-      if (error) throw error;
-      await downloadFile(data, `documento-alcance-${projectName || "proyecto"}.pdf`);
-      toast.success("Documento de alcance descargado");
-    } catch (err: any) {
-      console.error("Scope document export error:", err);
-      toast.error(
-        "Error al generar documento: " + (err.message || "Error desconocido")
-      );
-    } finally {
-      setGeneratingScope(false);
+      setDownloading(false);
     }
   };
 
@@ -332,104 +102,89 @@ export const ProjectProposalExport = ({
           variant="outline"
           className="text-[10px] px-2 py-0 border-primary/30 text-primary bg-primary/5"
         >
-          DOCUMENTO UNIFICADO
+          F7 · DOCUMENTO ÚNICO
         </Badge>
       }
     >
       <div className="p-4 space-y-4">
         <p className="text-xs text-muted-foreground">
-          Genera documentos PDF profesionales para enviar al cliente: el <strong>Documento de Alcance</strong> (≤15 págs)
-          incluye la fotografía inicial del cliente, cómo lo vamos a resolver, áreas de trabajo con tareas
-          clasificadas por complejidad, consumos mensuales estimados de IA, planificación temporal e inversión.
-          La <strong>Propuesta Comercial</strong> es una versión más breve (≤10 págs) y la <strong>Propuesta
-          Completa</strong> incluye toda la información técnica.
+          Único entregable comercial. Se genera de forma determinista a partir
+          del alcance aprobado y de las condiciones comerciales derivadas del
+          presupuesto. No incluye margen, coste interno ni jerga técnica.
         </p>
 
-        {models.length > 0 && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-semibold text-foreground">
-              Modelos de monetización a incluir
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {models.map((m: any, i: number) => (
-                <label
-                  key={i}
-                  className={`flex items-center gap-3 p-2.5 rounded-lg border cursor-pointer transition-all text-sm ${
-                    selectedModels.includes(i)
-                      ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20"
-                      : "border-border/50 hover:border-border"
-                  }`}
-                >
-                  <Checkbox
-                    checked={selectedModels.includes(i)}
-                    onCheckedChange={() => toggleModel(i)}
-                    className="shrink-0"
-                  />
-                  <span className="text-foreground font-medium">{m.name}</span>
-                </label>
-              ))}
+        {!canGenerate && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-foreground/80">
+              {budgetStatus === "editing"
+                ? "Has editado el presupuesto. Apruébalo de nuevo para habilitar la propuesta."
+                : budgetStatus === "generated"
+                ? "Aprueba el presupuesto en el Paso 4 para poder generar la propuesta cliente."
+                : "Genera y aprueba el presupuesto antes de generar la propuesta cliente."}
             </div>
           </div>
         )}
 
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <Button
-            onClick={handleGenerateScope}
-            disabled={generatingScope || selectedModels.length === 0}
-            className="gap-2 w-full"
+            onClick={() => onGenerate()}
+            disabled={!canGenerate || proposalGenerating}
+            className="gap-2 flex-1"
           >
-            {generatingScope ? (
+            {proposalGenerating ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Generando documento de alcance...
+                Generando propuesta...
               </>
             ) : (
               <>
-                <FileScope className="w-4 h-4" />
-                Documento de Alcance (≤15 págs) — Recomendado
+                <Sparkles className="w-4 h-4" />
+                {hasProposal ? "Regenerar propuesta cliente" : "Generar propuesta cliente"}
               </>
             )}
           </Button>
 
-        <div className="flex flex-col sm:flex-row gap-2">
           <Button
-            onClick={handleGenerateSimple}
-            disabled={generatingSimple || selectedModels.length === 0}
+            onClick={handleDownloadPdf}
+            disabled={!hasProposal || downloading}
             variant="outline"
             className="gap-2 flex-1"
           >
-            {generatingSimple ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generando propuesta...
-              </>
+            {downloading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <>
-                <FileDown className="w-4 h-4" />
-                Propuesta Comercial (máx 10 págs)
-              </>
+              <Download className="w-4 h-4" />
             )}
+            {downloading ? "Generando PDF..." : "Descargar propuesta cliente PDF"}
           </Button>
+        </div>
 
-          <Button
-            onClick={handleGenerate}
-            disabled={generating || selectedModels.length === 0}
-            className="gap-2 flex-1"
-          >
-            {generating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generando propuesta...
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4" />
-                Propuesta Completa
-              </>
+        {hasProposal && (
+          <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-1.5">
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-muted-foreground">
+                Versión <strong className="text-foreground">v{proposalData?.version}</strong>
+                {proposalData?.proposal_meta?.mvp_count != null && (
+                  <> · MVP: <strong className="text-foreground">{proposalData.proposal_meta.mvp_count}</strong></>
+                )}
+                {proposalData?.proposal_meta?.fast_follow_count != null && (
+                  <> · Fast-follow: <strong className="text-foreground">{proposalData.proposal_meta.fast_follow_count}</strong></>
+                )}
+              </span>
+              {proposalData?.proposal_meta?.soul_required && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                  Soul sessions
+                </Badge>
+              )}
+            </div>
+            {jargonWarnings.length > 0 && (
+              <p className="text-[11px] text-amber-600">
+                ⚠️ Posible jerga interna detectada: {jargonWarnings.slice(0, 3).join(", ")}
+              </p>
             )}
-          </Button>
-        </div>
-        </div>
+          </div>
+        )}
       </div>
     </CollapsibleCard>
   );

@@ -5,9 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { Calculator, Loader2, TrendingUp, Server, Package, Star, AlertTriangle, Pencil, Save, X, Download, FileText, Users, Lock } from "lucide-react";
+import { Calculator, Loader2, TrendingUp, Server, Package, Star, AlertTriangle, Pencil, Save, X, Download, FileText, Users, Lock, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { budgetToCommercialTermsV1 } from "@/lib/budgetToCommercialTerms";
 
 const MONETIZATION_OPTIONS = [
   { id: "saas_subscription", label: "SaaS (suscripción mensual)", description: "Cobro recurrente mensual/anual al cliente por uso de la plataforma." },
@@ -60,6 +61,7 @@ interface BudgetData {
     pros: string[];
     cons: string[];
     best_for?: string;
+    visible_to_client?: boolean;
   }>;
   pricing_notes?: string;
   risk_factors?: string[];
@@ -91,6 +93,9 @@ export const ProjectBudgetPanel = ({
   const [selectedExportModels, setSelectedExportModels] = useState<number[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [budgetExportMode, setBudgetExportMode] = useState<'internal' | 'client'>('client');
+  // Vista global del panel: cliente oculta márgenes, costes internos, horas
+  const [viewMode, setViewMode] = useState<'internal' | 'client'>('internal');
+  const isClientView = viewMode === 'client';
 
   useEffect(() => {
     if (budgetData) {
@@ -192,6 +197,19 @@ export const ProjectBudgetPanel = ({
   const handleSave = () => {
     if (!editData) return;
     onBudgetUpdate?.(editData);
+    // Derivar commercial_terms_v1 y persistir en localStorage para que el
+    // pipeline técnico (F7) pueda leerlo sin tocar el schema actual.
+    try {
+      const derived = budgetToCommercialTermsV1(editData);
+      if (derived) {
+        localStorage.setItem(
+          `commercial_terms_v1:${projectId}`,
+          JSON.stringify(derived)
+        );
+      }
+    } catch (e) {
+      console.warn("[ProjectBudgetPanel] failed to derive commercial_terms_v1", e);
+    }
     setEditing(false);
   };
 
@@ -267,16 +285,46 @@ export const ProjectBudgetPanel = ({
   return (
     <CollapsibleCard
       id="budget-internal"
-      title="Estimación de Presupuesto"
+      title="Paso 4 · Presupuesto y condiciones"
       icon={<Calculator className="w-4 h-4 text-primary" />}
-      defaultOpen={false}
+      defaultOpen={true}
       badge={
-        <Badge variant="outline" className="text-[10px] px-2 py-0 border-amber-500/30 text-amber-600 bg-amber-500/5">
-          USO INTERNO
+        <Badge variant="outline" className="text-[10px] px-2 py-0 border-primary/30 text-primary bg-primary/5">
+          {isClientView ? "VISTA CLIENTE" : "VISTA INTERNA"}
         </Badge>
       }
     >
       <div className="p-4 space-y-4">
+        {/* View mode toggle (global) */}
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-border/50">
+          <p className="text-xs text-muted-foreground">
+            Cambia entre lo que ves tú y lo que verá el cliente.
+          </p>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => setViewMode('internal')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium transition-all ${
+                viewMode === 'internal'
+                  ? "border-amber-500/40 bg-amber-500/5 ring-1 ring-amber-500/20 text-foreground"
+                  : "border-border/50 text-muted-foreground hover:border-border"
+              }`}
+            >
+              <EyeOff className="w-3 h-3" /> Vista interna
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('client')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium transition-all ${
+                viewMode === 'client'
+                  ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20 text-foreground"
+                  : "border-border/50 text-muted-foreground hover:border-border"
+              }`}
+            >
+              <Eye className="w-3 h-3" /> Vista cliente
+            </button>
+          </div>
+        </div>
         {/* Monetization model selector */}
         <div className="space-y-3">
           <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
@@ -406,7 +454,8 @@ export const ProjectBudgetPanel = ({
                       </div>
                     ))}
 
-                    {/* Hourly rate */}
+                    {/* Hourly rate — internal only */}
+                    {!isClientView && (
                     <div className="border-t border-border/50 pt-2 flex items-center justify-between text-xs text-muted-foreground">
                       <span>Tarifa por hora</span>
                       {editing ? (
@@ -425,12 +474,13 @@ export const ProjectBudgetPanel = ({
                         <span>€{displayData.development.hourly_rate_eur ?? 0}/h · {displayData.development.total_hours ?? 0}h totales</span>
                       )}
                     </div>
+                    )}
 
                     <div className="border-t border-border/50 pt-2 flex justify-between text-sm font-semibold">
                       <span>Total desarrollo</span>
                       <span className="text-primary">€{(displayData.development.total_development_eur ?? 0).toLocaleString()}</span>
                     </div>
-                    {displayData.development.your_cost_eur != null && (
+                    {!isClientView && displayData.development.your_cost_eur != null && (
                       <div className="flex justify-between text-xs text-muted-foreground">
                         <span>Tu coste real</span>
                         <span>€{displayData.development.your_cost_eur.toLocaleString()} ({displayData.development.margin_pct ?? 0}% margen)</span>
@@ -542,6 +592,22 @@ export const ProjectBudgetPanel = ({
                               </div>
                               <p className="text-xs text-muted-foreground mt-0.5">{model.description}</p>
                             </div>
+                            {!isClientView && (
+                              <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer shrink-0">
+                                <Checkbox
+                                  checked={model.visible_to_client ?? isRecommended}
+                                  onCheckedChange={(checked) => {
+                                    if (!editData) return;
+                                    const models = [...editData.monetization_models];
+                                    models[i] = { ...models[i], visible_to_client: checked === true };
+                                    setEditData({ ...editData, monetization_models: models });
+                                    onBudgetUpdate?.({ ...editData, monetization_models: models });
+                                  }}
+                                  className="h-3 w-3"
+                                />
+                                <Users className="w-3 h-3" /> Mostrar al cliente
+                              </label>
+                            )}
                           </div>
                           <div className="flex flex-wrap gap-3 text-xs">
                             {(model.setup_price_eur || editing) && (
@@ -613,7 +679,7 @@ export const ProjectBudgetPanel = ({
                                 )}
                               </div>
                             )}
-                            {(model.your_margin_pct != null || editing) && (
+                            {!isClientView && (model.your_margin_pct != null || editing) && (
                               <div className="flex items-center gap-1">
                                 <span className="text-muted-foreground">Margen:</span>
                                 {editing ? (

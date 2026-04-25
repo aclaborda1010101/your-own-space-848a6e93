@@ -342,78 +342,7 @@ const ProjectWizardEdit = () => {
       </CollapsibleCard>
 
 
-      {/* Publish to Expert Forge — after PRD (step 3) approved */}
-      {steps.find(s => s.stepNumber === 3)?.status === "approved" && (() => {
-        const step3Out = steps.find(s => s.stepNumber === 3)?.outputData;
-        
-        // Robust PRD extraction with fallback chain
-        let fullPrdText = "";
-        let manifestData: Record<string, unknown> | null = null;
-        if (step3Out) {
-          if (typeof step3Out === "string") {
-            try {
-              const parsed = JSON.parse(step3Out);
-              fullPrdText = parsed.document || parsed.content || parsed.text || step3Out;
-              if (parsed.architecture_manifest) manifestData = parsed.architecture_manifest;
-            } catch {
-              fullPrdText = step3Out;
-            }
-          } else if (typeof step3Out === "object") {
-            fullPrdText = step3Out.document || step3Out.content || step3Out.text || "";
-            if (typeof fullPrdText === "object") {
-              fullPrdText = JSON.stringify(fullPrdText);
-            }
-            if (!fullPrdText || fullPrdText.length < 100) {
-              fullPrdText = JSON.stringify(step3Out);
-            }
-            if (step3Out.architecture_manifest) {
-              manifestData = step3Out.architecture_manifest as Record<string, unknown>;
-            }
-          }
-        }
-
-        console.log(`[ProjectWizard] PRD text length for Expert Forge: ${fullPrdText.length} chars, manifest: ${manifestData ? 'yes' : 'no'}`);
-
-        const prdTooShort = fullPrdText.length < 1000;
-
-        return (
-          <>
-            <div className="flex justify-end items-center gap-2">
-              {prdTooShort && (
-                <span className="text-xs text-destructive">⚠️ PRD muy corto ({fullPrdText.length} chars)</span>
-              )}
-              <span className="text-xs text-muted-foreground">{fullPrdText.length.toLocaleString()} chars</span>
-              {manifestData && (
-                <span className="text-xs text-primary">📋 Manifest incluido</span>
-              )}
-              <Button variant="outline" className="gap-2" onClick={() => {
-                if (prdTooShort) {
-                  toast.error("El PRD está vacío o incompleto. Regenera el Paso 3.");
-                  return;
-                }
-                setForgeOpen(true);
-              }}>
-                <Rocket className="h-4 w-4" />
-                Publicar en Expert Forge
-              </Button>
-            </div>
-            {manifestData && (
-              <ManifestViewer manifest={manifestData} />
-            )}
-            <PublishToForgeDialog
-              open={forgeOpen}
-              onOpenChange={setForgeOpen}
-              projectId={id!}
-              projectName={project.name}
-              projectDescription={project.company || ""}
-              prdText={fullPrdText}
-              architectureManifest={manifestData}
-            />
-          </>
-        );
-      })()}
-
-      {/* Budget panel — internal, only after step 3 (PRD) approved */}
+      {/* Paso 4 — Budget panel — only after step 3 (PRD) approved */}
       {steps.find(s => s.stepNumber === 3)?.status === "approved" && (
         <ProjectBudgetPanel
           projectId={id!}
@@ -426,7 +355,7 @@ const ProjectWizardEdit = () => {
         />
       )}
 
-      {/* Unified client proposal — after budget exists */}
+      {/* Paso 5 — Unified client proposal — after budget exists */}
       {budgetData && steps.find(s => s.stepNumber === 3)?.status === "approved" && (
         <ProjectProposalExport
           projectId={id!}
@@ -442,22 +371,85 @@ const ProjectWizardEdit = () => {
         />
       )}
 
+      {/* Avanzado / Interno — colapsado por defecto */}
+      <CollapsibleCard
+        id={`advanced-internal-${id}`}
+        title="Avanzado / Interno"
+        icon={<Briefcase className="w-4 h-4 text-muted-foreground" />}
+        defaultOpen={false}
+        badge={
+          <Badge variant="outline" className="text-[10px] px-2 py-0 border-amber-500/30 text-amber-600 bg-amber-500/5">
+            USO INTERNO
+          </Badge>
+        }
+      >
+        <div className="p-4 space-y-4">
+          {steps.find(s => s.stepNumber === 3)?.status === "approved" && (() => {
+            const step3Out = steps.find(s => s.stepNumber === 3)?.outputData;
+            let fullPrdText = "";
+            let manifestData: Record<string, unknown> | null = null;
+            if (step3Out) {
+              if (typeof step3Out === "string") {
+                try {
+                  const parsed = JSON.parse(step3Out);
+                  fullPrdText = parsed.document || parsed.content || parsed.text || step3Out;
+                  if (parsed.architecture_manifest) manifestData = parsed.architecture_manifest;
+                } catch {
+                  fullPrdText = step3Out;
+                }
+              } else if (typeof step3Out === "object") {
+                fullPrdText = step3Out.document || step3Out.content || step3Out.text || "";
+                if (typeof fullPrdText === "object") fullPrdText = JSON.stringify(fullPrdText);
+                if (!fullPrdText || fullPrdText.length < 100) fullPrdText = JSON.stringify(step3Out);
+                if (step3Out.architecture_manifest) manifestData = step3Out.architecture_manifest as Record<string, unknown>;
+              }
+            }
+            const prdTooShort = fullPrdText.length < 1000;
+            return (
+              <>
+                <div className="flex justify-end items-center gap-2">
+                  {prdTooShort && (
+                    <span className="text-xs text-destructive">⚠️ PRD muy corto ({fullPrdText.length} chars)</span>
+                  )}
+                  <span className="text-xs text-muted-foreground">{fullPrdText.length.toLocaleString()} chars</span>
+                  {manifestData && <span className="text-xs text-primary">📋 Manifest incluido</span>}
+                  <Button variant="outline" className="gap-2" onClick={() => {
+                    if (prdTooShort) { toast.error("El PRD está vacío o incompleto. Regenera el Paso 3."); return; }
+                    setForgeOpen(true);
+                  }}>
+                    <Rocket className="h-4 w-4" />
+                    Publicar en Expert Forge
+                  </Button>
+                </div>
+                {manifestData && <ManifestViewer manifest={manifestData} />}
+                <PublishToForgeDialog
+                  open={forgeOpen}
+                  onOpenChange={setForgeOpen}
+                  projectId={id!}
+                  projectName={project.name}
+                  projectDescription={project.company || ""}
+                  prdText={fullPrdText}
+                  architectureManifest={manifestData}
+                />
+              </>
+            );
+          })()}
 
-      {/* Documents panel */}
-      <ProjectDocumentsPanel
-        projectId={id!}
-        projectName={project.name}
-        company={project.company}
-        steps={steps.map(s => ({
-          stepNumber: s.stepNumber,
-          outputData: s.outputData,
-          status: s.status,
-          version: s.version || 1,
-        }))}
-      />
+          <ProjectDocumentsPanel
+            projectId={id!}
+            projectName={project.name}
+            company={project.company}
+            steps={steps.map(s => ({
+              stepNumber: s.stepNumber,
+              outputData: s.outputData,
+              status: s.status,
+              version: s.version || 1,
+            }))}
+          />
 
-      {/* Activity timeline — last */}
-      <ProjectActivityTimeline projectId={id!} />
+          <ProjectActivityTimeline projectId={id!} />
+        </div>
+      </CollapsibleCard>
     </main>
   );
 };

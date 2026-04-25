@@ -169,6 +169,7 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, normali
   const [showOriginal, setShowOriginal] = useState(false);
   const [attachments, setAttachments] = useState<AttachmentMeta[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [approving, setApproving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -253,8 +254,14 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, normali
     toast.success("Archivo eliminado");
   };
 
-  const handleApprove = () => {
-    onApprove({ ...editedBriefing, attachments });
+  const handleApprove = async () => {
+    if (approving) return;
+    setApproving(true);
+    try {
+      await Promise.resolve(onApprove({ ...editedBriefing, attachments }));
+    } finally {
+      setApproving(false);
+    }
   };
 
   const updateField = (key: string, value: any) => {
@@ -472,8 +479,9 @@ export const ProjectWizardStep2 = ({ inputContent, briefing, generating, normali
               </div>
             );
           })()}
-          <Button size="sm" onClick={handleApprove} className="gap-1.5 shadow-sm" disabled={normalizing}>
-            <Check className="w-3.5 h-3.5" /> Aprobar briefing
+          <Button size="sm" onClick={handleApprove} className="gap-1.5 shadow-sm" disabled={normalizing || approving}>
+            {approving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+            {approving ? "Aprobando…" : "Aprobar briefing"}
           </Button>
         </div>
       </div>

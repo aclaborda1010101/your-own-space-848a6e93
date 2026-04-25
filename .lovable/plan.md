@@ -1,107 +1,51 @@
+# Plan: arreglar 3 problemas concretos del wizard
 
-## Diagnóstico (verificado en BD y código)
+## Diagnóstico
 
-Step 2 v5 de AFFLUX (`status=review`, `_clean_brief_md` presente, 71 cambios registrados) sigue con estos problemas:
+### 1. "Aprobar briefing" no hace nada visible
+En la sesión actual el log de la edge function **no muestra** ningún `approve_step` para step 2 — solo step 4. Step 2 sigue en `status=review` v9 con `approved_at = NULL`. Hipótesis: el usuario pulsó el botón pero `approveStep(2, …)` se quedó esperando porque dispara primero `normalizeBrief()` cuando detecta que el brief limpio podría no estar al día — y como ya hay v9 con `_clean_brief_md` válido, esa rama no debería ejecutarse. Lo más probable es que el `editedBriefing` que se pasa al backend incluye `_clean_brief_md` pero la cadena `normalizeBrief()` se ejecuta igualmente en otro punto, o el toast/reload simplemente no se vio. Hay además un error en logs de un update con enum `jarvis_job_status` que **no es** del approve real (es de otra ruta) pero ensucia la traza.
 
-- `business_projects.company = "Alejandro Gordo"` → el normalizador recibe `companyName="Alejandro Gordo"`, lo detecta como persona, lo mueve a `founder_or_decision_maker`, pero al rellenar `client_company_name` vuelve a poner `ctx.companyName` (= "Alejandro Gordo"). Empate. Por eso la portada sigue mal.
-- `CANONICAL_GROUPS` por defecto y los `matchTokens` de AFFLUX comparten términos genéricos (`call`, `llamada`, `coach`, `agent`...) → fusiona "Catalogador de propietarios" con "Revista emocional", "Notas comerciales" con "Asistente pre/post llamada", etc.
-- Los catalizadores de `business_catalysts` no se inyectan canónicamente, así que "fallecimiento/herencia" puede no aparecer aunque exista en otras secciones.
-- `open_questions` y `client_requested_items` aún incluyen frases en inglés porque `client_requested_items` no está en la lista de campos a traducir y la tirada del LLM se topa con cap de 60.
-- AFFLUX overrides ya cubre 12 componentes canónicos pero falta el 13 ("Centralizador documental y organización de datos") y la alerta "71" (existe pero el `manual_review_alerts_count` está a 1, conviene revisar texto).
+### 2. Sigue habiendo inglés mezclado
+El detector `isLikelyEnglish` exige >18% de palabras del listado `EN_HINT_WORDS` para activar la traducción LLM. Frases como *"Information on 70% of potential clients, incluyendo DNI, birth dates, and family contacts"* tienen suficientes números/términos propios para diluir ese ratio por debajo del umbral, así que **nunca entran al batch de traducción**. El `applyDeterministicSpanishCleanup` solo cubre frases enteras concretas, no fragmentos sueltos como `data on`, `suggests`, `represents`, `implying`, `is available`, etc.
 
-Todo es **arreglable con una pasada editorial determinista** sobre el Step 2 actual. No se re-extrae, no se tocan chunks, no se tocan F2/F3/F5/PRD.
+### 3. UI de presupuesto y propuesta cliente "desaparecida"
+- El selector `pricingMode` (sin cifras / rangos / detalle completo) vivía dentro de `ProjectWizardStep3.tsx` (RadioGroup), pero el wizard actual ya **no usa ese componente**: renderiza `ProjectWizardGenericStep` para step 3 (PRD Técnico). El estado `pricingMode` se sigue pasando a `runChainedPRD`, pero el control visual ya no aparece en ningún sitio.
+- `ProjectBudgetPanel` solo se monta cuando `step3.status === "approved"`. En el proyecto actual step 3 está en `review`, por eso no se ve. Igual con `ProjectProposalExport` (necesita además `budgetData`). El usuario percibe que "ha desaparecido" porque generó el PRD pero no lo aprobó.
 
-## Cambios propuestos (globales, no específicos de AFFLUX)
+---
 
-### 1. `supabase/functions/project-wizard-step/brief-normalizer.ts`
+## Cambios
 
-**a) `applyNamingSplit` — fix definitivo del empate persona/empresa**
-- Si `ctx.companyName` también pasa `looksLikePersonName(...)`, NO usarlo como `client_company_name`. En su lugar:
-  - usar `ctx.productName` (si existe) como company por defecto **o** `[POR CONFIRMAR]`.
-  - mover `ctx.companyName` a `founder_or_decision_maker` si está vacío.
-- Cuando `ctx.productName` esté presente y `client_company_name` siga siendo el mismo string que el founder, sustituir `client_company_name` por `productName` (caso AFFLUX donde la empresa real se llama AFLU/AFFLUX y no está en BD).
+### A. Brief Limpio: traducción agresiva sin heurística de ratio
+`supabase/functions/project-wizard-step/brief-normalizer.ts`
 
-**b) `applySemanticDedup` — separación canónica estricta**
-- Cuando se usan `ctx.canonicalComponents`, exigir **score mínimo + desempate**: para cada candidato, calcular hits contra TODOS los grupos y asignar al de **mayor score** (no al primero con ≥2). Si hay empate entre grupos distintos, no fusionar (dejar el ítem en su propio bucket renombrado al ganador único o al original).
-- Añadir lista de pares mutuamente exclusivos (`mutexGroups`) en el `NormalizationContext` para impedir fusiones cruzadas conocidas:
-  - "Catalogador de propietarios en 7 roles" ↔ "Generador de revista emocional"
-  - "Analizador de notas comerciales" ↔ "Asistente pre/post llamada"
-  - "Matching activo-inversor" ↔ "Detector de compradores institucionales"
-  - "Soul de Alejandro" ↔ "RAG de conocimiento"
+1. **Nueva señal `hasEnglishFragment`** que dispare con CUALQUIER fragmento sospechoso (lista ampliada, ~80 patrones cortos: `\bdata on\b`, `\bsuggests\b`, `\brepresents\b`, `\bimplying\b`, `\bare available\b`, `\bvaluable insights\b`, `\bin order to\b`, `\bsuch as\b`, `\bwhich is\b`, `\bcontain\b`, `\bare not fully\b`, `\bis currently\b`, `\bemails over\b`, `\byears of\b`, `\bcurrently not\b`, `\bbirth dates\b`, `\bfamily contacts\b`, `\bpersonalized outreach\b`, `\boff-market\b`, `\bclients potential\b`, etc.).
+2. **`isLikelyEnglish` pasa a OR**: `EN_PHRASE_RE.test(s) || hasEnglishFragment(s) || ratio > 0.18`. Así cualquier item con un solo trigger entra al batch de traducción LLM.
+3. **`applyDeterministicSpanishCleanup` ampliado** con ~50 reemplazos puente más: `data on real estate off-market` → `datos sobre activos inmobiliarios fuera de mercado`, `suggests a structured data source that can be further utilized` → `sugiere una fuente de datos estructurada que puede explotarse mejor`, `Information on X% of potential clients` → `Información sobre el X% de los clientes potenciales`, `birth dates, and family contacts` → `fechas de nacimiento y contactos familiares`, `49,000 emails from 15 years of commercial negotiations contain valuable insights` → `49.000 correos de 15 años de negociaciones comerciales contienen información valiosa`, `Existing CRM data … is not fully cataloged` → `Los datos del CRM existentes … no están completamente catalogados`, `the possibility of monitoring and analyzing` → `la posibilidad de monitorizar y analizar`, `to improve conversion and discourse, implying these recordings are available but not fully utilized` → `para mejorar la conversión y el discurso; estas grabaciones están disponibles pero no se aprovechan plenamente`, etc. Aplicado **siempre**, también después del LLM, para cazar lo que aún quede.
+4. **Nueva pasada final `stripResidualEnglishTokens`**: si tras todo lo anterior un string sigue conteniendo trigger fragments, se reemplazan los más comunes con sus equivalentes españoles uno a uno (tabla pequeña de ~30 palabras puente: `data`→`datos`, `clients`→`clientes`, `emails`→`correos`, `recordings`→`grabaciones`, `available`→`disponibles`, `valuable`→`valiosa`, `insights`→`información`, etc.) para minimizar lo que pase al PDF final.
+5. **Pasada también sobre `_clean_brief_md`** (no solo sobre el JSON v2): el clean brief se reconstruye desde v2, pero hago una pasada de `applyDeterministicSpanishCleanup` también sobre el markdown final como red de seguridad antes de persistirlo.
 
-**c) Inyección de catalizadores canónicos**
-- Nueva función `applyCanonicalCatalysts(briefing, ctx)` que, si `ctx.canonicalCatalysts` está definido, garantiza que cada catalizador aparezca en `business_catalysts` (añade items faltantes con `_inferred_by: "normalizer_catalyst_v1"`).
-- Permite resolver el problema "fallecimiento/herencia debe estar en catalizadores".
+### B. UI de presupuesto y selector de pricing — siempre accesibles
+`src/pages/ProjectWizard.tsx`
 
-**d) Traducción más amplia**
-- Añadir `client_requested_items`, `underutilized_data_assets`, `inferred_needs` y `external_data_sources_mentioned` a `FIELDS_TO_SCAN`.
-- Subir cap de `capped` de 60 a 120.
-- Añadir más palabras EN al `EN_HINT_WORDS` (`recorded`, `calls`, `lost`, `opportunities`, `qualification`, `prioritization`, `graph`, `historical`, `record`, `building`, `deal`).
+1. **Mover el selector `pricingMode`** (RadioGroup con sin cifras / rangos / detalle completo) **fuera** de `ProjectWizardStep3` — extraerlo a un mini-componente `PricingModeSelector` que se renderiza **siempre** dentro de step 3 (encima del bloque de PRD), tanto antes como después de generar.
+2. **Renderizar `ProjectBudgetPanel`** cuando `step3.outputData` exista (no solo cuando esté aprobado). Mantener un aviso visible "El PRD aún no está aprobado — al aprobarlo se incorporará al presupuesto" si `status !== approved`, pero ya permitir generar/editar modelos de monetización.
+3. **Renderizar `ProjectProposalExport`** cuando `budgetData` exista (no exigir PRD aprobado), con el mismo aviso suave si el budgetStatus no es `approved`.
+4. Todo el flujo de auto-chain (aprobar PRD → presupuesto → propuesta) sigue funcionando igual; solo se relaja el gating visual para que el usuario no se "quede sin pantalla".
 
-**e) Inyección de componentes obligatorios**
-- Nueva función `ensureCanonicalComponentsPresent(briefing, ctx)`: tras el dedup, comprueba que cada `ctx.canonicalComponents[*].canonical` aparezca al menos una vez en `ai_native_opportunity_signals`. Si falta, inserta un placeholder con `_inferred_by: "normalizer_required_component_v1"` para que aparezca en el "Brief Limpio" como candidato F2/roadmap.
+### C. Aprobación de briefing fiable
+`src/hooks/useProjectWizard.ts` + `src/components/projects/wizard/ProjectWizardStep2.tsx`
 
-### 2. `src/lib/normalization-overrides.ts`
+1. En `approveStep` (ya existe el pre-check Step 2 → normalizeBrief si falta brief limpio): añadir **log explícito** con `console.info` antes y después del invoke, y un **toast.error claro** si la respuesta tiene `error` (ya lanza, pero el `try/catch` envuelve todo y a veces silencia). Cambiar a chequeo de `data?.error` además de `error` del wrapper.
+2. En el botón "Aprobar briefing" del Step2: añadir **estado local `approving`** controlado por `handleApprove` (set true, await, set false), deshabilitar el botón y mostrar `Loader2` mientras corre. Hoy el botón solo se deshabilita por `normalizing`, así que si la llamada tarda 5 s sin mostrar feedback el usuario cree que "no hace nada".
+3. En la edge function (`project-wizard-step/index.ts`, sección `approve_step`): si la actualización de `project_wizard_steps` falla con error de enum, **devolver 500 con mensaje claro** en vez de loguear y devolver 200. Hoy `if (updErr) console.error(...)` y luego sigue con éxito → el frontend toastea "Paso aprobado" aunque la fila no se haya actualizado. Cambiar a `if (updErr) return 500 { error: updErr.message }`.
 
-**a) Tipo extendido**: añadir `companyNameOverride?`, `canonicalCatalysts?`, `mutexGroups?`.
-
-**b) AFFLUX overrides actualizados**:
-- `companyNameOverride: "AFLU"` (con `productName: "AFFLUX"` ya existente).
-- `matchTokens` afinados (eliminar términos demasiado genéricos compartidos, p. ej. quitar `call`/`llamada` del grupo "revista emocional" y de "Soul").
-- `canonicalCatalysts`:
-  - "Fallecimiento de propietario, herencia o cambio sucesorio como disparador de venta"
-  - "Detección de compradores institucionales activos (tipo Benatar)"
-  - "Desajuste entre oferta de edificios completos y demanda inversora"
-  - "Baja respuesta y fricción comercial como catalizador de automatización"
-- `mutexGroups`: las 4 parejas listadas arriba.
-- Añadir 13.º componente canónico: "Centralizador documental y organización de datos".
-- Confirmar texto exacto de la alerta "71".
-
-### 3. `supabase/functions/project-wizard-step/index.ts`
-
-- En la rama `repair_step2_brief`/`normalize_brief`, propagar `companyNameOverride`, `canonicalCatalysts` y `mutexGroups` al `NormalizationContext`.
-- (No tocar lógica de chunks ni de PRD.)
-
-### 4. `supabase/functions/project-wizard-step/clean-brief-builder.ts`
-
-- Sección 9 "Componentes candidatos normalizados": si un ítem viene de `_inferred_by: "normalizer_required_component_v1"`, marcarlo como `*(candidato F2/roadmap)*` para no engañar sobre evidencia.
-- Sección 4 "Catalizadores": ordenar primero los `_inferred_by: "normalizer_catalyst_v1"` para que destaquen los canónicos.
-- Sección 7 "Compliance flags": forzar bullets limpios (ya lo hace) y traducir `evidence` que siga en inglés (re-aplicar `isLikelyEnglish` con un mini glosario fijo si la traducción LLM no llegó).
-
-### 5. `src/hooks/useProjectWizard.ts`
-
-- En `normalizeBrief()` enviar también los nuevos campos del override (`companyNameOverride`, `canonicalCatalysts`, `mutexGroups`).
-- (Opcional) Si `companyNameOverride` está definido, mostrar un toast informativo: *"Se aplicará el nombre de empresa autoritativo: AFLU"*.
-
-### 6. `src/main.tsx`
-
-- Bump de `cache-bust` para forzar rebuild de la preview.
-
-## Acción inmediata tras el merge
-
-El usuario pulsa **"Limpiar y normalizar"** una vez. Eso ejecuta `repair_step2_brief` con los nuevos overrides, genera la v6 del Step 2 con:
-
-- Cliente: **AFLU** · Decisor: **Alejandro Gordo** · Producto: **AFFLUX**
-- 13 componentes canónicos sin fusiones cruzadas erróneas
-- Catalizadores incluyendo fallecimiento/herencia
-- Frases en inglés traducidas (incluyendo `client_requested_items` y `open_questions`)
-- Alerta manual "71" presente
-- PDF resultante 8-10 páginas
+---
 
 ## Criterio de aceptación
 
-- BD: `output_data.business_extraction_v2.client_naming_check.client_company_name = "AFLU"` (no "Alejandro Gordo").
-- BD: `output_data._normalization_log.changes` contiene `naming_split` con `after: "AFLU"`.
-- `_clean_brief_md` no contiene las frases EN del listado del usuario.
-- Sección 9 contiene los 13 nombres canónicos, sin fusiones entre catalogador↔revista, notas↔llamada, matching↔detector institucional, Soul↔RAG.
-- Sección 4 contiene "Fallecimiento de propietario..." como bullet.
-- Sección 8 contiene la alerta "Revisar señal 71".
-- `_clean_brief_md.length` < 12.000 chars (~8 páginas A4).
-- No se ha tocado Step 3+.
-
-## Fuera de alcance (explícitamente)
-
-- No re-extraer.
-- No tocar `chunked-extractor.ts`.
-- No tocar PRD, propuesta, F2/F3/F4/F5.
-- No cambiar `business_projects.company` automáticamente (lo dejamos al user; el override es la fuente de verdad para el brief).
+1. Pulsar "Aprobar briefing" muestra loader, después toast de éxito (o error explícito), y el step 2 pasa a `status=approved` con `approved_at` set en BD. Si algo falla, sale toast con el motivo real.
+2. El Brief Limpio v10 generado tras `normalizeBrief` ya no contiene fragmentos como `data on`, `suggests a`, `valuable insights`, `birth dates`, `is currently not`, `not fully utilized`, `vast amount of`, etc. Una búsqueda por esos términos en `_clean_brief_md` devuelve 0 hits.
+3. En la pantalla de step 3 aparece **siempre** el selector "Cifras de inversión" (sin cifras / rangos / detalle completo) por encima del PRD, generado o no.
+4. En cuanto exista `step3.outputData` (PRD generado, esté o no aprobado), aparece `ProjectBudgetPanel` con la selección de modelos de monetización. En cuanto exista `budgetData`, aparece `ProjectProposalExport` con el botón de descargar la propuesta cliente.
+5. La regeneración del PDF del Brief Limpio sigue siendo `Limpiar y normalizar` → `Exportar PDF`, sin re-extraer desde chunks.

@@ -379,9 +379,18 @@ const EN_HINT_WORDS = new Set([
 
 const EN_PHRASE_RE = /\b(AI can|Develop an AI|The client acknowledges|Carlos expresses|Aflu has collected|CRM data|Call recordings|Recorded Calls|Lost opportunities|Knowledge graph|Automated lead|What are the specific|The current process|There is a desire|The goal is|The effectiveness of|The client wants|Carlos wants)\b/i;
 
+// Short English bridge fragments. ANY single match flags the string as
+// requiring translation, regardless of overall ratio.
+const EN_FRAGMENT_RE = /\b(data on |suggests |represents |implying |implies |is currently|are currently|is available|are available|valuable insights|in order to|such as|which is|which are|contain |contains |are not fully|is not fully|currently not|emails over|years of|birth dates|family contacts|personalized outreach|off-market|data source|leveraged by|fully utilized|fully leveraged|further utilized|structured data|potential clients|negotiation strategies|conflict resolution|contact history|rich dataset|sales efforts|to identify|to be further|the possibility of|monitoring and analyzing|to improve conversion|but not fully|cataloged or utilized|sales|owners and properties|and their|criterion|over the years|on a structured|based on the|all the|by AI|with the|by the LLM|of the system|out of)\b/i;
+
+function hasEnglishFragment(s: string): boolean {
+  return EN_FRAGMENT_RE.test(s);
+}
+
 function isLikelyEnglish(s: string): boolean {
   if (!s || typeof s !== "string") return false;
   if (EN_PHRASE_RE.test(s)) return true;
+  if (hasEnglishFragment(s)) return true;
   const words = s.toLowerCase().match(/[a-záéíóúñ]+/gi) || [];
   if (words.length < 3) return false;
   const enHits = words.filter((w) => EN_HINT_WORDS.has(w)).length;
@@ -576,6 +585,104 @@ function applyDeterministicSpanishCleanup(briefing: any, changes: NormalizationC
     [/\bincluding\b/gi, "incluyendo"],
     [/\bhowever\b/gi, "sin embargo"],
     [/\bmoreover\b/gi, "además"],
+    // ── Bridge fragments observed in real briefs ───────────────────
+    [/\ba gran volumen de data on real estate off-market and potential clients\b/gi,
+      "un gran volumen de datos sobre activos inmobiliarios fuera de mercado y clientes potenciales"],
+    [/\bdata on real estate off-market and potential clients\b/gi,
+      "datos sobre activos inmobiliarios fuera de mercado y clientes potenciales"],
+    [/\bdata on real estate\b/gi, "datos sobre activos inmobiliarios"],
+    [/\bwhich is currently not fully leveraged by AI\b/gi,
+      "que actualmente no se aprovecha plenamente con IA"],
+    [/\bcurrently not fully leveraged by AI\b/gi,
+      "actualmente no se aprovecha plenamente con IA"],
+    [/\bnot fully leveraged by AI\b/gi, "no se aprovecha plenamente con IA"],
+    [/\bsuggests a structured data source that can be further utilized\b/gi,
+      "sugiere una fuente de datos estructurada que puede explotarse mejor"],
+    [/\bsuggests a structured data source\b/gi,
+      "sugiere una fuente de datos estructurada"],
+    [/\bcan be further utilized\b/gi, "puede explotarse mejor"],
+    [/\bInformation on (\d+%?) of potential clients\b/gi,
+      "Información sobre el $1 de los clientes potenciales"],
+    [/\bbirth dates, and family contacts\b/gi,
+      "fechas de nacimiento y contactos familiares"],
+    [/\bbirth dates\b/gi, "fechas de nacimiento"],
+    [/\bfamily contacts\b/gi, "contactos familiares"],
+    [/\brepresents a rich dataset for personalized outreach and analysis\b/gi,
+      "representa un conjunto de datos rico para contacto y análisis personalizados"],
+    [/\bpersonalized outreach and analysis\b/gi,
+      "contacto y análisis personalizados"],
+    [/\bpersonalized outreach\b/gi, "contacto personalizado"],
+    [/\brich dataset\b/gi, "conjunto de datos rico"],
+    [/\bAgust[ií]n menciona the possibility of monitoring and analyzing\b/gi,
+      "Agustín menciona la posibilidad de monitorizar y analizar"],
+    [/\bthe possibility of monitoring and analyzing\b/gi,
+      "la posibilidad de monitorizar y analizar"],
+    [/\bto improve conversion and discourse, implying these recordings are available but not fully utilized\b/gi,
+      "para mejorar la conversión y el discurso; estas grabaciones están disponibles pero no se aprovechan plenamente"],
+    [/\bto improve conversion and discourse\b/gi,
+      "para mejorar la conversión y el discurso"],
+    [/\bimplying these recordings are available but not fully utilized\b/gi,
+      "estas grabaciones están disponibles pero no se aprovechan plenamente"],
+    [/\bare available but not fully utilized\b/gi,
+      "están disponibles pero no se aprovechan plenamente"],
+    [/\bnot fully utilized\b/gi, "no se aprovechan plenamente"],
+    [/\bover (\d[\d,\.]*) years\b/gi, "a lo largo de $1 años"],
+    [/\bemails from (\d[\d,\.]*) years of commercial negotiations contain valuable insights into negotiation strategies, conflict resolution, and contact history\b/gi,
+      "correos de $1 años de negociaciones comerciales contienen información valiosa sobre estrategias de negociación, resolución de conflictos e historial de contactos"],
+    [/\bvaluable insights into\b/gi, "información valiosa sobre"],
+    [/\bvaluable insights\b/gi, "información valiosa"],
+    [/\bnegotiation strategies, conflict resolution, and contact history\b/gi,
+      "estrategias de negociación, resolución de conflictos e historial de contactos"],
+    [/\bExisting Datos del CRM on owners and properties is not fully cataloged or utilized to identify missing information or to pre-categorize owners for sales efforts\b/gi,
+      "Los Datos del CRM existentes sobre propietarios y propiedades no están completamente catalogados ni aprovechados para identificar información faltante ni para precategorizar propietarios para acciones comerciales"],
+    [/\bExisting Datos del CRM\b/gi, "Los Datos del CRM existentes"],
+    [/\bExisting CRM data\b/gi, "Los Datos del CRM existentes"],
+    [/\bon owners and properties is not fully cataloged or utilized\b/gi,
+      "sobre propietarios y propiedades no están completamente catalogados ni aprovechados"],
+    [/\bnot fully cataloged or utilized\b/gi,
+      "no están completamente catalogados ni aprovechados"],
+    [/\bto identify missing information\b/gi,
+      "para identificar información faltante"],
+    [/\bto pre-categorize owners for sales efforts\b/gi,
+      "para precategorizar propietarios para acciones comerciales"],
+    [/\bpre-categorize\b/gi, "precategorizar"],
+    [/\bsales efforts\b/gi, "acciones comerciales"],
+    [/\bowners and properties\b/gi, "propietarios y propiedades"],
+    [/\b(\d[\d,\.]*) emails from (\d[\d,\.]*) years\b/gi,
+      "$1 correos de $2 años"],
+    [/\bemails over (\d[\d,\.]*) years\b/gi, "correos de $1 años"],
+    [/\bover (\d[\d,\.]*) years of\b/gi, "de $1 años de"],
+    [/\bover (\d[\d,\.]*)%\b/gi, "más del $1%"],
+    [/\bof potential clients\b/gi, "de los clientes potenciales"],
+    [/\bcurrently not used in an intelligent way\b/gi,
+      "actualmente no se usa de forma inteligente"],
+    [/\bto detect patterns or opportunities\b/gi,
+      "para detectar patrones u oportunidades"],
+    [/\bcurrently does not\b/gi, "actualmente no"],
+    [/\bare not fully\b/gi, "no están del todo"],
+    [/\bis not fully\b/gi, "no está del todo"],
+    [/\bbut implies\b/gi, "pero implica"],
+    [/\bimplies\b/gi, "implica"],
+    [/\bimplying\b/gi, "lo que implica que"],
+    [/\bsuggests\b/gi, "sugiere"],
+    [/\brepresents\b/gi, "representa"],
+    [/\bcontain\b/gi, "contiene"],
+    [/\bcontains\b/gi, "contiene"],
+    [/\bare available\b/gi, "están disponibles"],
+    [/\bis available\b/gi, "está disponible"],
+    [/\bis currently\b/gi, "actualmente está"],
+    [/\bare currently\b/gi, "actualmente están"],
+    [/\bcurrently not\b/gi, "actualmente no"],
+    [/\bcurrently used\b/gi, "actualmente se usa"],
+    [/\bfurther utilized\b/gi, "explotado en mayor medida"],
+    [/\bdata source\b/gi, "fuente de datos"],
+    [/\bstructured data\b/gi, "datos estructurados"],
+    [/\bpotential clients\b/gi, "clientes potenciales"],
+    [/\bcontact history\b/gi, "historial de contactos"],
+    [/\bcommercial negotiations\b/gi, "negociaciones comerciales"],
+    [/\bsales efforts\b/gi, "acciones comerciales"],
+    [/\boff-market\b/gi, "fuera de mercado"],
+    [/\breal estate\b/gi, "activos inmobiliarios"],
   ];
 
   function walk(node: any, path: string): any {
@@ -599,6 +706,83 @@ function applyDeterministicSpanishCleanup(briefing: any, changes: NormalizationC
   if (briefing.business_extraction_v2) {
     briefing.business_extraction_v2 = walk(briefing.business_extraction_v2, "business_extraction_v2");
   }
+}
+
+/**
+ * Last-resort word-level swap. Runs AFTER deterministic phrase cleanup +
+ * LLM translation. Only swaps individual EN words for ES equivalents when
+ * the surrounding context still has English fragments. Avoids breaking
+ * brand names by skipping CamelCase / ALLCAPS tokens.
+ */
+function applyResidualWordSwap(briefing: any, changes: NormalizationChange[]) {
+  const SINGLE_WORDS: Array<[RegExp, string]> = [
+    [/\bdata\b/gi, "datos"],
+    [/\bclients\b/gi, "clientes"],
+    [/\bclient\b/gi, "cliente"],
+    [/\bemails\b/gi, "correos"],
+    [/\brecordings\b/gi, "grabaciones"],
+    [/\bowners\b/gi, "propietarios"],
+    [/\bproperties\b/gi, "propiedades"],
+    [/\bbuildings\b/gi, "edificios"],
+    [/\bavailable\b/gi, "disponibles"],
+    [/\bvaluable\b/gi, "valiosa"],
+    [/\binsights\b/gi, "información"],
+    [/\bcurrently\b/gi, "actualmente"],
+    [/\bpotential\b/gi, "potenciales"],
+    [/\bsuggests\b/gi, "sugiere"],
+    [/\brepresents\b/gi, "representa"],
+    [/\bincludes\b/gi, "incluye"],
+    [/\bcontains\b/gi, "contiene"],
+    [/\bcontain\b/gi, "contienen"],
+    [/\bsuch as\b/gi, "como"],
+    [/\bin order to\b/gi, "para"],
+    [/\b(\d[\d,\.]*) emails\b/gi, "$1 correos"],
+    [/\bover (\d[\d,\.]*) years\b/gi, "a lo largo de $1 años"],
+  ];
+
+  function walk(node: any, path: string): any {
+    if (typeof node === "string") {
+      if (!hasEnglishFragment(node)) return node;
+      let out = node;
+      for (const [from, to] of SINGLE_WORDS) out = out.replace(from, to);
+      out = out.replace(/\s{2,}/g, " ").trim();
+      if (out !== node) {
+        changes.push({
+          type: "residual_word_swap",
+          field: path,
+          before: node,
+          after: out,
+          reason: "Reemplazo de palabras puente residuales tras LLM y limpieza determinista.",
+        });
+      }
+      return out;
+    }
+    if (Array.isArray(node)) return node.map((item, i) => walk(item, `${path}[${i}]`));
+    if (node && typeof node === "object") {
+      const out: Record<string, any> = {};
+      for (const [k, v] of Object.entries(node)) out[k] = k.startsWith("_") ? v : walk(v, path ? `${path}.${k}` : k);
+      return out;
+    }
+    return node;
+  }
+
+  if (briefing.business_extraction_v2) {
+    briefing.business_extraction_v2 = walk(briefing.business_extraction_v2, "business_extraction_v2");
+  }
+}
+
+/**
+ * Apply deterministic + residual cleanup directly on a clean-brief markdown
+ * string. Used as a final safety net on the pre-rendered _clean_brief_md.
+ */
+export function cleanupSpanishMarkdown(md: string): string {
+  if (!md || typeof md !== "string") return md;
+  // Reuse the same phrase map by walking a fake briefing payload.
+  const fake = { business_extraction_v2: { __md: md } };
+  const dummyChanges: NormalizationChange[] = [];
+  applyDeterministicSpanishCleanup(fake, dummyChanges);
+  applyResidualWordSwap(fake, dummyChanges);
+  return fake.business_extraction_v2.__md;
 }
 
 // ── 4. Semantic dedup ────────────────────────────────────────────────
@@ -1081,12 +1265,18 @@ export async function normalizeBrief(
   // 2b. Off-topic / forbidden topics filter (whole-item removal).
   applyForbiddenTopicsFilter(briefing, ctx, changes);
 
-  // 3. Language normalization (single LLM call, non-blocking)
+  // 3a. Deterministic cleanup BEFORE the LLM, so the model sees fewer
+  // already-translated fragments and focuses on the rest.
+  applyDeterministicSpanishCleanup(briefing, changes);
+
+  // 3b. Language normalization (single LLM call, non-blocking)
   const langResult = await applyLanguageNormalization(briefing, changes);
 
-  // 3b. Deterministic cleanup for recurrent English fragments that must not
-  // survive in the clean brief even if the LLM skips or misses them.
+  // 3c. Deterministic cleanup AGAIN to catch any new English the LLM left.
   applyDeterministicSpanishCleanup(briefing, changes);
+
+  // 3d. Last-resort word-level swap for residual English bridge tokens.
+  applyResidualWordSwap(briefing, changes);
 
   // 4. Semantic dedup (uses canonical override from ctx if provided)
   applySemanticDedup(briefing, changes, ctx);

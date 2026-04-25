@@ -544,14 +544,27 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
   const modelLabel = PRICING_MODEL_LABEL_ES[p.budget.pricing_model] ?? p.budget.pricing_model;
   lines.push(`**Modalidad:** ${modelLabel}`);
   lines.push("");
-  if (p.budget.setup_fee !== undefined) {
-    lines.push(`- **Cuota inicial:** ${fmtMoney(p.budget.setup_fee, c)}`);
+
+  // Helper: prefiere display si está; si no, formatea el número.
+  const displaySetup = p.budget.setup_fee_display ??
+    (p.budget.setup_fee !== undefined ? fmtMoney(p.budget.setup_fee, c) : undefined);
+  const displayMonthly = p.budget.monthly_retainer_display ??
+    (p.budget.monthly_retainer !== undefined ? fmtMoney(p.budget.monthly_retainer, c) : undefined);
+
+  if (displaySetup) {
+    lines.push(`- **Cuota inicial:** ${displaySetup}`);
   }
-  if (p.budget.monthly_retainer !== undefined) {
-    lines.push(`- **Mensualidad recurrente:** ${fmtMoney(p.budget.monthly_retainer, c)}`);
+  if (displayMonthly) {
+    lines.push(`- **Mensualidad recurrente:** ${displayMonthly}`);
   }
-  // Total de referencia (orientativo a 12 meses si hay mensualidad)
-  if (p.budget.setup_fee !== undefined && p.budget.monthly_retainer !== undefined) {
+  // Total de referencia (orientativo a 12 meses) — solo si tenemos números
+  // numéricos exactos (no rangos). Si hay rango (max definido), no calculamos.
+  if (
+    p.budget.setup_fee !== undefined &&
+    p.budget.monthly_retainer !== undefined &&
+    p.budget.setup_fee_max === undefined &&
+    p.budget.monthly_retainer_max === undefined
+  ) {
     const total12 = p.budget.setup_fee + p.budget.monthly_retainer * 12;
     lines.push(`- **Total estimado primer año:** ${fmtMoney(total12, c)} _(cuota inicial + 12 mensualidades)_`);
   }

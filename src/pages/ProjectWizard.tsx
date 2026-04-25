@@ -73,7 +73,7 @@ const ProjectWizardEdit = () => {
   const {
     project, steps, costs, totalCost, currentStep,
     loading, generating, chainedPhase, prdSubProgress, internalStepStatuses,
-    runExtraction, approveStep, navigateToStep, runGenericStep, runChainedPRD, updateStepOutputData,
+    runExtraction, retryFailedChunks, normalizeBrief, approveStep, navigateToStep, runGenericStep, runChainedPRD, updateStepOutputData,
     updateInputContent, updateProjectName,
     budgetData, budgetGenerating, budgetStatus, generateBudgetEstimate, updateBudgetData, approveBudget,
     proposalData, proposalGenerating, generateClientProposal,

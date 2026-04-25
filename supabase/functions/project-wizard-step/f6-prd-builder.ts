@@ -338,10 +338,14 @@ export function buildTechnicalPrd(input: F6Input): F6Output {
 
 export function renderPrdMarkdown(prd: TechnicalPrdV1): string {
   const lines: string[] = [];
-  lines.push(`# PRD Técnico — ${prd.project_name}`);
+  lines.push(`# PRD Técnico de Construcción — ${prd.project_name}`);
   lines.push("");
-  lines.push(`> Cliente: **${prd.client_name}** · Generado: ${prd.generated_at}`);
-  lines.push(`> Fuente: Step ${prd.source_step.step_number} v${prd.source_step.version} (row ${prd.source_step.row_id})`);
+  lines.push(`> **Cliente / empresa:** ${prd.client_name}`);
+  lines.push(`> **Producto:** ${prd.project_name}`);
+  lines.push(`> **Fuente de alcance:** \`scope_architecture_v1\` (Step ${prd.source_step.step_number} v${prd.source_step.version}, row \`${prd.source_step.row_id}\`)`);
+  lines.push(`> **Generado:** ${prd.generated_at} · **Pipeline:** v2 determinista (sin LLM)`);
+  lines.push("");
+  lines.push("_Este documento es el PRD técnico para construcción (Lovable). La propuesta cliente es un documento separado._");
   lines.push("");
   lines.push("## Resumen ejecutivo");
   lines.push("");

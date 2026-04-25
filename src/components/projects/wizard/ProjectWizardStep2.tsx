@@ -159,7 +159,7 @@ const BriefItemList = ({ items, colorScheme, showComponentType }: {
   );
 };
 
-export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtract, onApprove, projectId, projectName, company, version = 1 }: Props) => {
+export const ProjectWizardStep2 = ({ inputContent, briefing, generating, onExtract, onForceFullExtract, onApprove, projectId, projectName, company, version = 1 }: Props) => {
   const [editedBriefing, setEditedBriefing] = useState<any>(null);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [showOriginal, setShowOriginal] = useState(false);

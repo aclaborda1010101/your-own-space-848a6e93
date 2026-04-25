@@ -24,6 +24,16 @@ function getSupabaseAdmin() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 }
 
+function isValidStep2Briefing(output: unknown): boolean {
+  if (!output || typeof output !== "object") return false;
+  const briefing = output as Record<string, unknown>;
+  return briefing.brief_version === "2.0.0"
+    && !!briefing.business_extraction_v2
+    && typeof briefing.business_extraction_v2 === "object"
+    && !!briefing._f0_signals
+    && typeof briefing._f0_signals === "object";
+}
+
 /** Truncate long strings to avoid prompt bloat and timeouts */
 function truncate(s: string, max = 30000): string {
   if (!s || s.length <= max) return s;
@@ -108,6 +118,26 @@ serve(async (req) => {
 
     if (action === "extract") {
       const { projectName, companyName, projectType, clientNeed, inputContent, inputType } = stepData;
+
+      const { data: latestStep2 } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data, version, updated_at")
+        .eq("project_id", projectId)
+        .eq("step_number", 2)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latestStep2 && isValidStep2Briefing(latestStep2.output_data)) {
+        console.log(`[wizard][extract] reusing existing Step 2 v${latestStep2.version} for ${projectId}`);
+        return new Response(JSON.stringify({
+          briefing: latestStep2.output_data,
+          version: latestStep2.version,
+          reused: true,
+        }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       // ── Transcript filter (Step 1.5) ────────────────────────────────────
       function needsTranscriptFilter(iType: string, content: string): boolean {

@@ -377,24 +377,23 @@ const ProjectWizardEdit = () => {
           company={project.company || ""}
           budgetData={budgetData}
           generating={budgetGenerating}
+          budgetStatus={budgetStatus}
           onGenerate={(models) => generateBudgetEstimate(models)}
           onBudgetUpdate={updateBudgetData}
+          onApprove={() => approveBudget({ autoChain: autoChainEnabled })}
         />
       )}
 
-      {/* Paso 5 — Unified client proposal — after budget exists */}
+      {/* Paso 5 — Unified client proposal (F7) — after budget exists */}
       {budgetData && steps.find(s => s.stepNumber === 3)?.status === "approved" && (
         <ProjectProposalExport
           projectId={id!}
           projectName={project.name}
           company={project.company || ""}
-          steps={steps.map(s => ({
-            stepNumber: s.stepNumber,
-            outputData: s.outputData,
-            status: s.status,
-            version: s.version || 1,
-          }))}
-          budgetData={budgetData}
+          budgetStatus={budgetStatus}
+          proposalData={proposalData}
+          proposalGenerating={proposalGenerating}
+          onGenerate={generateClientProposal}
         />
       )}
 

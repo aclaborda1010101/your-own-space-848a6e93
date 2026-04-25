@@ -285,15 +285,48 @@ export const ProjectBudgetPanel = ({
   return (
     <CollapsibleCard
       id="budget-internal"
-      title="Estimación de Presupuesto"
+      title="Paso 4 · Presupuesto y condiciones"
       icon={<Calculator className="w-4 h-4 text-primary" />}
-      defaultOpen={false}
+      defaultOpen={true}
       badge={
-        <Badge variant="outline" className="text-[10px] px-2 py-0 border-amber-500/30 text-amber-600 bg-amber-500/5">
-          USO INTERNO
+        <Badge variant="outline" className="text-[10px] px-2 py-0 border-primary/30 text-primary bg-primary/5">
+          {isClientView ? "VISTA CLIENTE" : "VISTA INTERNA"}
         </Badge>
       }
     >
+      <div className="p-4 space-y-4">
+        {/* View mode toggle (global) */}
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-border/50">
+          <p className="text-xs text-muted-foreground">
+            Cambia entre lo que ves tú y lo que verá el cliente.
+          </p>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => setViewMode('internal')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium transition-all ${
+                viewMode === 'internal'
+                  ? "border-amber-500/40 bg-amber-500/5 ring-1 ring-amber-500/20 text-foreground"
+                  : "border-border/50 text-muted-foreground hover:border-border"
+              }`}
+            >
+              <EyeOff className="w-3 h-3" /> Vista interna
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('client')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium transition-all ${
+                viewMode === 'client'
+                  ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20 text-foreground"
+                  : "border-border/50 text-muted-foreground hover:border-border"
+              }`}
+            >
+              <Eye className="w-3 h-3" /> Vista cliente
+            </button>
+          </div>
+        </div>
+      <div>
+
       <div className="p-4 space-y-4">
         {/* Monetization model selector */}
         <div className="space-y-3">

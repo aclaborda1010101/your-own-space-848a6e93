@@ -10,7 +10,14 @@ interface PipelineQAPanelProps {
   projectId: string;
 }
 
-type WizardAction = "build_registry" | "audit_f4a_gaps" | "audit_f4b_feasibility" | "architect_scope";
+type WizardAction =
+  | "build_registry"
+  | "audit_f4a_gaps"
+  | "audit_f4b_feasibility"
+  | "architect_scope"
+  | "generate_technical_prd"
+  | "generate_client_proposal"
+  | "audit_final_deliverables";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -20,7 +27,22 @@ const ACTION_META: Record<WizardAction, { label: string; step: string; hint: num
   audit_f4a_gaps: { label: "F4a · Gap Audit", step: "Step 26", hint: 180, variant: "holo" },
   audit_f4b_feasibility: { label: "F4b · Feasibility", step: "Step 27", hint: 240, variant: "holo" },
   architect_scope: { label: "F5 · Scope Architect", step: "Step 28", hint: 180, variant: "holo" },
+  generate_technical_prd: { label: "PRD técnico", step: "Step 29", hint: 30, variant: "outline" },
+  generate_client_proposal: { label: "Propuesta cliente", step: "Step 30", hint: 30, variant: "outline" },
+  audit_final_deliverables: { label: "Auditar entregables", step: "Step 31", hint: 30, variant: "outline" },
 };
+
+const DEFAULT_COMMERCIAL_TERMS = `{
+  "pricing_model": "setup_plus_monthly",
+  "setup_fee": 25000,
+  "monthly_retainer": 4500,
+  "currency": "EUR",
+  "ai_usage_cost_policy": "Costes de IA y APIs externas facturados a coste según consumo real.",
+  "payment_terms": "50% al inicio, 50% contra entrega del MVP. Mensualidades a mes vencido.",
+  "timeline": "MVP en 12 semanas tras kickoff.",
+  "validity_days": 30,
+  "taxes": "IVA no incluido."
+}`;
 
 export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
   const [loading, setLoading] = useState(false);

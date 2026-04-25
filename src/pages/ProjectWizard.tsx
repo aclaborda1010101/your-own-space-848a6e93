@@ -279,9 +279,10 @@ const ProjectWizardEdit = () => {
               inputContent={project.inputContent}
               onUpdateContent={updateInputContent}
               onGoToExtraction={() => navigateToStep(2)}
-              onReExtract={() => {
+              onReExtract={(freshContent) => {
                 navigateToStep(2);
-                setTimeout(() => runExtraction(), 300);
+                // Pasamos contenido fresco explícitamente para evitar el race con setProject
+                runExtraction(freshContent);
               }}
               hasExistingBriefing={!!steps.find(s => s.stepNumber === 2)?.outputData}
               generating={generating}

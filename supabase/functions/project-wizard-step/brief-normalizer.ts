@@ -537,6 +537,55 @@ ${JSON.stringify({ items: capped }, null, 2)}`;
   }
 }
 
+function applyDeterministicSpanishCleanup(briefing: any, changes: NormalizationChange[]) {
+  const replacements: Array<[RegExp, string]> = [
+    [/\bAflu has collected\b/gi, "AFLU ha recopilado"],
+    [/\bCRM data\b/gi, "Datos del CRM"],
+    [/\bCall recordings\b/gi, "Grabaciones de llamadas"],
+    [/\bRecorded Calls\b/gi, "Grabaciones de llamadas"],
+    [/\bLost opportunities\b/gi, "Oportunidades perdidas"],
+    [/\bKnowledge graph\b/gi, "Grafo de conocimiento"],
+    [/\bAutomated lead qualification and prioritization\b/gi, "Calificación y priorización automatizada de oportunidades"],
+    [/\bThe client acknowledges\b/gi, "El cliente reconoce"],
+    [/\bCarlos expresses\b/gi, "Carlos expresa"],
+    [/\bCarlos wants\b/gi, "Carlos quiere"],
+    [/\bThe client wants\b/gi, "El cliente quiere"],
+    [/\bDevelop an AI\b/gi, "Desarrollar una IA"],
+    [/\bAI can listen\b/gi, "La IA puede escuchar"],
+    [/\bThe current process\b/gi, "El proceso actual"],
+    [/\bThere is a desire\b/gi, "Existe el objetivo"],
+    [/\bThe goal is\b/gi, "El objetivo es"],
+    [/\bThe effectiveness of\b/gi, "La eficacia de"],
+    [/\bDesire to automate repetitive tasks\b/gi, "Necesidad de automatizar tareas repetitivas"],
+    [/\bImprove efficiency of 'zona' team\b/gi, "Mejorar la eficiencia del equipo de zona"],
+    [/\bIncrease originación of assets in buildings\b/gi, "Aumentar la originación de activos en edificios"],
+    [/\bImprove commercial team's effectiveness\b/gi, "Mejorar la efectividad del equipo comercial"],
+    [/\bImprove Team Efficiency and Reduce Manual Effort\b/gi, "Mejorar la eficiencia del equipo y reducir el esfuerzo manual"],
+  ];
+
+  function walk(node: any, path: string): any {
+    if (typeof node === "string") {
+      let out = node;
+      for (const [from, to] of replacements) out = out.replace(from, to);
+      if (out !== node) {
+        changes.push({ type: "deterministic_spanish_cleanup", field: path, before: node, after: out, reason: "Frase explicativa inglesa reescrita en español." });
+      }
+      return out;
+    }
+    if (Array.isArray(node)) return node.map((item, i) => walk(item, `${path}[${i}]`));
+    if (node && typeof node === "object") {
+      const out: Record<string, any> = {};
+      for (const [k, v] of Object.entries(node)) out[k] = k.startsWith("_") ? v : walk(v, path ? `${path}.${k}` : k);
+      return out;
+    }
+    return node;
+  }
+
+  if (briefing.business_extraction_v2) {
+    briefing.business_extraction_v2 = walk(briefing.business_extraction_v2, "business_extraction_v2");
+  }
+}
+
 // ── 4. Semantic dedup ────────────────────────────────────────────────
 
 function stemEs(word: string): string {

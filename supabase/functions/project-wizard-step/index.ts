@@ -1932,19 +1932,57 @@ REGLAS PARA deep_patterns:
 
       const { data: projectRow } = await supabase
         .from("business_projects")
-        .select("name, company")
+        .select("name, company, client_company, decision_maker_name")
         .eq("id", projectId)
         .single();
 
-      const f7 = buildClientProposal({
-        scope: step28Row.output_data.scope_architecture_v1,
-        source_step: { step_number: 28, version: step28Row.version, row_id: step28Row.id },
-        projectName: stepData?.projectName ?? projectRow?.name ?? "Proyecto",
-        clientName: stepData?.companyName ?? projectRow?.company ?? "Cliente",
-        briefSummary,
-        problemsDetected,
-        commercialTerms,
-      });
+      // Validar que el scope tiene contenido — si no, error explícito.
+      const scopeArch = step28Row.output_data.scope_architecture_v1;
+      const totalScope =
+        (scopeArch?.data_foundation?.length ?? 0) +
+        (scopeArch?.mvp?.length ?? 0) +
+        (scopeArch?.fast_follow_f2?.length ?? 0) +
+        (scopeArch?.roadmap_f3?.length ?? 0);
+      if (totalScope === 0) {
+        return new Response(JSON.stringify({ error: "EMPTY_SCOPE: el alcance aprobado en Step 28 está vacío. Re-ejecuta architect_scope." }), {
+          status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      let f7;
+      try {
+        f7 = buildClientProposal({
+          scope: scopeArch,
+          source_step: { step_number: 28, version: step28Row.version, row_id: step28Row.id },
+          projectName: stepData?.projectName ?? projectRow?.name ?? "Proyecto",
+          clientCompany:
+            stepData?.clientCompany ??
+            (projectRow as any)?.client_company ??
+            projectRow?.name ??
+            "Cliente",
+          decisionMakerName:
+            stepData?.decisionMakerName ??
+            (projectRow as any)?.decision_maker_name ??
+            projectRow?.company ??
+            undefined,
+          briefSummary,
+          problemsDetected,
+          commercialTerms,
+        });
+      } catch (e: any) {
+        const msg = String(e?.message || e);
+        if (msg.startsWith("MISSING_BUDGET_AMOUNTS")) {
+          return new Response(JSON.stringify({
+            error: "MISSING_BUDGET_AMOUNTS: la propuesta no se puede generar sin importes reales (cuota inicial, mensualidad o precios por fase). Revisa el presupuesto.",
+          }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        if (msg.startsWith("EMPTY_SCOPE")) {
+          return new Response(JSON.stringify({ error: msg }), {
+            status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        throw e;
+      }
 
       const proposalMarkdown = renderProposalMarkdown(f7.client_proposal_v1);
       const jargon = detectInternalJargon(proposalMarkdown);

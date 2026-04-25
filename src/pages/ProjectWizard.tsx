@@ -383,33 +383,56 @@ const ProjectWizardEdit = () => {
       </div>
 
 
-      {/* Paso 4 — Budget panel — only after step 3 (PRD) approved */}
-      {steps.find(s => s.stepNumber === 3)?.status === "approved" && (
-        <ProjectBudgetPanel
-          projectId={id!}
-          projectName={project.name}
-          company={project.company || ""}
-          budgetData={budgetData}
-          generating={budgetGenerating}
-          budgetStatus={budgetStatus}
-          onGenerate={(models) => generateBudgetEstimate(models)}
-          onBudgetUpdate={updateBudgetData}
-          onApprove={() => approveBudget({ autoChain: autoChainEnabled })}
-        />
-      )}
+      {/* Paso 4 — Budget panel — disponible cuando exista el PRD (aprobado o no) */}
+      {(() => {
+        const step3 = steps.find(s => s.stepNumber === 3);
+        const hasPRD = !!step3?.outputData;
+        const prdApproved = step3?.status === "approved";
+        if (!hasPRD) return null;
+        return (
+          <div className="space-y-2">
+            {!prdApproved && (
+              <div className="text-xs text-muted-foreground border border-dashed border-border/40 rounded-md px-3 py-2 bg-muted/20">
+                El PRD aún no está aprobado. Puedes ir trabajando el presupuesto; al aprobar el PRD se incorporará automáticamente al pipeline.
+              </div>
+            )}
+            <ProjectBudgetPanel
+              projectId={id!}
+              projectName={project.name}
+              company={project.company || ""}
+              budgetData={budgetData}
+              generating={budgetGenerating}
+              budgetStatus={budgetStatus}
+              onGenerate={(models) => generateBudgetEstimate(models)}
+              onBudgetUpdate={updateBudgetData}
+              onApprove={() => approveBudget({ autoChain: autoChainEnabled })}
+            />
+          </div>
+        );
+      })()}
 
-      {/* Paso 5 — Unified client proposal (F7) — after budget exists */}
-      {budgetData && steps.find(s => s.stepNumber === 3)?.status === "approved" && (
-        <ProjectProposalExport
-          projectId={id!}
-          projectName={project.name}
-          company={project.company || ""}
-          budgetStatus={budgetStatus}
-          proposalData={proposalData}
-          proposalGenerating={proposalGenerating}
-          onGenerate={generateClientProposal}
-        />
-      )}
+      {/* Paso 5 — Propuesta cliente (F7) — disponible cuando exista presupuesto */}
+      {budgetData && steps.find(s => s.stepNumber === 3)?.outputData && (() => {
+        const budgetApproved = budgetStatus === "approved";
+        return (
+          <div className="space-y-2">
+            {!budgetApproved && (
+              <div className="text-xs text-muted-foreground border border-dashed border-border/40 rounded-md px-3 py-2 bg-muted/20">
+                El presupuesto aún no está aprobado. Puedes generar la propuesta en borrador para revisar antes de cerrarla.
+              </div>
+            )}
+            <ProjectProposalExport
+              projectId={id!}
+              projectName={project.name}
+              company={project.company || ""}
+              budgetStatus={budgetStatus}
+              proposalData={proposalData}
+              proposalGenerating={proposalGenerating}
+              onGenerate={generateClientProposal}
+            />
+          </div>
+        );
+      })()}
 
       {/* Avanzado / Interno — colapsado por defecto */}
       <CollapsibleCard

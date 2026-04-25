@@ -128,7 +128,7 @@ serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-      if (isValidStep2Briefing(latestStep2?.output_data)) {
+      if (latestStep2 && isValidStep2Briefing(latestStep2.output_data)) {
         console.log(`[wizard][extract] reusing existing Step 2 v${latestStep2.version} for ${projectId}`);
         return new Response(JSON.stringify({
           briefing: latestStep2.output_data,

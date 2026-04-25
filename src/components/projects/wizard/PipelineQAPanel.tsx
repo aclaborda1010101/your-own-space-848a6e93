@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Play, Copy, Check } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Loader2, Play, Copy, Check, FileText, FileBadge, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -54,6 +56,8 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [commercialTerms, setCommercialTerms] = useState<string>(DEFAULT_COMMERCIAL_TERMS);
+  const [showTermsForm, setShowTermsForm] = useState(false);
   const startRef = useRef<number | null>(null);
   const tickRef = useRef<number | null>(null);
 
@@ -102,6 +106,17 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
         return;
       }
 
+      const body: Record<string, unknown> = { action, projectId };
+
+      if (action === "generate_client_proposal") {
+        try {
+          body.commercial_terms = JSON.parse(commercialTerms);
+        } catch (e) {
+          setError("commercial_terms no es JSON válido. Revisa el formulario.");
+          return;
+        }
+      }
+
       const url = `${SUPABASE_URL}/functions/v1/project-wizard-step`;
       const res = await fetch(url, {
         method: "POST",
@@ -110,7 +125,7 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
           Authorization: `Bearer ${token}`,
           apikey: ANON_KEY,
         },
-        body: JSON.stringify({ action, projectId }),
+        body: JSON.stringify(body),
       });
 
       setStatus(res.status);
@@ -128,6 +143,16 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
       setLoading(false);
       setCurrentAction(null);
     }
+  };
+
+  const downloadMarkdown = (filename: string, content: string) => {
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(blobUrl);
   };
 
   const copyRaw = async () => {
@@ -154,6 +179,42 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
     if (!parsed || typeof parsed !== "object") return null;
 
     const audit = parsed.audit ?? {};
+
+    // Step 31 — final deliverables audit
+    if (lastAction === "audit_final_deliverables" || parsed.deliverables_audit) {
+      const a = parsed.deliverables_audit ?? parsed;
+      return {
+        ok: parsed.ok,
+        passed: a.checks_passed ?? a.passed,
+        failed: a.checks_failed ?? a.failed,
+        warnings: a.warnings_count ?? a.warnings?.length,
+        verdict: a.verdict ?? a.recommendation,
+      };
+    }
+
+    // Step 30 — client proposal
+    if (lastAction === "generate_client_proposal" || parsed.client_proposal) {
+      const p = parsed.client_proposal ?? parsed;
+      return {
+        ok: parsed.ok,
+        sections_count: p.sections?.length ?? p.sections_count,
+        word_count: p.word_count,
+        banned_phrases_found: p.banned_phrases_found ?? 0,
+        version: p.version,
+      };
+    }
+
+    // Step 29 — technical PRD
+    if (lastAction === "generate_technical_prd" || parsed.technical_prd) {
+      const p = parsed.technical_prd ?? parsed;
+      return {
+        ok: parsed.ok,
+        components_count: p.components_count ?? p.components?.length,
+        sections_count: p.sections?.length ?? p.sections_count,
+        traceability_violations: p.traceability_violations ?? 0,
+        version: p.version,
+      };
+    }
 
     // Step 27 (F4b) — feasibility
     if (
@@ -206,6 +267,20 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
     };
   })();
 
+  // Markdown descargable según última acción
+  const downloadableMarkdown = (() => {
+    if (!parsed) return null;
+    if (lastAction === "generate_technical_prd") {
+      const md = parsed.technical_prd?.markdown ?? parsed.markdown;
+      if (md) return { filename: "PRD-tecnico.md", content: md, label: "Descargar PRD (MD)" };
+    }
+    if (lastAction === "generate_client_proposal") {
+      const md = parsed.client_proposal?.markdown ?? parsed.markdown;
+      if (md) return { filename: "Propuesta-cliente.md", content: md, label: "Descargar Propuesta (MD)" };
+    }
+    return null;
+  })();
+
   const renderActionButton = (action: WizardAction) => {
     const meta = ACTION_META[action];
     const isThisRunning = loading && currentAction === action;
@@ -237,10 +312,10 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0 flex-1">
-            <CardTitle className="text-base">QA · Pipeline v2 — Steps 25 / 26 / 27 / 28</CardTitle>
+            <CardTitle className="text-base">QA · Pipeline v2 — Steps 25–31</CardTitle>
             <CardDescription className="text-xs mt-1">
-              Lanza acciones del wizard sin tocar consola. Tiempos típicos: Build Registry ~60–120s,
-              F4a ~60–180s (Flash), F4b ~120–240s (Pro), F5 ~60–180s (Pro).
+              Pipeline interno (25–28) y entregables finales (29 PRD · 30 Propuesta · 31 Auditoría).
+              Tiempos típicos: Registry ~60–120s, F4a ~60–180s, F4b ~120–240s, F5 ~60–180s, PRD/Propuesta ~30–60s.
             </CardDescription>
           </div>
           {loading && currentAction && (
@@ -255,6 +330,74 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
           {renderActionButton("audit_f4a_gaps")}
           {renderActionButton("audit_f4b_feasibility")}
           {renderActionButton("architect_scope")}
+        </div>
+
+        <div className="border-t border-border/40 mt-3 pt-3 space-y-3">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+            Entregables finales
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              onClick={() => run("generate_technical_prd")}
+              disabled={loading}
+              variant="outline"
+              size="sm"
+            >
+              {loading && currentAction === "generate_technical_prd" ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Generando PRD…</>
+              ) : (
+                <><FileText className="w-4 h-4" />Generar PRD técnico (Step 29)</>
+              )}
+            </Button>
+            <Button
+              onClick={() => setShowTermsForm((v) => !v)}
+              variant="ghost"
+              size="sm"
+              className="text-xs"
+            >
+              {showTermsForm ? "Ocultar" : "Editar"} commercial_terms
+            </Button>
+            <Button
+              onClick={() => run("generate_client_proposal")}
+              disabled={loading}
+              variant="outline"
+              size="sm"
+            >
+              {loading && currentAction === "generate_client_proposal" ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Generando propuesta…</>
+              ) : (
+                <><FileBadge className="w-4 h-4" />Generar Propuesta cliente (Step 30)</>
+              )}
+            </Button>
+            <Button
+              onClick={() => run("audit_final_deliverables")}
+              disabled={loading}
+              variant="ghost"
+              size="sm"
+            >
+              {loading && currentAction === "audit_final_deliverables" ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Auditando…</>
+              ) : (
+                <><ShieldCheck className="w-4 h-4" />Auditar entregables (Step 31)</>
+              )}
+            </Button>
+          </div>
+
+          {showTermsForm && (
+            <div className="space-y-1.5">
+              <Label htmlFor="commercial-terms" className="text-xs text-muted-foreground">
+                commercial_terms_v1 (JSON) — usado por Step 30
+              </Label>
+              <Textarea
+                id="commercial-terms"
+                value={commercialTerms}
+                onChange={(e) => setCommercialTerms(e.target.value)}
+                rows={12}
+                className="font-mono text-[11px]"
+                spellCheck={false}
+              />
+            </div>
+          )}
         </div>
       </CardHeader>
 
@@ -272,8 +415,24 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
                 · duración {elapsed}s
               </span>
             )}
+            {downloadableMarkdown && (
+              <Button
+                onClick={() => downloadMarkdown(downloadableMarkdown.filename, downloadableMarkdown.content)}
+                variant="holo"
+                size="sm"
+                className="ml-auto h-7 text-xs"
+              >
+                <FileText className="w-3 h-3" />
+                {downloadableMarkdown.label}
+              </Button>
+            )}
             {raw && (
-              <Button onClick={copyRaw} variant="outline" size="sm" className="ml-auto h-7 text-xs">
+              <Button
+                onClick={copyRaw}
+                variant="outline"
+                size="sm"
+                className={cn("h-7 text-xs", !downloadableMarkdown && "ml-auto")}
+              >
                 {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                 {copied ? "Copiado" : "Copiar RAW"}
               </Button>

@@ -45,52 +45,74 @@ function fakeScope(): ScopeArchitectureV1 {
   };
 }
 
+function fakeCommercial(overrides: Partial<any> = {}) {
+  return {
+    pricing_model: "setup_plus_monthly" as const,
+    setup_fee: 25000,
+    monthly_retainer: 4500,
+    currency: "EUR",
+    payment_terms: "50% al inicio, 50% contra entrega.",
+    validity_days: 30,
+    ai_usage_cost_policy: "Costes IA según consumo.",
+    taxes: "IVA no incluido.",
+    ...overrides,
+  };
+}
+
 Deno.test("F7: produces a single proposal with budget and conditions", () => {
   const out = buildClientProposal({
     scope: fakeScope(),
     source_step: { step_number: 28, version: 3, row_id: "row-28" },
-    projectName: "AFFLUX", clientName: "Cliente X",
-    commercialTerms: {
-      pricing_model: "setup_plus_monthly",
-      setup_fee: 25000,
-      monthly_retainer: 4500,
-      currency: "EUR",
-      payment_terms: "50% al inicio, 50% contra entrega.",
-      validity_days: 30,
-    },
+    projectName: "AFFLUX",
+    clientCompany: "AFLU / AFFLUX",
+    decisionMakerName: "Alejandro Gordo",
+    commercialTerms: fakeCommercial(),
   });
   const p = out.client_proposal_v1;
-  assertEquals(p.mvp_scope.length, 2); // data_foundation + mvp
+  assertEquals(p.mvp_scope.length, 2);
   assertEquals(p.later_phases.fast_follow.length, 1);
   assertEquals(p.later_phases.roadmap.length, 0);
   assertEquals(p.budget.setup_fee, 25000);
   assertEquals(p.budget.monthly_retainer, 4500);
+  assertEquals(p.client_company, "AFLU / AFFLUX");
+  assertEquals(p.decision_maker_name, "Alejandro Gordo");
   assert(p.conditions.some((c) => /cumplimiento/i.test(c)));
   assert(p.conditions.some((c) => /sesiones/i.test(c)));
   assert(p.implementation_plan.soul_sessions_required);
   assertEquals(p.implementation_plan.soul_sessions_count, 4);
 });
 
-Deno.test("F7: proposal markdown does NOT leak internal jargon", () => {
+Deno.test("F7: markdown uses ES headers and shows cliente/decisor", () => {
   const out = buildClientProposal({
     scope: fakeScope(),
     source_step: { step_number: 28, version: 3, row_id: "row-28" },
-    projectName: "AFFLUX", clientName: "Cliente X",
-    commercialTerms: { pricing_model: "fixed_project", setup_fee: 50000, currency: "EUR" },
+    projectName: "AFFLUX",
+    clientCompany: "AFLU / AFFLUX",
+    decisionMakerName: "Alejandro Gordo",
+    commercialTerms: fakeCommercial({ pricing_model: "fixed_project", monthly_retainer: undefined, setup_fee: 50000 }),
   });
   const md = renderProposalMarkdown(out.client_proposal_v1);
   const jargon = detectInternalJargon(md);
   assertEquals(jargon, []);
   assert(md.includes("# Propuesta — AFFLUX"));
-  assert(md.includes("## 11. Presupuesto"));
+  assert(md.includes("CONFIDENCIAL — AFLU / AFFLUX"));
+  assert(md.includes("**Cliente / empresa:** AFLU / AFFLUX"));
+  assert(md.includes("**Decisor:** Alejandro Gordo"));
+  assert(md.includes("**Producto:** AFFLUX"));
 });
 
-Deno.test("F7: requires pricing_model — meta counts coherent", () => {
+Deno.test("F7: phased pricing — meta counts coherent", () => {
   const out = buildClientProposal({
     scope: fakeScope(),
     source_step: { step_number: 28, version: 3, row_id: "row-28" },
-    projectName: "AFFLUX", clientName: "Cliente X",
-    commercialTerms: { pricing_model: "phased", phase_prices: [{ phase: "F1", price: 10000 }], currency: "EUR" },
+    projectName: "AFFLUX",
+    clientCompany: "AFLU / AFFLUX",
+    commercialTerms: fakeCommercial({
+      pricing_model: "phased",
+      setup_fee: undefined,
+      monthly_retainer: undefined,
+      phase_prices: [{ phase: "F1", price: 10000 }],
+    }),
   });
   assertEquals(out.proposal_meta.mvp_count, 2);
   assertEquals(out.proposal_meta.fast_follow_count, 1);
@@ -101,4 +123,105 @@ Deno.test("F7: requires pricing_model — meta counts coherent", () => {
 Deno.test("F7: detectInternalJargon catches banned phrases", () => {
   const found = detectInternalJargon("This mentions Step 28 and F4 and registry_gap_audit_v1.");
   assert(found.length >= 2);
+});
+
+Deno.test("F7: throws MISSING_BUDGET_AMOUNTS when no fees provided", () => {
+  let threw = false;
+  try {
+    buildClientProposal({
+      scope: fakeScope(),
+      source_step: { step_number: 28, version: 3, row_id: "row-28" },
+      projectName: "AFFLUX",
+      clientCompany: "AFLU / AFFLUX",
+      commercialTerms: fakeCommercial({ setup_fee: undefined, monthly_retainer: undefined, phase_prices: undefined }),
+    });
+  } catch (e) {
+    threw = true;
+    assert(String((e as Error).message).startsWith("MISSING_BUDGET_AMOUNTS"));
+  }
+  assert(threw, "expected MISSING_BUDGET_AMOUNTS to throw");
+});
+
+Deno.test("F7: weeks_1_to_2 → 'semanas 1 y 2' in conditions", () => {
+  const out = buildClientProposal({
+    scope: fakeScope(),
+    source_step: { step_number: 28, version: 3, row_id: "row-28" },
+    projectName: "AFFLUX",
+    clientCompany: "AFLU / AFFLUX",
+    commercialTerms: fakeCommercial(),
+  });
+  const cond = out.client_proposal_v1.conditions.find((c) => /sesiones/i.test(c));
+  assert(cond, "expected a conditions entry about sesiones");
+  assert(/semanas 1 y 2/.test(cond!), `expected 'semanas 1 y 2' in: ${cond}`);
+  assert(!/weeks?[_ ]1[_ ]to[_ ]2/i.test(cond!), `should not contain raw weeks_1_to_2: ${cond}`);
+});
+
+Deno.test("F7: markdown numbering is consecutive (1..N), no gaps", () => {
+  const out = buildClientProposal({
+    scope: fakeScope(),
+    source_step: { step_number: 28, version: 3, row_id: "row-28" },
+    projectName: "AFFLUX",
+    clientCompany: "AFLU / AFFLUX",
+    commercialTerms: fakeCommercial(),
+  });
+  const md = renderProposalMarkdown(out.client_proposal_v1);
+  const numbered = [...md.matchAll(/^## (\d+)\. /gm)].map((m) => Number(m[1]));
+  assert(numbered.length >= 8, `expected at least 8 numbered sections, got ${numbered.length}`);
+  for (let i = 0; i < numbered.length; i++) {
+    assertEquals(numbered[i], i + 1, `section ${i} should be numbered ${i + 1}, got ${numbered[i]}`);
+  }
+});
+
+Deno.test("F7: omits 'Roadmap posterior' subsection when empty", () => {
+  const out = buildClientProposal({
+    scope: fakeScope(),
+    source_step: { step_number: 28, version: 3, row_id: "row-28" },
+    projectName: "AFFLUX",
+    clientCompany: "AFLU / AFFLUX",
+    commercialTerms: fakeCommercial(),
+  });
+  const md = renderProposalMarkdown(out.client_proposal_v1);
+  assert(!md.includes("Roadmap posterior"), "should not render empty Roadmap subsection");
+  assert(md.includes("Segundo lote"), "should still render fast-follow subsection");
+});
+
+Deno.test("F7: respects Step 28 buckets — copies them as-is (1+9 / 2 / 0)", () => {
+  const scope = fakeScope();
+  scope.mvp = Array.from({ length: 9 }, (_, i) => ({
+    scope_id: `SCOPE-MVP-${i + 1}`,
+    source_type: "registry_component" as const,
+    source_ref: `COMP-MVP-${i + 1}`,
+    name: `Componente MVP ${i + 1}`,
+    bucket: "mvp" as const,
+    status: "approved_for_scope" as const,
+    blockers: [],
+    required_actions: [],
+    soul_dependency: "none" as const,
+    business_job: `Trabajo de negocio ${i + 1}.`,
+  }));
+  scope.fast_follow_f2 = [
+    {
+      scope_id: "SCOPE-FF-1", source_type: "registry_component", source_ref: "COMP-FF-1",
+      name: "Revista emocional", bucket: "fast_follow_f2", status: "deferred",
+      blockers: [], required_actions: [], soul_dependency: "none",
+    },
+    {
+      scope_id: "SCOPE-FF-2", source_type: "registry_component", source_ref: "COMP-FF-2",
+      name: "Compradores institucionales (Benatar)", bucket: "fast_follow_f2", status: "deferred",
+      blockers: [], required_actions: [], soul_dependency: "none",
+    },
+  ];
+  scope.roadmap_f3 = [];
+
+  const out = buildClientProposal({
+    scope,
+    source_step: { step_number: 28, version: 2, row_id: "row-28" },
+    projectName: "AFFLUX",
+    clientCompany: "AFLU / AFFLUX",
+    commercialTerms: fakeCommercial(),
+  });
+  // data_foundation (1) + mvp (9) = 10 en alcance MVP del PDF
+  assertEquals(out.client_proposal_v1.mvp_scope.length, 10);
+  assertEquals(out.client_proposal_v1.later_phases.fast_follow.length, 2);
+  assertEquals(out.client_proposal_v1.later_phases.roadmap.length, 0);
 });

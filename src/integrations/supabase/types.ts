@@ -1614,12 +1614,14 @@ export type Database = {
           auto_patterns: boolean | null
           business_size: string | null
           business_type: string | null
+          client_company: string | null
           close_probability: string | null
           close_reason: string | null
           closed_at: string | null
           company: string | null
           created_at: string
           current_step: number | null
+          decision_maker_name: string | null
           detected_at: string
           estimated_value: number | null
           id: string
@@ -1650,12 +1652,14 @@ export type Database = {
           auto_patterns?: boolean | null
           business_size?: string | null
           business_type?: string | null
+          client_company?: string | null
           close_probability?: string | null
           close_reason?: string | null
           closed_at?: string | null
           company?: string | null
           created_at?: string
           current_step?: number | null
+          decision_maker_name?: string | null
           detected_at?: string
           estimated_value?: number | null
           id?: string
@@ -1686,12 +1690,14 @@ export type Database = {
           auto_patterns?: boolean | null
           business_size?: string | null
           business_type?: string | null
+          client_company?: string | null
           close_probability?: string | null
           close_reason?: string | null
           closed_at?: string | null
           company?: string | null
           created_at?: string
           current_step?: number | null
+          decision_maker_name?: string | null
           detected_at?: string
           estimated_value?: number | null
           id?: string

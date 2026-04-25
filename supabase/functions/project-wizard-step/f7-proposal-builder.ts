@@ -49,7 +49,10 @@ export interface ProposalScopeItem {
 export interface ClientProposalV1 {
   schema_version: "1.0.0";
   project_name: string;
+  /** Compatibilidad: nombre principal mostrado al cliente. Igual a client_company. */
   client_name: string;
+  client_company: string;
+  decision_maker_name?: string;
   generated_at: string;
   validity_days: number;
   source_step: { step_number: 28; version: number; row_id: string };
@@ -137,15 +140,67 @@ export interface F7Input {
   scope: ScopeArchitectureV1;
   source_step: { step_number: 28; version: number; row_id: string };
   projectName: string;
-  clientName: string;
+  /** Backwards-compat: si no se pasa clientCompany, se usa clientName. */
+  clientName?: string;
+  /** Empresa cliente (cabecera/portada). p.ej. "AFLU / AFFLUX". */
+  clientCompany?: string;
+  /** Persona física que decide. p.ej. "Alejandro Gordo". */
+  decisionMakerName?: string;
   briefSummary?: string;
   problemsDetected?: string[];
   commercialTerms: CommercialTermsV1;
 }
 
+// ───────────────────────────────────────────────────────────────────────────────
+// Internal: weeks_window → ES nativo
+// ───────────────────────────────────────────────────────────────────────────────
+
+const WEEKS_WINDOW_ES: Record<string, string> = {
+  weeks_1_to_2: "semanas 1 y 2",
+  weeks_1_to_3: "semanas 1 a 3",
+  weeks_1_to_4: "semanas 1 a 4",
+  weeks_2_to_4: "semanas 2 a 4",
+  weeks_2_to_6: "semanas 2 a 6",
+};
+
+function weeksWindowEs(raw: string | undefined | null): string {
+  if (!raw) return "primeras semanas";
+  if (WEEKS_WINDOW_ES[raw]) return WEEKS_WINDOW_ES[raw];
+  // Fallback genérico: weeks_X_to_Y → "semanas X a Y"
+  const m = raw.match(/^weeks?_(\d+)_to_(\d+)$/i);
+  if (m) {
+    const a = m[1], b = m[2];
+    return Number(b) - Number(a) === 1 ? `semanas ${a} y ${b}` : `semanas ${a} a ${b}`;
+  }
+  // Último fallback: limpiar guiones bajos.
+  return raw.replace(/_/g, " ");
+}
+
 export function buildClientProposal(input: F7Input): F7Output {
   const t0 = Date.now();
   const { scope, commercialTerms } = input;
+
+  // ── Guard: presupuesto debe traer importes reales ──
+  const hasBudget =
+    typeof commercialTerms.setup_fee === "number" ||
+    typeof commercialTerms.monthly_retainer === "number" ||
+    (commercialTerms.phase_prices?.length ?? 0) > 0;
+  if (!hasBudget) {
+    throw new Error("MISSING_BUDGET_AMOUNTS: la propuesta no puede generarse sin importes (setup_fee, monthly_retainer o phase_prices).");
+  }
+
+  // ── Guard: el scope de Step 28 debe tener al menos 1 componente productivo ──
+  const totalScope =
+    (scope.data_foundation?.length ?? 0) +
+    (scope.mvp?.length ?? 0) +
+    (scope.fast_follow_f2?.length ?? 0) +
+    (scope.roadmap_f3?.length ?? 0);
+  if (totalScope === 0) {
+    throw new Error("EMPTY_SCOPE: el alcance aprobado en Step 28 está vacío.");
+  }
+
+  const clientCompany = (input.clientCompany ?? input.clientName ?? "Cliente").trim();
+  const decisionMakerName = input.decisionMakerName?.trim() || undefined;
 
   const currency = commercialTerms.currency ?? "EUR";
   const validityDays = commercialTerms.validity_days ?? 30;
@@ -174,7 +229,7 @@ export function buildClientProposal(input: F7Input): F7Output {
   }
   if (soulRequired) {
     conditions.push(
-      `Sesiones de captura de criterio (${scope.soul_capture_plan.sessions} sesiones de ${scope.soul_capture_plan.session_duration_min} minutos) en las primeras ${scope.soul_capture_plan.weeks_window.replace(/_/g, " ")} del proyecto.`,
+      `Sesiones de captura de criterio (${scope.soul_capture_plan.sessions} sesiones de ${scope.soul_capture_plan.session_duration_min} minutos) en las primeras ${weeksWindowEs(scope.soul_capture_plan.weeks_window)} del proyecto.`,
     );
   }
   conditions.push(
@@ -246,15 +301,18 @@ export function buildClientProposal(input: F7Input): F7Output {
   const proposal: ClientProposalV1 = {
     schema_version: "1.0.0",
     project_name: input.projectName,
-    client_name: input.clientName,
+    client_name: clientCompany,
+    client_company: clientCompany,
+    decision_maker_name: decisionMakerName,
     generated_at: new Date().toISOString(),
     validity_days: validityDays,
     source_step: input.source_step,
     executive_summary:
-      `Propuesta para diseñar e implementar la solución a medida acordada con ${input.clientName}. ` +
-      `El alcance comprometido incluye ${mvp.length} módulos productivos, ` +
-      `${fastFollow.length} módulos planificados como segundo lote y ` +
-      `${roadmap.length} módulos contemplados en roadmap posterior. ` +
+      `Propuesta para diseñar e implementar la solución a medida acordada con ${clientCompany}. ` +
+      `El alcance comprometido incluye ${mvp.length} módulos productivos` +
+      (fastFollow.length > 0 ? ` y ${fastFollow.length} módulos planificados como segundo lote` : "") +
+      (roadmap.length > 0 ? `, además de ${roadmap.length} módulos contemplados en roadmap posterior` : "") +
+      ". " +
       (soulRequired
         ? "El proyecto incorpora sesiones de captura de criterio estratégico al inicio para garantizar que la solución refleje fielmente la lógica de decisión del responsable. "
         : "") +
@@ -263,7 +321,7 @@ export function buildClientProposal(input: F7Input): F7Output {
         : ""),
     context:
       input.briefSummary?.trim() ||
-      `Solución a medida para ${input.clientName}, basada en el análisis y las decisiones acordadas durante la fase de descubrimiento.`,
+      `Solución a medida para ${clientCompany}, basada en el análisis y las decisiones acordadas durante la fase de descubrimiento.`,
     problems_detected:
       input.problemsDetected && input.problemsDetected.length > 0
         ? [...input.problemsDetected]
@@ -336,32 +394,56 @@ function fmtMoney(n: number | undefined, currency: string): string {
   return `${n.toLocaleString("es-ES", { maximumFractionDigits: 2 })} ${currency}`;
 }
 
+const PRICING_MODEL_LABEL_ES: Record<string, string> = {
+  fixed_project: "Proyecto cerrado",
+  setup_plus_monthly: "Cuota inicial + mensualidad recurrente",
+  subscription: "Suscripción mensual",
+  phased: "Pago por fases",
+  retainer: "Iguala mensual",
+  mixed: "Modelo mixto",
+};
+
 export function renderProposalMarkdown(p: ClientProposalV1): string {
   const c = p.budget.currency;
   const lines: string[] = [];
+
+  // ── Cabecera ──
   lines.push(`# Propuesta — ${p.project_name}`);
   lines.push("");
-  lines.push(`**Cliente:** ${p.client_name}`);
+  lines.push(`> **CONFIDENCIAL — ${p.client_company}**`);
+  lines.push("");
+  lines.push(`**Cliente / empresa:** ${p.client_company}`);
+  if (p.decision_maker_name) {
+    lines.push(`**Decisor:** ${p.decision_maker_name}`);
+  }
+  lines.push(`**Producto:** ${p.project_name}`);
   lines.push(`**Fecha:** ${p.generated_at.substring(0, 10)} · **Validez:** ${p.validity_days} días`);
   lines.push("");
-  lines.push("## 1. Resumen ejecutivo");
-  lines.push("");
+
+  // ── Numeración dinámica ──
+  let n = 1;
+  const section = (title: string) => {
+    lines.push(`## ${n++}. ${title}`);
+    lines.push("");
+  };
+
+  section("Resumen ejecutivo");
   lines.push(p.executive_summary);
   lines.push("");
-  lines.push("## 2. Contexto");
-  lines.push("");
+
+  section("Contexto");
   lines.push(p.context);
   lines.push("");
-  lines.push("## 3. Problemas detectados");
-  lines.push("");
+
+  section("Problemas detectados");
   for (const x of p.problems_detected) lines.push(`- ${x}`);
   lines.push("");
-  lines.push("## 4. Propuesta de solución");
-  lines.push("");
+
+  section("Propuesta de solución");
   lines.push(p.proposed_solution);
   lines.push("");
-  lines.push("## 5. Alcance MVP");
-  lines.push("");
+
+  section("Alcance MVP");
   if (p.mvp_scope.length === 0) {
     lines.push("_Sin módulos definidos en el MVP._");
   } else {
@@ -371,36 +453,36 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
       lines.push("");
     }
   }
-  lines.push("## 6. Fases posteriores");
-  lines.push("");
-  lines.push("### Segundo lote (fast follow)");
-  if (p.later_phases.fast_follow.length === 0) {
-    lines.push("_No aplica._");
-  } else {
-    for (const it of p.later_phases.fast_follow) {
-      lines.push(`- **${it.title}** — ${it.description}`);
+
+  // Fases posteriores: solo si hay algo que mostrar
+  const hasFastFollow = p.later_phases.fast_follow.length > 0;
+  const hasRoadmap = p.later_phases.roadmap.length > 0;
+  if (hasFastFollow || hasRoadmap) {
+    section("Fases posteriores");
+    if (hasFastFollow) {
+      lines.push("### Segundo lote (fast follow)");
+      for (const it of p.later_phases.fast_follow) {
+        lines.push(`- **${it.title}** — ${it.description}`);
+      }
+      lines.push("");
+    }
+    if (hasRoadmap) {
+      lines.push("### Roadmap posterior");
+      for (const it of p.later_phases.roadmap) {
+        lines.push(`- **${it.title}** — ${it.description}`);
+      }
+      lines.push("");
     }
   }
-  lines.push("");
-  lines.push("### Roadmap posterior");
-  if (p.later_phases.roadmap.length === 0) {
-    lines.push("_No aplica._");
-  } else {
-    for (const it of p.later_phases.roadmap) {
-      lines.push(`- **${it.title}** — ${it.description}`);
-    }
-  }
-  lines.push("");
-  lines.push("## 7. Qué queda fuera");
-  lines.push("");
-  if (p.out_of_scope.length === 0) {
-    lines.push("_No aplica._");
-  } else {
+
+  // Out of scope: solo si hay algo que mostrar
+  if (p.out_of_scope.length > 0) {
+    section("Qué queda fuera");
     for (const x of p.out_of_scope) lines.push(`- ${x}`);
+    lines.push("");
   }
-  lines.push("");
-  lines.push("## 8. Plan de implementación");
-  lines.push("");
+
+  section("Plan de implementación");
   lines.push(p.implementation_plan.summary);
   if (p.implementation_plan.soul_sessions_required) {
     lines.push("");
@@ -409,34 +491,41 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
   lines.push("");
   lines.push(`**Plazos:** ${p.implementation_plan.timeline}`);
   lines.push("");
-  lines.push("## 9. Responsabilidades del cliente");
-  lines.push("");
+
+  section("Responsabilidades del cliente");
   for (const x of p.client_responsibilities) lines.push(`- ${x}`);
   lines.push("");
-  lines.push("## 10. Riesgos y mitigaciones");
-  lines.push("");
+
+  section("Riesgos y mitigaciones");
   for (const r of p.risks_and_mitigations) {
     lines.push(`- **Riesgo:** ${r.risk}`);
     lines.push(`  - **Mitigación:** ${r.mitigation}`);
   }
   lines.push("");
-  lines.push("## 11. Presupuesto");
+
+  section("Presupuesto");
+  const modelLabel = PRICING_MODEL_LABEL_ES[p.budget.pricing_model] ?? p.budget.pricing_model;
+  lines.push(`**Modalidad:** ${modelLabel}`);
   lines.push("");
-  lines.push(`**Modalidad:** ${p.budget.pricing_model}`);
   if (p.budget.setup_fee !== undefined) {
-    lines.push(`- Cuota inicial: **${fmtMoney(p.budget.setup_fee, c)}**`);
+    lines.push(`- **Cuota inicial:** ${fmtMoney(p.budget.setup_fee, c)}`);
   }
   if (p.budget.monthly_retainer !== undefined) {
-    lines.push(`- Mensualidad recurrente: **${fmtMoney(p.budget.monthly_retainer, c)}**`);
+    lines.push(`- **Mensualidad recurrente:** ${fmtMoney(p.budget.monthly_retainer, c)}`);
+  }
+  // Total de referencia (orientativo a 12 meses si hay mensualidad)
+  if (p.budget.setup_fee !== undefined && p.budget.monthly_retainer !== undefined) {
+    const total12 = p.budget.setup_fee + p.budget.monthly_retainer * 12;
+    lines.push(`- **Total estimado primer año:** ${fmtMoney(total12, c)} _(cuota inicial + 12 mensualidades)_`);
   }
   if (p.budget.phase_prices && p.budget.phase_prices.length > 0) {
-    lines.push("- Precios por fase:");
+    lines.push("- **Precios por fase:**");
     for (const ph of p.budget.phase_prices) {
       lines.push(`  - **${ph.phase}**: ${fmtMoney(ph.price, c)}${ph.description ? ` — ${ph.description}` : ""}`);
     }
   }
   if (p.budget.optional_addons && p.budget.optional_addons.length > 0) {
-    lines.push("- Opcionales (no incluidos en el precio base):");
+    lines.push("- **Opcionales (no incluidos en el precio base):**");
     for (const a of p.budget.optional_addons) {
       lines.push(`  - **${a.name}**${a.price !== undefined ? `: ${fmtMoney(a.price, c)}` : ""}${a.description ? ` — ${a.description}` : ""}`);
     }
@@ -450,26 +539,27 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
     lines.push(`**Impuestos:** ${p.budget.taxes}`);
   }
   lines.push("");
-  lines.push("## 12. Modalidad de pago");
-  lines.push("");
+
+  section("Modalidad de pago");
   lines.push(p.payment_terms);
   lines.push("");
+
   if (p.support_terms) {
-    lines.push("## 13. Soporte post-entrega");
-    lines.push("");
+    section("Soporte post-entrega");
     lines.push(p.support_terms);
     lines.push("");
   }
-  lines.push("## 14. Condiciones");
-  lines.push("");
+
+  section("Condiciones");
   for (const x of p.conditions) lines.push(`- ${x}`);
   lines.push("");
+
   if (p.legal_notes) {
-    lines.push("## 15. Notas legales");
-    lines.push("");
+    section("Notas legales");
     lines.push(p.legal_notes);
     lines.push("");
   }
+
   lines.push("## Próximos pasos");
   lines.push("");
   for (const x of p.next_steps) lines.push(`- ${x}`);

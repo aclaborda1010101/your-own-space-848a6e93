@@ -64,12 +64,23 @@ export interface CommercialTermsModel {
 }
 
 export interface CommercialTermsV1 {
-  pricing_model: string;
+  // ── Flat fields consumed by F7 (Step 30) ──
+  pricing_model: "fixed_project" | "setup_plus_monthly" | "subscription" | "phased" | "retainer" | "mixed";
+  setup_fee?: number;
+  monthly_retainer?: number;
+  phase_prices?: Array<{ phase: string; price: number; description?: string }>;
+  optional_addons?: Array<{ name: string; price?: number; description?: string }>;
+  ai_usage_cost_policy: string;
+  payment_terms: string;
+  taxes?: string;
+  currency: string;
+  validity_days: number;
+
+  // ── Internal audit / debugging only — never rendered to client ──
   selected_models: CommercialTermsModel[];
   recommended_model: string | null;
   development_total_eur: number | null;
   recurring_monthly_eur: number | null;
-  ai_usage_cost_policy: string;
   notes: string;
   risk_factors: string[];
   source: "derived_from_budget_data";
@@ -122,21 +133,50 @@ export function budgetToCommercialTermsV1(
     };
   });
 
-  // Pricing model heuristic: usa el recomendado si existe, si no el primero
-  const primary = models.find((m) => m.recommended) || models[0];
-  let pricing_model = "fixed_project";
+  // Pricing model heuristic basado en el modelo recomendado/principal
+  const recommended = models.find((m) => m.recommended) || null;
+  const primary = recommended || models[0];
+  const visibleModels = models.filter((m) => m.visible_to_client);
+
+  let pricing_model: CommercialTermsV1["pricing_model"] = "fixed_project";
   if (primary.setup_fee != null && primary.monthly_fee != null) pricing_model = "setup_plus_monthly";
   else if (primary.monthly_fee != null) pricing_model = "subscription";
   else if (primary.setup_fee != null) pricing_model = "fixed_project";
 
+  // Aplanar el modelo principal a los campos que F7 lee directamente.
+  const setup_fee = primary.setup_fee ?? undefined;
+  const monthly_retainer = primary.monthly_fee ?? undefined;
+
+  // Otros modelos visibles → opcionales (no incluidos en el precio base).
+  const optional_addons = visibleModels
+    .filter((m) => m.id !== primary.id)
+    .map((m) => ({
+      name: m.name,
+      price: m.setup_fee ?? m.monthly_fee ?? m.unit_price ?? undefined,
+      description: m.description || undefined,
+    }));
+
   return {
+    // Flat fields consumed by F7
     pricing_model,
+    setup_fee,
+    monthly_retainer,
+    phase_prices: undefined,
+    optional_addons: optional_addons.length > 0 ? optional_addons : undefined,
+    ai_usage_cost_policy:
+      "Costes de IA/API no incluidos por defecto, facturados según consumo real.",
+    payment_terms:
+      (budget.pricing_notes && budget.pricing_notes.trim()) ||
+      "50% al inicio del proyecto y 50% contra entrega del MVP. Mensualidades, en su caso, facturadas a mes vencido.",
+    taxes: "IVA no incluido. Se aplicará el tipo vigente.",
+    currency: "EUR",
+    validity_days: 30,
+
+    // Internal audit
     selected_models: models,
     recommended_model: budget.recommended_model || null,
     development_total_eur: budget.development?.total_development_eur ?? null,
     recurring_monthly_eur: budget.recurring_monthly?.total_monthly_eur ?? null,
-    ai_usage_cost_policy:
-      "Costes de IA/API no incluidos por defecto, facturados según consumo real.",
     notes: budget.pricing_notes || "",
     risk_factors: budget.risk_factors || [],
     source: "derived_from_budget_data",
@@ -159,11 +199,16 @@ export function validateBudgetForClientProposal(
     return "Marca al menos un modelo como visible para el cliente.";
   }
 
-  const withPrice = visibles.filter(
-    (m) => m.setup_price_eur || m.monthly_price_eur || m.price_range
-  );
-  if (withPrice.length === 0) {
-    return "El modelo visible no tiene precio (setup, mensual o rango).";
+  // Debe haber al menos un modelo visible con un importe NUMÉRICO real
+  // (no string vacío, no rango sin número).
+  const withNumericPrice = visibles.filter((m) => {
+    const setup = parseEuro(m.setup_price_eur);
+    const monthly = parseEuro(m.monthly_price_eur);
+    return (typeof setup === "number" && setup > 0) ||
+           (typeof monthly === "number" && monthly > 0);
+  });
+  if (withNumericPrice.length === 0) {
+    return "El modelo visible para el cliente debe tener un importe numérico (cuota inicial o mensualidad). Sin importes reales no se puede generar la propuesta.";
   }
 
   return null;

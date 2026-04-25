@@ -100,11 +100,16 @@ Deno.test("F8: detects missing budget", () => {
     scope: s, source_step: { step_number: 28, version: 1, row_id: "r28" },
     projectName: "X", clientName: "Y",
   }).technical_prd_v1;
+  // Build a valid proposal first (F7 now rejects empty budgets), then strip
+  // the budget amounts to simulate the legacy condition F8 must catch.
   const proposal = buildClientProposal({
     scope: s, source_step: { step_number: 28, version: 1, row_id: "r28" },
     projectName: "X", clientName: "Y",
-    commercialTerms: { pricing_model: "fixed_project", currency: "EUR" }, // no fee/retainer/phases
+    commercialTerms: { pricing_model: "fixed_project", setup_fee: 1, currency: "EUR" } as any,
   }).client_proposal_v1;
+  proposal.budget.setup_fee = undefined;
+  proposal.budget.monthly_retainer = undefined;
+  proposal.budget.phase_prices = undefined;
   const audit = runFinalDeliverablesAudit({
     scope: s, prd, proposal,
     source_steps: {

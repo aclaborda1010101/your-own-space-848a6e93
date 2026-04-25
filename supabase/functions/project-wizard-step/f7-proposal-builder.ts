@@ -301,15 +301,18 @@ export function buildClientProposal(input: F7Input): F7Output {
   const proposal: ClientProposalV1 = {
     schema_version: "1.0.0",
     project_name: input.projectName,
-    client_name: input.clientName,
+    client_name: clientCompany,
+    client_company: clientCompany,
+    decision_maker_name: decisionMakerName,
     generated_at: new Date().toISOString(),
     validity_days: validityDays,
     source_step: input.source_step,
     executive_summary:
-      `Propuesta para diseñar e implementar la solución a medida acordada con ${input.clientName}. ` +
-      `El alcance comprometido incluye ${mvp.length} módulos productivos, ` +
-      `${fastFollow.length} módulos planificados como segundo lote y ` +
-      `${roadmap.length} módulos contemplados en roadmap posterior. ` +
+      `Propuesta para diseñar e implementar la solución a medida acordada con ${clientCompany}. ` +
+      `El alcance comprometido incluye ${mvp.length} módulos productivos` +
+      (fastFollow.length > 0 ? ` y ${fastFollow.length} módulos planificados como segundo lote` : "") +
+      (roadmap.length > 0 ? `, además de ${roadmap.length} módulos contemplados en roadmap posterior` : "") +
+      ". " +
       (soulRequired
         ? "El proyecto incorpora sesiones de captura de criterio estratégico al inicio para garantizar que la solución refleje fielmente la lógica de decisión del responsable. "
         : "") +
@@ -318,7 +321,7 @@ export function buildClientProposal(input: F7Input): F7Output {
         : ""),
     context:
       input.briefSummary?.trim() ||
-      `Solución a medida para ${input.clientName}, basada en el análisis y las decisiones acordadas durante la fase de descubrimiento.`,
+      `Solución a medida para ${clientCompany}, basada en el análisis y las decisiones acordadas durante la fase de descubrimiento.`,
     problems_detected:
       input.problemsDetected && input.problemsDetected.length > 0
         ? [...input.problemsDetected]

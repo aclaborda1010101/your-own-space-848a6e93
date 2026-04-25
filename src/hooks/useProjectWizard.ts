@@ -1333,6 +1333,28 @@ export const useProjectWizard = (projectId?: string) => {
         toast.error("No se pudieron derivar las condiciones comerciales del presupuesto");
         return;
       }
+
+      // Auto-cadena: si Step 28 no existe, ejecutar pipeline v2 completo primero.
+      const { data: step28Check } = await supabase
+        .from("project_wizard_steps")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("step_number", 28)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!step28Check?.id) {
+        toast.info("Generando alcance previo (Step 28). Puede tardar varios minutos…");
+        for (const prereq of ["build_registry", "audit_f4a_gaps", "audit_f4b_feasibility", "architect_scope"]) {
+          const { data: prereqData, error: prereqErr } = await supabase.functions.invoke("project-wizard-step", {
+            body: { action: prereq, projectId },
+          });
+          if (prereqErr) throw new Error(`Falló paso previo "${prereq}": ${prereqErr.message || prereqErr}`);
+          if (prereqData?.error) throw new Error(`${prereq}: ${prereqData.error}`);
+        }
+      }
+
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
           action: "generate_client_proposal",

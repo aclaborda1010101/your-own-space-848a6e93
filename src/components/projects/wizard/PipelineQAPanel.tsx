@@ -56,6 +56,8 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [commercialTerms, setCommercialTerms] = useState<string>(DEFAULT_COMMERCIAL_TERMS);
+  const [showTermsForm, setShowTermsForm] = useState(false);
   const startRef = useRef<number | null>(null);
   const tickRef = useRef<number | null>(null);
 

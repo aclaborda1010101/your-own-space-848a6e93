@@ -87,6 +87,64 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
     }
   };
 
+  // Acciones que requieren que Step 28 (architect_scope) ya exista.
+  const REQUIRES_STEP_28: WizardAction[] = ["generate_technical_prd", "generate_client_proposal"];
+  // Cadena previa necesaria para producir Step 28.
+  const PREREQ_CHAIN: WizardAction[] = [
+    "build_registry",
+    "audit_f4a_gaps",
+    "audit_f4b_feasibility",
+    "architect_scope",
+  ];
+
+  const invokeAction = async (
+    action: WizardAction,
+    token: string,
+    extraBody: Record<string, unknown> = {},
+  ): Promise<{ status: number; text: string; parsed: any | null }> => {
+    const url = `${SUPABASE_URL}/functions/v1/project-wizard-step`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        apikey: ANON_KEY,
+      },
+      body: JSON.stringify({ action, projectId, ...extraBody }),
+    });
+    const text = await res.text();
+    let p: any = null;
+    try { p = JSON.parse(text); } catch { /* noop */ }
+    return { status: res.status, text, parsed: p };
+  };
+
+  const ensureStep28Exists = async (token: string): Promise<{ ok: boolean; error?: string }> => {
+    const { data: step28 } = await supabase
+      .from("project_wizard_steps")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("step_number", 28)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (step28?.id) return { ok: true };
+
+    // Step 28 no existe → ejecutar cadena previa F2/F3 → F4a → F4b → F5.
+    for (const prereq of PREREQ_CHAIN) {
+      setCurrentAction(prereq);
+      startRef.current = Date.now();
+      setElapsed(0);
+      const { status, parsed: pr } = await invokeAction(prereq, token);
+      if (status < 200 || status >= 300) {
+        return {
+          ok: false,
+          error: `Falló paso previo "${ACTION_META[prereq].label}" (${status}): ${pr?.error || "error desconocido"}`,
+        };
+      }
+    }
+    return { ok: true };
+  };
+
   const run = async (action: WizardAction) => {
     setLoading(true);
     setCurrentAction(action);
@@ -106,36 +164,33 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
         return;
       }
 
-      const body: Record<string, unknown> = { action, projectId };
+      // Auto-cadena: si la acción requiere Step 28 y no existe, ejecutar prereqs.
+      if (REQUIRES_STEP_28.includes(action)) {
+        const pre = await ensureStep28Exists(token);
+        if (!pre.ok) {
+          setError(pre.error || "No se pudo preparar Step 28.");
+          return;
+        }
+        // Restaurar UI a la acción original solicitada por el usuario.
+        setCurrentAction(action);
+        startRef.current = Date.now();
+        setElapsed(0);
+      }
 
+      const extraBody: Record<string, unknown> = {};
       if (action === "generate_client_proposal") {
         try {
-          body.stepData = { commercial_terms_v1: JSON.parse(commercialTerms) };
+          extraBody.stepData = { commercial_terms_v1: JSON.parse(commercialTerms) };
         } catch (e) {
           setError("commercial_terms no es JSON válido. Revisa el formulario.");
           return;
         }
       }
 
-      const url = `${SUPABASE_URL}/functions/v1/project-wizard-step`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          apikey: ANON_KEY,
-        },
-        body: JSON.stringify(body),
-      });
-
-      setStatus(res.status);
-      const text = await res.text();
+      const { status, text, parsed: p } = await invokeAction(action, token, extraBody);
+      setStatus(status);
       setRaw(text);
-      try {
-        setParsed(JSON.parse(text));
-      } catch {
-        setParsed(null);
-      }
+      setParsed(p);
     } catch (e: any) {
       setError(e?.message || String(e));
     } finally {

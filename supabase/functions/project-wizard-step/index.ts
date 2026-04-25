@@ -2347,8 +2347,21 @@ Validez de la propuesta, condiciones de cambio de alcance, firma.`;
       });
     }
 
-    // ── Action: generate_prd_chained (New 4-step pipeline: F3→F4→F5 in one call) ──
+    // ── Action: generate_prd_chained (LEGACY pipeline — DEPRECATED) ──
+    // Bloqueado en producción: usar build_registry → audit_f4a_gaps →
+    // audit_f4b_feasibility → architect_scope → generate_technical_prd.
     if (action === "generate_prd_chained") {
+      const allowLegacy = req.headers.get("x-allow-legacy") === "true";
+      if (!allowLegacy) {
+        console.warn("[project-wizard-step] Blocked legacy action generate_prd_chained");
+        return new Response(JSON.stringify({
+          error: "Pipeline legacy desactivado. Usa el flujo v2 (architect_scope → generate_technical_prd). Para forzarlo en debug local envía el header x-allow-legacy: true.",
+          code: "LEGACY_PIPELINE_DISABLED",
+        }), {
+          status: 410,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const sd = stepData;
       const briefingJson = sd.briefingJson;
       const briefStr = typeof briefingJson === 'string' ? briefingJson : JSON.stringify(briefingJson || {}, null, 2);
@@ -3291,7 +3304,17 @@ Responde SOLO con JSON válido conteniendo las claves faltantes.`;
 
     // ── Action: generate_prd (Step 5) — ASYNC via waitUntil — 6 PARTS LOW-LEVEL ──
     if (action === "generate_prd") {
-      // Mark step as "generating" immediately
+      const allowLegacyPrd = req.headers.get("x-allow-legacy") === "true";
+      if (!allowLegacyPrd) {
+        console.warn("[project-wizard-step] Blocked legacy action generate_prd");
+        return new Response(JSON.stringify({
+          error: "Pipeline legacy desactivado. Usa generate_technical_prd basado en Step 28. Para forzar en debug local envía x-allow-legacy: true.",
+          code: "LEGACY_PIPELINE_DISABLED",
+        }), {
+          status: 410,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const { data: existingStepInit } = await supabase
         .from("project_wizard_steps")
         .select("id, version")

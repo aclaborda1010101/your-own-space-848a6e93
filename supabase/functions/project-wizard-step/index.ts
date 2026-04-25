@@ -245,9 +245,9 @@ serve(async (req) => {
         metadata: { recovered: recovered.length, still_failed: stillFailedList.length },
       });
 
-      await supabase.from("project_wizard_steps").insert({
-        project_id: pid,
-        step_number: 2,
+      // The (project_id, step_number) pair is UNIQUE, so we UPDATE the
+      // existing Step 2 row in place instead of inserting a duplicate.
+      await supabase.from("project_wizard_steps").update({
         step_name: "Extracción Inteligente (Chunked + Retry)",
         status: "review",
         input_data: {
@@ -260,7 +260,7 @@ serve(async (req) => {
         model_used: "gemini-2.5-flash",
         version: newVersion,
         user_id: user.id,
-      });
+      }).eq("id", latestStep2.id);
 
       return new Response(JSON.stringify({
         briefing: finalBriefing,

@@ -18,6 +18,7 @@ import { ProjectActivityTimeline } from "@/components/projects/wizard/ProjectAct
 import { ProjectBudgetPanel } from "@/components/projects/wizard/ProjectBudgetPanel";
 import { ProjectLiveSummaryPanel } from "@/components/projects/wizard/ProjectLiveSummaryPanel";
 import { ProjectProposalExport } from "@/components/projects/wizard/ProjectProposalExport";
+import { PricingModeSelector } from "@/components/projects/wizard/PricingModeSelector";
 import { ChainedPRDProgress } from "@/components/projects/wizard/ChainedPRDProgress";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
 import { PublishToForgeDialog } from "@/components/projects/wizard/PublishToForgeDialog";
@@ -319,29 +320,36 @@ const ProjectWizardEdit = () => {
                   </CardContent>
                 </Card>
               ) : (
-                <ProjectWizardGenericStep
-                  stepNumber={3}
-                  stepName="PRD Técnico"
-                  description="Genera internamente Alcance + Auditoría IA + PRD Técnico en una sola operación."
-                  outputData={step3Data?.outputData || null}
-                  generating={generating && (chainedPhase === "idle" || chainedPhase === "done")}
-                  onGenerate={async () => {
-                    await runChainedPRD(pricingMode);
-                  }}
-                  onApprove={async () => {
-                    await approveStep(3, undefined, { autoChain: autoChainEnabled });
-                  }}
-                  generateLabel="Generar PRD Técnico"
-                  isMarkdown={true}
-                  projectId={id}
-                  projectName={project.name}
-                  company={project.company}
-                  version={step3Data?.version || 1}
-                  onUpdateOutputData={(newData) => updateStepOutputData(3, newData)}
-                  exportMode={exportMode}
-                  onExportModeChange={setExportMode}
-                  status={step3Data?.status}
-                />
+                <div className="space-y-4">
+                  <PricingModeSelector
+                    value={pricingMode}
+                    onChange={setPricingMode}
+                    disabled={generating}
+                  />
+                  <ProjectWizardGenericStep
+                    stepNumber={3}
+                    stepName="PRD Técnico"
+                    description="Genera internamente Alcance + Auditoría IA + PRD Técnico en una sola operación."
+                    outputData={step3Data?.outputData || null}
+                    generating={generating && (chainedPhase === "idle" || chainedPhase === "done")}
+                    onGenerate={async () => {
+                      await runChainedPRD(pricingMode);
+                    }}
+                    onApprove={async () => {
+                      await approveStep(3, undefined, { autoChain: autoChainEnabled });
+                    }}
+                    generateLabel="Generar PRD Técnico"
+                    isMarkdown={true}
+                    projectId={id}
+                    projectName={project.name}
+                    company={project.company}
+                    version={step3Data?.version || 1}
+                    onUpdateOutputData={(newData) => updateStepOutputData(3, newData)}
+                    exportMode={exportMode}
+                    onExportModeChange={setExportMode}
+                    status={step3Data?.status}
+                  />
+                </div>
               )}
             </>
           )}

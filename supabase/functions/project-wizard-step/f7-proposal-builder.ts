@@ -364,17 +364,20 @@ export function buildClientProposal(input: F7Input): F7Output {
       pricing_model: commercialTerms.pricing_model,
       currency,
       setup_fee: commercialTerms.setup_fee,
+      setup_fee_max: commercialTerms.setup_fee_max,
+      setup_fee_display: commercialTerms.setup_fee_display,
       monthly_retainer: commercialTerms.monthly_retainer,
+      monthly_retainer_max: commercialTerms.monthly_retainer_max,
+      monthly_retainer_display: commercialTerms.monthly_retainer_display,
       phase_prices: commercialTerms.phase_prices,
       optional_addons: commercialTerms.optional_addons,
       ai_usage_cost_policy: commercialTerms.ai_usage_cost_policy,
       taxes: commercialTerms.taxes,
     },
-    payment_terms:
-      commercialTerms.payment_terms?.trim() ||
+    payment_terms: scrubInternalLeak(commercialTerms.payment_terms) ||
       "50% al inicio del proyecto y 50% contra entrega del MVP. Mensualidades, en su caso, facturadas a mes vencido.",
-    support_terms: commercialTerms.support_terms,
-    legal_notes: commercialTerms.legal_notes,
+    support_terms: scrubInternalLeak(commercialTerms.support_terms) || undefined,
+    legal_notes: scrubInternalLeak(commercialTerms.legal_notes) || undefined,
     next_steps: nextSteps,
   };
 

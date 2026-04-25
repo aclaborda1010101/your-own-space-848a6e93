@@ -273,9 +273,20 @@ serve(async (req) => {
       });
     }
 
-    // ── Action: normalize_brief (Step 2 — clean + dedup + clean brief) ───
-    if (action === "normalize_brief") {
-      const { projectId: pid, projectName, companyName, founderName, sectorHint } = body.stepData || {};
+    // ── Action: normalize_brief / repair_step2_brief ─────────────────────
+    // Both run the same robust pipeline. `repair_step2_brief` additionally
+    // tries to recover failed chunks first (when inputContent is provided).
+    if (action === "normalize_brief" || action === "repair_step2_brief") {
+      const sd = body.stepData || {};
+      const pid = sd.projectId || projectId;
+      const projectName = sd.projectName || "";
+      const companyName = sd.companyName || "";
+      const founderName = sd.founderName;
+      const sectorHint = sd.sectorHint;
+      const inputContent: string | undefined = sd.inputContent;
+
+      console.log(`[${action}] start project=${pid} hasInput=${!!inputContent}`);
+
       if (!pid) {
         return new Response(JSON.stringify({ error: "projectId required" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -292,53 +303,133 @@ serve(async (req) => {
         .maybeSingle();
 
       if (!latestStep2 || !latestStep2.output_data) {
+        console.warn(`[${action}] no Step 2 found for project=${pid}`);
         return new Response(JSON.stringify({ error: "No existing Step 2 to normalize" }), {
           status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
+      console.log(`[${action}] loaded step2 v${latestStep2.version}`);
+
       const { normalizeBrief } = await import("./brief-normalizer.ts");
       const { buildCleanBrief } = await import("./clean-brief-builder.ts");
 
-      const existingBriefing: any = latestStep2.output_data;
-      const normResult = await normalizeBrief(existingBriefing, {
-        projectName: projectName || "",
-        companyName: companyName || "",
-        founderName, sectorHint, language: "es",
+      let workingBriefing: any = latestStep2.output_data;
+      let recoveredCount = 0;
+      let stillFailedList: Array<{ chunk_id: string; error: string }> = [];
+
+      // Best-effort retry of failed chunks (only for repair_step2_brief and only if input is available)
+      try {
+        const meta = workingBriefing?._chunked_extraction_meta;
+        const failedIds: string[] = Array.isArray(meta?.failed_chunks)
+          ? meta.failed_chunks.map((c: any) => c.chunk_id).filter(Boolean)
+          : [];
+        if (action === "repair_step2_brief" && failedIds.length > 0 && typeof inputContent === "string" && inputContent.length > 0) {
+          console.log(`[${action}] attempting retry of ${failedIds.length} failed chunks`);
+          const { retryFailedChunks, mergeChunkBriefs } = await import("./chunked-extractor.ts");
+          const retry = await retryFailedChunks(failedIds, inputContent, {
+            projectName, companyName,
+            projectType: sd.projectType, clientNeed: sd.clientNeed,
+          });
+          recoveredCount = retry.recovered.length;
+          stillFailedList = retry.stillFailed.map((s: any) => ({ chunk_id: s.chunk_id, error: s.error }));
+
+          if (retry.recovered.length > 0) {
+            const v2 = workingBriefing.business_extraction_v2 || {};
+            const syntheticOk: any = {
+              chunk_id: "MERGED-PRIOR",
+              observed_facts: v2.observed_facts || [],
+              business_catalysts: v2.business_catalysts || [],
+              underutilized_data_assets: v2.underutilized_data_assets || [],
+              quantified_economic_pains: v2.quantified_economic_pains || [],
+              decision_points: v2.decision_points || [],
+              stakeholder_signals: v2.stakeholder_signals || [],
+              client_requested_items: v2.client_requested_items || [],
+              inferred_needs: v2.inferred_needs || [],
+              ai_native_opportunity_signals: v2.ai_native_opportunity_signals || [],
+              external_data_sources_mentioned: v2.external_data_sources_mentioned || [],
+              founder_commitment_signals: v2.founder_commitment_signals || [],
+              initial_compliance_flags: v2.initial_compliance_flags || [],
+              constraints_and_risks: v2.constraints_and_risks || [],
+              open_questions: v2.open_questions || [],
+              architecture_signals: v2.architecture_signals || [],
+              source_quotes: v2.source_quotes || [],
+              tokensInput: 0, tokensOutput: 0,
+            };
+            const mergeRes = await mergeChunkBriefs(
+              [syntheticOk, ...retry.recovered],
+              { projectName, companyName },
+              { synthesizeNarrative: false },
+            );
+            const merged: any = mergeRes.briefing;
+            if (v2.business_model_summary) merged.business_extraction_v2.business_model_summary = v2.business_model_summary;
+            if (v2.executive_summary) merged.business_extraction_v2.executive_summary = v2.executive_summary;
+            if (v2.project_title) merged.business_extraction_v2.project_title = v2.project_title;
+            merged._chunked_extraction_meta = {
+              ...meta,
+              chunks_succeeded: Array.from(new Set([...(meta?.chunks_succeeded || []), ...retry.recovered.map((r: any) => r.chunk_id)])),
+              failed_chunks: stillFailedList,
+              retry_applied: true,
+              retry_at: new Date().toISOString(),
+              recovered_count: recoveredCount,
+            };
+            merged._extraction_mode = "chunked";
+            merged._f0_signals = workingBriefing._f0_signals;
+            workingBriefing = merged;
+            console.log(`[${action}] recovered ${recoveredCount}/${failedIds.length}, still failing: ${stillFailedList.length}`);
+          }
+        }
+      } catch (retryErr) {
+        console.warn(`[${action}] retry pipeline failed (non-blocking):`, retryErr instanceof Error ? retryErr.message : retryErr);
+      }
+
+      // Normalization
+      const normResult = await normalizeBrief(workingBriefing, {
+        projectName, companyName, founderName, sectorHint, language: "es",
       });
       let finalBriefing: any = normResult.briefing;
 
-      const cleanBrief = buildCleanBrief(finalBriefing, { projectName: projectName || "" });
+      // Mark pending failed chunks in the normalization log so the UI knows.
+      if (stillFailedList.length > 0) {
+        finalBriefing._normalization_log = finalBriefing._normalization_log || {};
+        finalBriefing._normalization_log.pending_failed_chunks = stillFailedList;
+      }
+
+      // Build clean brief (deterministic markdown)
+      const cleanBrief = buildCleanBrief(finalBriefing, { projectName });
       finalBriefing._clean_brief_md = cleanBrief.markdown;
       finalBriefing._clean_brief_sections = cleanBrief.sections;
 
+      // Anti-leak + legacy
       const leak = stripRegistryLeaks(finalBriefing);
       finalBriefing = leak.cleaned;
       finalBriefing = ensureLegacyBriefShape(finalBriefing);
       finalBriefing.brief_version = "2.0.0";
 
       const newVersion = (latestStep2.version || 1) + 1;
-      const costUsd = (normResult.tokensInput / 1_000_000) * 0.075 + (normResult.tokensOutput / 1_000_000) * 0.30;
+      const cleanLen = (finalBriefing._clean_brief_md || "").length;
 
+      const costUsd = (normResult.tokensInput / 1_000_000) * 0.075 + (normResult.tokensOutput / 1_000_000) * 0.30;
       if (normResult.tokensInput > 0 || normResult.tokensOutput > 0) {
         await recordCost(supabase, {
-          projectId: pid, stepNumber: 2, service: "gemini-flash", operation: "normalize_brief",
+          projectId: pid, stepNumber: 2, service: "gemini-flash", operation: action,
           tokensInput: normResult.tokensInput, tokensOutput: normResult.tokensOutput,
           costUsd, userId: user.id,
-          metadata: { changes: normResult.changes.length, llm_called: normResult.llmCalled },
+          metadata: { changes: normResult.changes.length, llm_called: normResult.llmCalled, recovered: recoveredCount, still_failed: stillFailedList.length },
         });
       }
 
-      await supabase.from("project_wizard_steps").insert({
+      const { error: insertErr } = await supabase.from("project_wizard_steps").insert({
         project_id: pid,
         step_number: 2,
-        step_name: "Extracción Inteligente (Normalizada)",
+        step_name: action === "repair_step2_brief"
+          ? "Extracción Inteligente (Reparada + Normalizada)"
+          : "Extracción Inteligente (Normalizada)",
         status: "review",
         input_data: {
           ...(latestStep2.input_data || {}),
-          retry_action: "normalize_brief",
+          retry_action: action,
           previous_version: latestStep2.version,
-          previous_version_snapshot: existingBriefing,
         },
         output_data: finalBriefing,
         model_used: "gemini-2.5-flash",
@@ -346,10 +437,23 @@ serve(async (req) => {
         user_id: user.id,
       });
 
+      if (insertErr) {
+        console.error(`[${action}] failed to persist new version:`, insertErr);
+        return new Response(JSON.stringify({ error: `Failed to persist normalized brief: ${insertErr.message}` }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      console.log(`[${action}] saved step2 v${newVersion} clean_len=${cleanLen} changes=${normResult.changes.length}`);
+
       return new Response(JSON.stringify({
+        success: true,
         briefing: finalBriefing,
         version: newVersion,
+        clean_brief_length: cleanLen,
         normalization_changes: normResult.changes.length,
+        recovered_chunks: recoveredCount,
+        still_failed_chunks: stillFailedList.length,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

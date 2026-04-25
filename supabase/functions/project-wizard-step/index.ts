@@ -1226,6 +1226,261 @@ REGLAS PARA deep_patterns:
       });
     }
 
+    // ── Action: generate_technical_prd (Step 29) ──────────────────────────
+    if (action === "generate_technical_prd") {
+      const { buildTechnicalPrd, renderPrdMarkdown } = await import("./f6-prd-builder.ts");
+
+      const { data: step28Row } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version, output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 28)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!step28Row?.output_data?.scope_architecture_v1) {
+        return new Response(JSON.stringify({ error: "No Step 28 scope found. Run architect_scope first." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: projectRow } = await supabase
+        .from("business_projects")
+        .select("name, company")
+        .eq("id", projectId)
+        .single();
+
+      const f6 = buildTechnicalPrd({
+        scope: step28Row.output_data.scope_architecture_v1,
+        source_step: { step_number: 28, version: step28Row.version, row_id: step28Row.id },
+        projectName: stepData?.projectName ?? projectRow?.name ?? "Proyecto",
+        clientName: stepData?.companyName ?? projectRow?.company ?? "Cliente",
+      });
+
+      const prdMarkdown = renderPrdMarkdown(f6.technical_prd_v1);
+      const output = {
+        technical_prd_v1: f6.technical_prd_v1,
+        prd_meta: f6.prd_meta,
+        prd_markdown: prdMarkdown,
+      };
+
+      const { data: existing29 } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 29)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const newVersion29 = existing29 ? existing29.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existing29?.id || undefined,
+        project_id: projectId,
+        step_number: 29,
+        step_name: "Pipeline v2 — F6 Technical PRD",
+        status: "review",
+        input_data: { source_step: 28 },
+        output_data: output,
+        model_used: "deterministic",
+        version: newVersion29,
+        user_id: user.id,
+      });
+
+      return new Response(JSON.stringify({
+        ok: true,
+        version: newVersion29,
+        components_total: f6.prd_meta.components_total,
+        components_by_bucket: f6.prd_meta.components_by_bucket,
+        markdown_chars: prdMarkdown.length,
+        f6_ms: f6.prd_meta.f6_ms,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ── Action: generate_client_proposal (Step 30) ────────────────────────
+    if (action === "generate_client_proposal") {
+      const { buildClientProposal, renderProposalMarkdown, detectInternalJargon } =
+        await import("./f7-proposal-builder.ts");
+
+      const commercialTerms = stepData?.commercial_terms_v1;
+      if (!commercialTerms || typeof commercialTerms !== "object" || !commercialTerms.pricing_model) {
+        return new Response(JSON.stringify({
+          error: "Missing commercial_terms_v1 in stepData (requires at least pricing_model).",
+        }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const { data: step28Row } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version, output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 28)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!step28Row?.output_data?.scope_architecture_v1) {
+        return new Response(JSON.stringify({ error: "No Step 28 scope found. Run architect_scope first." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Optional: brief summary from Step 2.
+      const { data: step2Row } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 2)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const briefV2 = step2Row?.output_data?.business_extraction_v2 ?? {};
+      const briefSummary = typeof briefV2?.executive_summary === "string"
+        ? briefV2.executive_summary
+        : typeof briefV2?.summary === "string"
+        ? briefV2.summary
+        : undefined;
+      const problemsDetected = Array.isArray(briefV2?.pain_points)
+        ? briefV2.pain_points.slice(0, 6).map((p: any) => typeof p === "string" ? p : (p?.label ?? p?.name ?? ""))
+            .filter((s: string) => s.length > 0)
+        : undefined;
+
+      const { data: projectRow } = await supabase
+        .from("business_projects")
+        .select("name, company")
+        .eq("id", projectId)
+        .single();
+
+      const f7 = buildClientProposal({
+        scope: step28Row.output_data.scope_architecture_v1,
+        source_step: { step_number: 28, version: step28Row.version, row_id: step28Row.id },
+        projectName: stepData?.projectName ?? projectRow?.name ?? "Proyecto",
+        clientName: stepData?.companyName ?? projectRow?.company ?? "Cliente",
+        briefSummary,
+        problemsDetected,
+        commercialTerms,
+      });
+
+      const proposalMarkdown = renderProposalMarkdown(f7.client_proposal_v1);
+      const jargon = detectInternalJargon(proposalMarkdown);
+
+      const output = {
+        client_proposal_v1: f7.client_proposal_v1,
+        proposal_meta: { ...f7.proposal_meta, internal_jargon_warnings: jargon },
+        proposal_markdown: proposalMarkdown,
+      };
+
+      const { data: existing30 } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 30)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const newVersion30 = existing30 ? existing30.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existing30?.id || undefined,
+        project_id: projectId,
+        step_number: 30,
+        step_name: "Pipeline v2 — F7 Client Proposal",
+        status: "review",
+        input_data: { source_step: 28, commercial_terms_v1: commercialTerms },
+        output_data: output,
+        model_used: "deterministic",
+        version: newVersion30,
+        user_id: user.id,
+      });
+
+      return new Response(JSON.stringify({
+        ok: true,
+        version: newVersion30,
+        mvp_count: f7.proposal_meta.mvp_count,
+        fast_follow_count: f7.proposal_meta.fast_follow_count,
+        roadmap_count: f7.proposal_meta.roadmap_count,
+        out_of_scope_count: f7.proposal_meta.out_of_scope_count,
+        soul_required: f7.proposal_meta.soul_required,
+        markdown_chars: proposalMarkdown.length,
+        internal_jargon_warnings: jargon,
+        f7_ms: f7.proposal_meta.f7_ms,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
+    // ── Action: audit_final_deliverables (Step 31) ────────────────────────
+    if (action === "audit_final_deliverables") {
+      const { runFinalDeliverablesAudit } = await import("./f8-deliverables-audit.ts");
+
+      const [{ data: step28Row }, { data: step29Row }, { data: step30Row }] = await Promise.all([
+        supabase.from("project_wizard_steps").select("id, version, output_data")
+          .eq("project_id", projectId).eq("step_number", 28)
+          .order("version", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("project_wizard_steps").select("id, version, output_data")
+          .eq("project_id", projectId).eq("step_number", 29)
+          .order("version", { ascending: false }).limit(1).maybeSingle(),
+        supabase.from("project_wizard_steps").select("id, version, output_data")
+          .eq("project_id", projectId).eq("step_number", 30)
+          .order("version", { ascending: false }).limit(1).maybeSingle(),
+      ]);
+
+      if (!step28Row?.output_data?.scope_architecture_v1) {
+        return new Response(JSON.stringify({ error: "No Step 28 scope found." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!step29Row?.output_data?.technical_prd_v1) {
+        return new Response(JSON.stringify({ error: "No Step 29 PRD found. Run generate_technical_prd first." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      if (!step30Row?.output_data?.client_proposal_v1) {
+        return new Response(JSON.stringify({ error: "No Step 30 proposal found. Run generate_client_proposal first." }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const audit = runFinalDeliverablesAudit({
+        scope: step28Row.output_data.scope_architecture_v1,
+        prd: step29Row.output_data.technical_prd_v1,
+        proposal: step30Row.output_data.client_proposal_v1,
+        source_steps: {
+          scope_step: { step_number: 28, version: step28Row.version, row_id: step28Row.id },
+          prd_step: { step_number: 29, version: step29Row.version, row_id: step29Row.id },
+          proposal_step: { step_number: 30, version: step30Row.version, row_id: step30Row.id },
+        },
+      });
+
+      const { data: existing31 } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 31)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const newVersion31 = existing31 ? existing31.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").upsert({
+        id: existing31?.id || undefined,
+        project_id: projectId,
+        step_number: 31,
+        step_name: "Pipeline v2 — F8 Final Deliverables Audit",
+        status: "review",
+        input_data: { source_steps: [28, 29, 30] },
+        output_data: audit,
+        model_used: "deterministic",
+        version: newVersion31,
+        user_id: user.id,
+      });
+
+      return new Response(JSON.stringify({
+        ok: true,
+        version: newVersion31,
+        summary: audit.final_deliverables_audit_v1.summary,
+        checks: audit.final_deliverables_audit_v1.checks,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
 
     if (action === "generate_scope") {
       const { briefingJson, contactName, currentDate, attachmentsContent } = stepData;

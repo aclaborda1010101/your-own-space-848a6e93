@@ -688,13 +688,20 @@ REGLAS PARA deep_patterns:
 
         // 6. Sampler traceability — record that the LLM saw a sampled input.
         if (prepared.wasSampled) {
+          const uniqueKeywords = Array.from(new Set(prepared.preservedWindows.map((w) => w.keyword)));
           appendExtractionWarning(briefing, {
             type: "long_input_sampled",
-            message: "Input was sampled before LLM extraction to avoid Edge Function timeout.",
+            message:
+              `Material muy largo (${prepared.originalChars.toLocaleString("es-ES")} caracteres). ` +
+              `Se enviaron al LLM ${prepared.sampledChars.toLocaleString("es-ES")} caracteres preservando cabeza, cola y ` +
+              `${prepared.preservedWindows.length} ventanas alrededor de palabras clave (${uniqueKeywords.slice(0, 6).join(", ")}` +
+              `${uniqueKeywords.length > 6 ? ", …" : ""}). Si el material recién añadido es prioritario, ` +
+              `puedes reextraer con la opción "Forzar contenido completo" desde esta misma alerta.`,
             original_chars: prepared.originalChars,
             sampled_chars: prepared.sampledChars,
             strategy: prepared.strategy,
-            preserved_keywords: prepared.preservedWindows.map((w) => w.keyword),
+            preserved_keywords: uniqueKeywords,
+            can_force_full: true,
           });
         }
       }

@@ -708,6 +708,83 @@ function applyDeterministicSpanishCleanup(briefing: any, changes: NormalizationC
   }
 }
 
+/**
+ * Last-resort word-level swap. Runs AFTER deterministic phrase cleanup +
+ * LLM translation. Only swaps individual EN words for ES equivalents when
+ * the surrounding context still has English fragments. Avoids breaking
+ * brand names by skipping CamelCase / ALLCAPS tokens.
+ */
+function applyResidualWordSwap(briefing: any, changes: NormalizationChange[]) {
+  const SINGLE_WORDS: Array<[RegExp, string]> = [
+    [/\bdata\b/gi, "datos"],
+    [/\bclients\b/gi, "clientes"],
+    [/\bclient\b/gi, "cliente"],
+    [/\bemails\b/gi, "correos"],
+    [/\brecordings\b/gi, "grabaciones"],
+    [/\bowners\b/gi, "propietarios"],
+    [/\bproperties\b/gi, "propiedades"],
+    [/\bbuildings\b/gi, "edificios"],
+    [/\bavailable\b/gi, "disponibles"],
+    [/\bvaluable\b/gi, "valiosa"],
+    [/\binsights\b/gi, "información"],
+    [/\bcurrently\b/gi, "actualmente"],
+    [/\bpotential\b/gi, "potenciales"],
+    [/\bsuggests\b/gi, "sugiere"],
+    [/\brepresents\b/gi, "representa"],
+    [/\bincludes\b/gi, "incluye"],
+    [/\bcontains\b/gi, "contiene"],
+    [/\bcontain\b/gi, "contienen"],
+    [/\bsuch as\b/gi, "como"],
+    [/\bin order to\b/gi, "para"],
+    [/\b(\d[\d,\.]*) emails\b/gi, "$1 correos"],
+    [/\bover (\d[\d,\.]*) years\b/gi, "a lo largo de $1 años"],
+  ];
+
+  function walk(node: any, path: string): any {
+    if (typeof node === "string") {
+      if (!hasEnglishFragment(node)) return node;
+      let out = node;
+      for (const [from, to] of SINGLE_WORDS) out = out.replace(from, to);
+      out = out.replace(/\s{2,}/g, " ").trim();
+      if (out !== node) {
+        changes.push({
+          type: "residual_word_swap",
+          field: path,
+          before: node,
+          after: out,
+          reason: "Reemplazo de palabras puente residuales tras LLM y limpieza determinista.",
+        });
+      }
+      return out;
+    }
+    if (Array.isArray(node)) return node.map((item, i) => walk(item, `${path}[${i}]`));
+    if (node && typeof node === "object") {
+      const out: Record<string, any> = {};
+      for (const [k, v] of Object.entries(node)) out[k] = k.startsWith("_") ? v : walk(v, path ? `${path}.${k}` : k);
+      return out;
+    }
+    return node;
+  }
+
+  if (briefing.business_extraction_v2) {
+    briefing.business_extraction_v2 = walk(briefing.business_extraction_v2, "business_extraction_v2");
+  }
+}
+
+/**
+ * Apply deterministic + residual cleanup directly on a clean-brief markdown
+ * string. Used as a final safety net on the pre-rendered _clean_brief_md.
+ */
+export function cleanupSpanishMarkdown(md: string): string {
+  if (!md || typeof md !== "string") return md;
+  // Reuse the same phrase map by walking a fake briefing payload.
+  const fake = { business_extraction_v2: { __md: md } };
+  const dummyChanges: NormalizationChange[] = [];
+  applyDeterministicSpanishCleanup(fake, dummyChanges);
+  applyResidualWordSwap(fake, dummyChanges);
+  return fake.business_extraction_v2.__md;
+}
+
 // ── 4. Semantic dedup ────────────────────────────────────────────────
 
 function stemEs(word: string): string {

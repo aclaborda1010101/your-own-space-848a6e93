@@ -1,51 +1,112 @@
-# Plan: arreglar 3 problemas concretos del wizard
+# Plan: arreglar el botón PRD técnico para que use el pipeline v2 (Step 28 como fuente de verdad)
 
-## Diagnóstico
+## Diagnóstico (confirmado leyendo el código)
 
-### 1. "Aprobar briefing" no hace nada visible
-En la sesión actual el log de la edge function **no muestra** ningún `approve_step` para step 2 — solo step 4. Step 2 sigue en `status=review` v9 con `approved_at = NULL`. Hipótesis: el usuario pulsó el botón pero `approveStep(2, …)` se quedó esperando porque dispara primero `normalizeBrief()` cuando detecta que el brief limpio podría no estar al día — y como ya hay v9 con `_clean_brief_md` válido, esa rama no debería ejecutarse. Lo más probable es que el `editedBriefing` que se pasa al backend incluye `_clean_brief_md` pero la cadena `normalizeBrief()` se ejecuta igualmente en otro punto, o el toast/reload simplemente no se vio. Hay además un error en logs de un update con enum `jarvis_job_status` que **no es** del approve real (es de otra ruta) pero ensucia la traza.
+Hoy en `ProjectWizard.tsx` el botón **"Generar PRD Técnico"** (Step 3 del wizard) llama a `runChainedPRD()` → `supabase.functions.invoke("project-wizard-step", { action: "generate_prd_chained" })`.
 
-### 2. Sigue habiendo inglés mezclado
-El detector `isLikelyEnglish` exige >18% de palabras del listado `EN_HINT_WORDS` para activar la traducción LLM. Frases como *"Information on 70% of potential clients, incluyendo DNI, birth dates, and family contacts"* tienen suficientes números/términos propios para diluir ese ratio por debajo del umbral, así que **nunca entran al batch de traducción**. El `applyDeterministicSpanishCleanup` solo cubre frases enteras concretas, no fragmentos sueltos como `data on`, `suggests`, `represents`, `implying`, `is available`, etc.
+`generate_prd_chained` es el **pipeline LEGACY**:
+- Llena `step_number = 10` (alcance legacy "Senior AI Solutions Architect", 14 secciones, 120 variables, 25 patrones).
+- Llena `step_number = 11` (auditoría IA legacy con scoring de automatización).
+- Llena `step_number = 12` (patrones).
+- Llena `step_number = 3` con un PRD low-level que arranca con "PRD LOW-LEVEL: AFFLUX", contiene "Lovable Build Blueprint", "Checklist Maestro", SQL completo, RLS, Edge Functions, motor de scoring determinista, y residuos LLM tipo "Claro, aquí tienes…". Las fases vienen del LLM, no del scope aprobado, así que mete fallecimientos en F2, matching en F2 y Soul en F3+.
 
-### 3. UI de presupuesto y propuesta cliente "desaparecida"
-- El selector `pricingMode` (sin cifras / rangos / detalle completo) vivía dentro de `ProjectWizardStep3.tsx` (RadioGroup), pero el wizard actual ya **no usa ese componente**: renderiza `ProjectWizardGenericStep` para step 3 (PRD Técnico). El estado `pricingMode` se sigue pasando a `runChainedPRD`, pero el control visual ya no aparece en ningún sitio.
-- `ProjectBudgetPanel` solo se monta cuando `step3.status === "approved"`. En el proyecto actual step 3 está en `review`, por eso no se ve. Igual con `ProjectProposalExport` (necesita además `budgetData`). El usuario percibe que "ha desaparecido" porque generó el PRD pero no lo aprobó.
+En paralelo existe el **pipeline v2 nuevo** (ya implementado y funcionando, pero solo accesible desde el panel "Avanzado / Interno → PipelineQAPanel"):
+- `build_registry` → `step_number = 25` (ai_opportunity_design_v1 + component_registry, F2+F3 deterministas).
+- `audit_f4a_gaps` → `step_number = 26` (registry_gap_audit_v1).
+- `audit_f4b_feasibility` → `step_number = 27` (registry_feasibility_audit_v1).
+- `architect_scope` → `step_number = 28` (`scope_architecture_v1` con buckets data_foundation / mvp / fast_follow_f2 / deferred, blockers DPIA y dataset_readiness, soul_capture_plan).
+- `generate_technical_prd` → `step_number = 29` (PRD técnico determinista construido **únicamente** desde Step 28 vía `f6-prd-builder.ts`, sin LLM, sin SQL, sin scoring inventado).
+- `generate_client_proposal` → `step_number = 30` (propuesta cliente sin jerga interna vía `f7-proposal-builder.ts`).
+- `audit_final_deliverables` → cross-check final.
+
+Resultado: el pipeline correcto ya existe y produce exactamente lo que pide el usuario (Step 28 como fuente única, sin fases inventadas, separación PRD técnico vs propuesta cliente, sin "Claro aquí tienes"), pero **el botón principal del wizard sigue apuntando a la ruta antigua**.
 
 ---
 
 ## Cambios
 
-### A. Brief Limpio: traducción agresiva sin heurística de ratio
-`supabase/functions/project-wizard-step/brief-normalizer.ts`
+### A. Botón "Generar PRD Técnico" → pipeline v2
 
-1. **Nueva señal `hasEnglishFragment`** que dispare con CUALQUIER fragmento sospechoso (lista ampliada, ~80 patrones cortos: `\bdata on\b`, `\bsuggests\b`, `\brepresents\b`, `\bimplying\b`, `\bare available\b`, `\bvaluable insights\b`, `\bin order to\b`, `\bsuch as\b`, `\bwhich is\b`, `\bcontain\b`, `\bare not fully\b`, `\bis currently\b`, `\bemails over\b`, `\byears of\b`, `\bcurrently not\b`, `\bbirth dates\b`, `\bfamily contacts\b`, `\bpersonalized outreach\b`, `\boff-market\b`, `\bclients potential\b`, etc.).
-2. **`isLikelyEnglish` pasa a OR**: `EN_PHRASE_RE.test(s) || hasEnglishFragment(s) || ratio > 0.18`. Así cualquier item con un solo trigger entra al batch de traducción LLM.
-3. **`applyDeterministicSpanishCleanup` ampliado** con ~50 reemplazos puente más: `data on real estate off-market` → `datos sobre activos inmobiliarios fuera de mercado`, `suggests a structured data source that can be further utilized` → `sugiere una fuente de datos estructurada que puede explotarse mejor`, `Information on X% of potential clients` → `Información sobre el X% de los clientes potenciales`, `birth dates, and family contacts` → `fechas de nacimiento y contactos familiares`, `49,000 emails from 15 years of commercial negotiations contain valuable insights` → `49.000 correos de 15 años de negociaciones comerciales contienen información valiosa`, `Existing CRM data … is not fully cataloged` → `Los datos del CRM existentes … no están completamente catalogados`, `the possibility of monitoring and analyzing` → `la posibilidad de monitorizar y analizar`, `to improve conversion and discourse, implying these recordings are available but not fully utilized` → `para mejorar la conversión y el discurso; estas grabaciones están disponibles pero no se aprovechan plenamente`, etc. Aplicado **siempre**, también después del LLM, para cazar lo que aún quede.
-4. **Nueva pasada final `stripResidualEnglishTokens`**: si tras todo lo anterior un string sigue conteniendo trigger fragments, se reemplazan los más comunes con sus equivalentes españoles uno a uno (tabla pequeña de ~30 palabras puente: `data`→`datos`, `clients`→`clientes`, `emails`→`correos`, `recordings`→`grabaciones`, `available`→`disponibles`, `valuable`→`valiosa`, `insights`→`información`, etc.) para minimizar lo que pase al PDF final.
-5. **Pasada también sobre `_clean_brief_md`** (no solo sobre el JSON v2): el clean brief se reconstruye desde v2, pero hago una pasada de `applyDeterministicSpanishCleanup` también sobre el markdown final como red de seguridad antes de persistirlo.
+**`src/hooks/useProjectWizard.ts` — nueva función `runPipelineV2PRD(pricingMode)` que reemplaza a `runChainedPRD` para el botón del wizard:**
 
-### B. UI de presupuesto y selector de pricing — siempre accesibles
-`src/pages/ProjectWizard.tsx`
+1. Verifica que Step 2 (briefing) esté `approved`. Si no, error claro.
+2. Llama secuencialmente a `project-wizard-step` con:
+   - `action: "build_registry"` (steps 25 + 26 + 27 internamente — el `build_registry` actual ya hace F2+F3; añadir `audit_f4a_gaps` y `audit_f4b_feasibility` justo después porque `architect_scope` los exige).
+   - `action: "audit_f4a_gaps"`.
+   - `action: "audit_f4b_feasibility"`.
+   - `action: "architect_scope"` → genera Step 28 `scope_architecture_v1`.
+   - `action: "generate_technical_prd"` → genera Step 29 con `prd_markdown` determinista.
+3. Va actualizando `chainedPhase`: `"alcance"` (registry+gap+feas), `"patrones"` (architect_scope), `"prd"` (generate_technical_prd), `"done"`.
+4. Al terminar, **escribe también `step_number = 3`** con el contenido de Step 29 (`prd_markdown` + manifest_summary) para que el resto del wizard (descarga PDF, budget panel, propuesta cliente, navegación) siga funcionando sin tocar el resto de la UI. Marcar status `review`.
+5. `pricingMode` se almacena para que `generate_client_proposal` lo use después.
 
-1. **Mover el selector `pricingMode`** (RadioGroup con sin cifras / rangos / detalle completo) **fuera** de `ProjectWizardStep3` — extraerlo a un mini-componente `PricingModeSelector` que se renderiza **siempre** dentro de step 3 (encima del bloque de PRD), tanto antes como después de generar.
-2. **Renderizar `ProjectBudgetPanel`** cuando `step3.outputData` exista (no solo cuando esté aprobado). Mantener un aviso visible "El PRD aún no está aprobado — al aprobarlo se incorporará al presupuesto" si `status !== approved`, pero ya permitir generar/editar modelos de monetización.
-3. **Renderizar `ProjectProposalExport`** cuando `budgetData` exista (no exigir PRD aprobado), con el mismo aviso suave si el budgetStatus no es `approved`.
-4. Todo el flujo de auto-chain (aprobar PRD → presupuesto → propuesta) sigue funcionando igual; solo se relaja el gating visual para que el usuario no se "quede sin pantalla".
+**`src/pages/ProjectWizard.tsx`:**
+- Reemplazar `runChainedPRD(pricingMode)` por `runPipelineV2PRD(pricingMode)` en el `onGenerate` del Step 3.
+- En `useProjectWizard.ts` línea 932, donde tras aprobar Step 2 se auto-lanza `runChainedPRD('none')`, cambiar también a `runPipelineV2PRD('none')`.
+- Mantener `runChainedPRD` exportado pero **no enlazado al botón principal** — solo accesible vía herramienta de debug por si hace falta revisar el legacy.
 
-### C. Aprobación de briefing fiable
-`src/hooks/useProjectWizard.ts` + `src/components/projects/wizard/ProjectWizardStep2.tsx`
+### B. PRD técnico generado SIEMPRE desde Step 28 (sin LLM)
 
-1. En `approveStep` (ya existe el pre-check Step 2 → normalizeBrief si falta brief limpio): añadir **log explícito** con `console.info` antes y después del invoke, y un **toast.error claro** si la respuesta tiene `error` (ya lanza, pero el `try/catch` envuelve todo y a veces silencia). Cambiar a chequeo de `data?.error` además de `error` del wrapper.
-2. En el botón "Aprobar briefing" del Step2: añadir **estado local `approving`** controlado por `handleApprove` (set true, await, set false), deshabilitar el botón y mostrar `Loader2` mientras corre. Hoy el botón solo se deshabilita por `normalizing`, así que si la llamada tarda 5 s sin mostrar feedback el usuario cree que "no hace nada".
-3. En la edge function (`project-wizard-step/index.ts`, sección `approve_step`): si la actualización de `project_wizard_steps` falla con error de enum, **devolver 500 con mensaje claro** en vez de loguear y devolver 200. Hoy `if (updErr) console.error(...)` y luego sigue con éxito → el frontend toastea "Paso aprobado" aunque la fila no se haya actualizado. Cambiar a `if (updErr) return 500 { error: updErr.message }`.
+`generate_technical_prd` (ya implementado) usa `buildTechnicalPrd()` y `renderPrdMarkdown()` de `f6-prd-builder.ts`, que es 100% determinista a partir de `scope_architecture_v1`. Esto garantiza:
+
+- ✅ Cliente = AFLU/AFFLUX, decisor = Alejandro Gordo (vienen del scope que ya respeta los overrides).
+- ✅ Detector de fallecimientos en MVP con DPIA/HITL (porque Step 28 lo coloca ahí).
+- ✅ Matching activo-inversor en MVP con dataset_readiness blocker.
+- ✅ Soul de Alejandro en data_foundation.
+- ✅ Benatar en fast_follow_f2.
+- ✅ Sin "Claro, aquí tienes" (no hay LLM en F6).
+- ✅ Sin SQL, sin RLS, sin scoring inventado, sin "120 variables / 25 patrones".
+- ✅ Sin fases inventadas.
+
+**Pequeño ajuste en `f6-prd-builder.ts`** (`renderPrdMarkdown`): añadir cabecera explícita al PDF:
+```
+# PRD Técnico de Construcción
+**Proyecto:** {projectName}
+**Cliente / empresa:** {clientName}
+**Decisor:** {decision_maker_from_scope}
+**Producto:** {projectName}
+**Fuente de alcance:** scope_architecture_v1 (Step 28 v{version}, row {row_id})
+```
+para que quede crystal-clear que ya no es legacy.
+
+### C. Propuesta cliente separada del PRD técnico
+
+`ProjectProposalExport` ya existe y ya invoca `generate_client_proposal` (Step 30) que es el `f7-proposal-builder.ts` determinista (renombrado a "Propuesta Cliente", sin jerga interna, con Gantt/precios/condiciones, validado contra `detectInternalJargon`).
+
+Ajustes en `src/pages/ProjectWizard.tsx`:
+1. **Renombrar el botón de descarga del Step 3** de "Borrador de alcance" a **"PRD Técnico (Lovable)"** y forzar `exportMode="internal"` para ese documento.
+2. **`ProjectProposalExport`** queda etiquetado como **"Propuesta Cliente"** y es el único entregable cliente.
+3. La generación de `generate_client_proposal` debe leer el `pricingMode` que se eligió en Step 3 y pasar `commercial_terms_v1` al backend (ya está casi todo cableado en `useProjectWizard.ts:1206`; solo falta inyectar `pricing_model` derivado de `pricingMode`).
+
+### D. Bloquear el path legacy para evitar regresiones
+
+En `supabase/functions/project-wizard-step/index.ts`:
+1. En `generate_prd_chained`: **dejar el código** (por compatibilidad con proyectos viejos), pero añadir en `index.ts` un flag `LEGACY_PRD_ALLOWED = false` que devuelva 410 Gone con mensaje "Pipeline legacy desactivado. Usar build_registry + architect_scope + generate_technical_prd." cuando alguien intente llamarlo desde producción. Mantener accesible solo vía un header `x-allow-legacy: true` para debug local.
+2. En `generate_prd` (action standalone): mismo tratamiento.
+
+### E. Limpieza de `step_number = 3` cuando viene del nuevo pipeline
+
+Cuando `runPipelineV2PRD` escribe Step 3, su `outputData` debe ser:
+```json
+{
+  "document": "<prd_markdown de Step 29>",
+  "source": "pipeline_v2",
+  "step_28_ref": { "version": N, "row_id": "..." },
+  "step_29_ref": { "version": N, "row_id": "..." },
+  "components_total": 13,
+  "components_by_bucket": { "data_foundation": 1, "mvp": 9, "fast_follow_f2": 2, "deferred": 1 }
+}
+```
+
+Así `ProjectDocumentDownload` (que lee `step3.outputData.document`) baja el PDF correcto, y el badge "Avanzado/Interno" puede mostrar el manifest sin reinventar nada.
 
 ---
 
 ## Criterio de aceptación
 
-1. Pulsar "Aprobar briefing" muestra loader, después toast de éxito (o error explícito), y el step 2 pasa a `status=approved` con `approved_at` set en BD. Si algo falla, sale toast con el motivo real.
-2. El Brief Limpio v10 generado tras `normalizeBrief` ya no contiene fragmentos como `data on`, `suggests a`, `valuable insights`, `birth dates`, `is currently not`, `not fully utilized`, `vast amount of`, etc. Una búsqueda por esos términos en `_clean_brief_md` devuelve 0 hits.
-3. En la pantalla de step 3 aparece **siempre** el selector "Cifras de inversión" (sin cifras / rangos / detalle completo) por encima del PRD, generado o no.
-4. En cuanto exista `step3.outputData` (PRD generado, esté o no aprobado), aparece `ProjectBudgetPanel` con la selección de modelos de monetización. En cuanto exista `budgetData`, aparece `ProjectProposalExport` con el botón de descargar la propuesta cliente.
-5. La regeneración del PDF del Brief Limpio sigue siendo `Limpiar y normalizar` → `Exportar PDF`, sin re-extraer desde chunks.
+1. Pulsar "Generar PRD Técnico" en Step 3 NO genera más el documento "PRD LOW-LEVEL / Lovable Build Blueprint / Checklist Maestro / 120 variables / 25 patrones / motor de scoring".
+2. El PDF descargado desde Step 3 arranca con `# PRD Técnico de Construcción · Fuente de alcance: scope_architecture_v1 (Step 28 v…)` y respeta exactamente los buckets de Step 28 (fallecimientos en MVP, matching en MVP, Soul en data_foundation, Benatar en F2).
+3. El PDF NO contiene SQL, RLS, "Claro aquí tienes…", "Edge Functions", ni "Lovable Build Blueprint".
+4. La propuesta cliente sigue siendo `ProjectProposalExport` (Step 30 / `generate_client_proposal`) y queda claramente separada del PRD técnico.
+5. Llamar al endpoint legacy `generate_prd_chained` desde producción devuelve 410 con mensaje claro.
+6. La aprobación del Step 2 sigue auto-encadenando, pero ahora dispara `runPipelineV2PRD` en vez de la cadena legacy.

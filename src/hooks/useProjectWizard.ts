@@ -783,6 +783,138 @@ export const useProjectWizard = (projectId?: string) => {
     }
   };
 
+  // ── Pipeline v2 PRD (canonical: build_registry → audit_f4a → audit_f4b → architect_scope → generate_technical_prd) ──
+  // Reemplaza al runChainedPRD legacy. Usa Step 28 (`scope_architecture_v1`)
+  // como única fuente de verdad y produce un PRD técnico determinista (sin LLM,
+  // sin SQL inventado, sin scoring inventado, sin "Claro aquí tienes…").
+  const runPipelineV2PRD = async (pricingMode: string = 'none') => {
+    if (!project || !projectId) return;
+
+    // Validar prerequisito: brief aprobado
+    const step2 = steps.find((s) => s.stepNumber === 2);
+    if (!step2 || step2.status !== "approved") {
+      toast.error("Aprueba primero el briefing (Paso 2) antes de generar el PRD.");
+      return;
+    }
+
+    setGenerating(true);
+    setChainedPhase("alcance");
+    try {
+      await clearSubsequentSteps(3);
+
+      // Persistimos el pricingMode para que la propuesta cliente lo use luego.
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(`wizard-pricing-mode-${projectId}`, pricingMode);
+        }
+      } catch { /* no-op */ }
+
+      const callAction = async (action: string, label: string) => {
+        console.info(`[pipeline-v2] ${label} (${action})…`);
+        const { data, error } = await supabase.functions.invoke("project-wizard-step", {
+          body: { action, projectId },
+        });
+        if (error) {
+          console.error(`[pipeline-v2] ${action} failed:`, error);
+          throw new Error(`${label} falló: ${error.message || error}`);
+        }
+        if (data?.error) {
+          throw new Error(`${label}: ${data.error}`);
+        }
+        return data;
+      };
+
+      // F2 + F3 — Component Registry (Step 25)
+      setChainedPhase("alcance");
+      await callAction("build_registry", "Construir registro de componentes");
+
+      // F4a — Gap Audit (Step 26)
+      await callAction("audit_f4a_gaps", "Auditoría de gaps");
+
+      // F4b — Feasibility Audit (Step 27)
+      setChainedPhase("auditoria");
+      await callAction("audit_f4b_feasibility", "Auditoría de viabilidad");
+
+      // F5 — Scope Architect (Step 28)
+      setChainedPhase("patrones");
+      await callAction("architect_scope", "Arquitectura de alcance (Step 28)");
+
+      // F6 — Technical PRD (Step 29)
+      setChainedPhase("prd");
+      await callAction("generate_technical_prd", "PRD técnico (Step 29)");
+
+      // Mirror Step 29 → Step 3 para que la UI existente (descarga PDF, badges,
+      // budget panel y propuesta cliente) lo encuentre sin cambios mayores.
+      const { data: step29Row } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version, output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 29)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!step29Row?.output_data) {
+        throw new Error("Step 29 no devolvió output_data tras generate_technical_prd.");
+      }
+
+      const od29 = step29Row.output_data as any;
+      const prdMarkdown: string = od29.prd_markdown || "";
+      const prdMeta = od29.prd_meta || {};
+
+      const { data: existing3 } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 3)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const newV3 = existing3 ? existing3.version + 1 : 1;
+      const mirroredOutput = {
+        document: prdMarkdown,
+        source: "pipeline_v2",
+        step_28_ref: { step_number: 28 },
+        step_29_ref: { step_number: 29, version: step29Row.version, row_id: step29Row.id },
+        prd_meta: prdMeta,
+        components_total: prdMeta.components_total || 0,
+        components_by_bucket: prdMeta.components_by_bucket || {},
+        pricing_mode: pricingMode,
+      };
+
+      const { error: upsertErr } = await supabase.from("project_wizard_steps").upsert({
+        id: existing3?.id || undefined,
+        project_id: projectId,
+        step_number: 3,
+        step_name: "PRD Técnico (Pipeline v2)",
+        status: "review",
+        input_data: { source: "pipeline_v2", pricing_mode: pricingMode },
+        output_data: mirroredOutput,
+        model_used: "deterministic_f6",
+        version: newV3,
+        user_id: user?.id ?? null,
+      });
+
+      if (upsertErr) {
+        console.error("[pipeline-v2] Failed to mirror Step 29 → Step 3:", upsertErr);
+        throw new Error(`No se pudo persistir el PRD en Step 3: ${upsertErr.message}`);
+      }
+
+      setChainedPhase("done");
+      toast.success("PRD Técnico generado desde Step 28 (pipeline v2)");
+      await loadProject();
+      return mirroredOutput;
+    } catch (e: any) {
+      console.error("Pipeline v2 PRD error:", e);
+      setChainedPhase("error");
+      toast.error(e.message || "Error generando PRD desde el pipeline v2");
+    } finally {
+      setGenerating(false);
+      setTimeout(() => setChainedPhase("idle"), 2000);
+    }
+  };
+
   // ── Run generic step (Steps 3-4 in new pipeline) ──────────────────────────
 
   const runGenericStep = async (stepNumber: number, action: string) => {
@@ -929,8 +1061,8 @@ export const useProjectWizard = (projectId?: string) => {
         if (stepNumber === 2) {
           setCurrentStep(3);
           setTimeout(() => {
-            runChainedPRD('none').catch((err) => {
-              console.error("Auto-chained PRD failed:", err);
+            runPipelineV2PRD('none').catch((err) => {
+              console.error("Auto pipeline-v2 PRD failed:", err);
             });
           }, 500);
         } else if (stepNumber === 3) {
@@ -1286,6 +1418,7 @@ export const useProjectWizard = (projectId?: string) => {
     loadCosts,
     runGenericStep,
     runChainedPRD,
+    runPipelineV2PRD,
     updateStepOutputData,
     updateInputContent,
     budgetData,

@@ -2009,8 +2009,7 @@ REGLAS PARA deep_patterns:
         .maybeSingle();
       const newVersion30 = existing30 ? existing30.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing30?.id || undefined,
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 30,
         step_name: "Pipeline v2 — F7 Client Proposal",

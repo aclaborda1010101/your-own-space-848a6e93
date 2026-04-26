@@ -74,7 +74,7 @@ const ProjectWizardEdit = () => {
   const navigate = useNavigate();
   const {
     project, steps, costs, totalCost, currentStep,
-    loading, generating, normalizing, chainedPhase, prdSubProgress, internalStepStatuses,
+    loading, generating, normalizing, chainedPhase, prdSubProgress, pipelineV2SubStep, internalStepStatuses,
     runExtraction, retryFailedChunks, normalizeBrief, approveStep, navigateToStep, runGenericStep, runChainedPRD, runPipelineV2PRD, updateStepOutputData,
     updateInputContent, updateProjectName,
     budgetData, budgetGenerating, budgetStatus, generateBudgetEstimate, updateBudgetData, approveBudget,
@@ -259,7 +259,9 @@ const ProjectWizardEdit = () => {
           <div className="flex-1 min-w-0">
             <p className="font-medium text-primary">Generando PRD automáticamente tras aprobar el Brief…</p>
             <p className="text-xs text-muted-foreground truncate">
-              Fase: {chainedPhase} {prdSubProgress?.label ? `· ${prdSubProgress.label}` : ""}
+              {pipelineV2SubStep
+                ? `Step ${pipelineV2SubStep.stepNumber}: ${pipelineV2SubStep.label}`
+                : `Fase: ${chainedPhase}${prdSubProgress?.label ? ` · ${prdSubProgress.label}` : ""}`}
             </p>
           </div>
         </div>
@@ -361,7 +363,7 @@ const ProjectWizardEdit = () => {
               {generating && chainedPhase !== "idle" && chainedPhase !== "done" ? (
                 <Card className="border-border/50">
                   <CardContent className="p-6">
-                    <ChainedPRDProgress currentPhase={chainedPhase} prdSubProgress={prdSubProgress} />
+                    <ChainedPRDProgress currentPhase={chainedPhase} prdSubProgress={prdSubProgress} pipelineV2SubStep={pipelineV2SubStep} />
                   </CardContent>
                 </Card>
               ) : (

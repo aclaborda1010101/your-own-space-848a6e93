@@ -1,123 +1,69 @@
-# Plan: Naming canónico bloqueado por `projectName` del usuario
+# Auto-cadena Pipeline v2 al aprobar el briefing
 
-## Diagnóstico
+## Estado actual
 
-El sistema ya separa `client_company_name`, `founder_or_decision_maker` y `proposed_product_name` en `brief-normalizer.ts`, pero:
+`approveStep(2)` ya dispara `runPipelineV2PRD()` automáticamente (líneas 1100-1107 de `useProjectWizard.ts`). La función ya ejecuta secuencialmente:
 
-1. La cabecera del brief limpio dice `CONFIDENCIAL — Alejandro Gordo` o `— AFLU` porque toma `client_company_name` y este puede acabar mal extraído.
-2. No existe el campo `detected_aliases[]` ni `canonical_source`, así que las variantes (`AFLU`, `AFLUS`, `AFFLU`, `Aflu`) se cuelan en lugar de quedar etiquetadas como aliases.
-3. `proposed_product_name` se sobreescribe SOLO si `ctx.productName` existe; si no, cae a `projectName`. Pero el LLM puede meter ahí `Alejandro Gordo` en pasos posteriores y nada lo bloquea.
-4. La cabecera del brief limpio NO usa `projectName` como ancla principal.
-5. `f6-prd-builder` y `f7-proposal-builder` reciben `projectName/clientName` desde `index.ts`, pero hay que confirmar que el `clientName` que reciben es `client_company_name` ya saneado y NO una variante OCR.
+`build_registry (25) → audit_f4a_gaps (26) → audit_f4b_feasibility (27) → architect_scope (28) → generate_technical_prd (29)`
 
-## Regla de oro
+…y luego espeja Step 29 en Step 3 para que la UI existente lo encuentre.
 
-> Lo que el usuario escribe en la ficha del proyecto (`projectName`) es la fuente de verdad para Producto/Proyecto/Título. La transcripción solo aporta `detected_aliases[]`.
+**Por eso te pasaba que con AFFLUX tenías que pulsar botones manualmente:** el flujo automático sí existía, pero como ya habías generado Steps 25/26/27/28 a mano, el `checkStepExists` los saltaba y solo regeneraba el 29 — encima sobre un Step 28 que se había sobrescrito por el bug de `upsert`.
 
----
+## Problemas a resolver
 
-## Cambios
+1. **Idempotencia ciega:** si Steps 25–28 existen, se reusan aunque sean obsoletos. Esto es lo que ha estado pasando contigo: aprobabas el brief, se reusaba el Step 28 viejo, y el PRD salía mal.
+2. **Sin granularidad de progreso:** `chainedPhase` solo distingue 4 fases legacy (`alcance/auditoria/patrones/prd`). En el pipeline v2 hay 5 (registry, gap, feasibility, scope, prd), así que el stepper no refleja exactamente dónde está.
+3. **Sin reintento ni feedback claro al fallar** un sub-step (solo `console.error`).
+4. **Sin forma de "regenerar limpio"** desde la aprobación: cuando reabrís el briefing, lo apruebas y la cadena reusa todo lo viejo.
 
-### 1. `supabase/functions/project-wizard-step/brief-normalizer.ts`
+## Cambios propuestos
 
-**a) Forzar `proposed_product_name = ctx.projectName` SIEMPRE.**
-Hoy solo se aplica si `ctx.productName` existe o si está vacío. Cambiar la lógica para que `projectName` (cuando se pasa) sobrescriba cualquier valor del LLM y se registre el cambio en `_normalization_log`. `ctx.productName` solo se usa si el usuario lo pasa explícitamente distinto.
+### 1. `src/hooks/useProjectWizard.ts` — `runPipelineV2PRD`
 
-**b) Generar `detected_aliases[]`.**
-Antes de sobrescribir, comparar `cnc.proposed_product_name` actual con `ctx.projectName` (case-insensitive, normalización Unicode). Si difiere y parece variante (Levenshtein ≤ 2 o substring/superstring), guardar el valor anterior en `cnc.detected_aliases`. También escanear `client_company_name` extraído inicialmente y los `_source_chunks` de la extracción cruda en busca de tokens parecidos a `projectName` que NO coincidan exactamente; dedupe + cap a 8.
+- Añadir parámetro `{ forceRegenerate?: boolean }`. Si `true`, salta el `checkStepExists` y regenera Steps 25–28 desde cero. Como ya arreglamos el `upsert` para que `.insert()` cree versiones nuevas en lugar de sobrescribir, esto dejará un historial limpio sin destruir nada.
+- Cuando se dispara desde `approveStep(2)`, pasar `forceRegenerate: true` por defecto. Razón: si el usuario está aprobando un briefing nuevo o re-aprobando uno corregido, lo coherente es regenerar todo el scope. Los Steps anteriores quedan persistidos como versiones históricas.
+- Reemplazar el `chainedPhase` legacy por un nuevo estado `pipelineV2Phase` con valores `idle | registry | gap_audit | feasibility | scope | prd | done | error` y un `currentSubStep` con número (25/26/27/28/29) para mostrar progreso real.
+- Mantener `chainedPhase` mapeado por compatibilidad con el stepper existente (registry→alcance, gap_audit+feasibility→auditoria, scope→patrones, prd→prd).
+- En cada sub-step: `try/catch` con un reintento automático (1 retry tras 3s). Si vuelve a fallar, toast claro indicando qué paso falló y dejar `pipelineV2Phase = "error"` para que el usuario decida.
+- Toast de éxito final: "PRD técnico generado · Step 29 v{N}" con link al panel.
 
-**c) Añadir `canonical_source: "user_project_input"`** cuando `projectName` se aplica como producto.
+### 2. `src/components/projects/wizard/ChainedPRDProgress.tsx`
 
-**d) Bloqueo de promoción persona→cliente.**
-Si tras pasar todas las reglas `client_company_name` sigue siendo igual a `founder_or_decision_maker` o sigue pareciendo persona y NO hay `companyNameOverride`, fijar `client_company_name = projectName` y registrar el cambio (la regla 2 del usuario: `Cliente / empresa: AFFLUX` cuando no hay otra cosa).
+- Aceptar el nuevo `pipelineV2Phase` y renderizar las 5 fases del pipeline v2 con sus labels reales:
+  1. Construir registro de componentes (Step 25)
+  2. Auditoría de gaps (Step 26)
+  3. Auditoría de viabilidad (Step 27)
+  4. Arquitectura de alcance (Step 28)
+  5. PRD técnico (Step 29)
+- Mantener compatibilidad hacia atrás con `currentPhase` legacy si no se pasa el nuevo prop.
+- Mostrar el sub-step actual con icono spinner y un check verde por cada uno completado.
 
-**e) Nunca permitir `proposed_product_name = null` si `projectName` existe.**
+### 3. `src/components/projects/wizard/ProjectWizardStepper.tsx`
 
-### 2. `supabase/functions/project-wizard-step/clean-brief-builder.ts`
+- Extender `ChainedPhase` o añadir un derivado para que el stepper de la izquierda muestre "PRD Técnico — generando (Step 26/29)" durante la cadena, en lugar de saltar entre etiquetas legacy.
 
-**a) Cabecera nueva** (líneas 153-159), tomando `projectName` como ancla:
+### 4. `src/pages/ProjectWizard.tsx`
 
-```
-# Brief Limpio — {projectName}
+- Renderizar `ChainedPRDProgress` con el nuevo `pipelineV2Phase` cuando está activo, dentro del Step 3.
+- Al terminar la cadena con éxito y mirror Step 29 → Step 3, navegar automáticamente al usuario al Step 3 y mostrar el PRD generado (esto ya está parcialmente; solo asegurar que el `setCurrentStep(3)` ocurra antes del scroll y el panel reciba el PRD recién espejado).
 
-> **CONFIDENCIAL — {projectName}**
+### 5. UI de aprobación del briefing (`ProjectWizardStep2`)
 
-**Proyecto / Producto:** {projectName}
-**Cliente / empresa:** {client_company_name || projectName}
-**Decisor:** {founder_or_decision_maker || "n/d"}
-{si detected_aliases.length} **Aliases detectados:** AFLU, AFLUS, AFFLU…
-```
+- Cambiar el copy del botón "Aprobar briefing" a algo como "Aprobar briefing y generar PRD técnico".
+- Añadir un microcopy debajo: "Esto generará automáticamente Steps 25–29 (Component Registry, auditorías, arquitectura de alcance y PRD técnico). Tarda ~3-6 minutos."
+- Opcional: checkbox "Reusar steps anteriores si existen" (por defecto OFF) para usuarios avanzados que quieran ahorrarse regeneraciones cuando hacen tweaks menores.
 
-**b) Eliminar la frase** `_Generado automáticamente desde la extracción cruda…_` (ya estaba pendiente del mensaje anterior; cerramos aquí).
+### 6. `PipelineQAPanel`
 
-**c) Añadir `projectName` como prop obligatorio** y pasarlo siempre desde `index.ts` (ya se hace en líneas 237 y 433 de `index.ts`).
+- Mantener los botones manuales (siguen siendo útiles para QA/debug), pero añadir un banner arriba: "El pipeline se ejecuta automáticamente al aprobar el briefing. Estos botones son para inspección y reejecución manual."
 
-### 3. `supabase/functions/project-wizard-step/f6-prd-builder.ts` y `f7-proposal-builder.ts`
+## Lo que NO cambia
 
-**Asegurar que reciben y usan `projectName` saneado**:
+- Las edge functions `project-wizard-step` (acciones `build_registry`, `audit_f4a_gaps`, `audit_f4b_feasibility`, `architect_scope`, `generate_technical_prd`) ya funcionan correctamente desde nuestras correcciones recientes (versionado por `.insert()`, reglas deterministas en F5, builder PRD F6 estricto).
+- El espejado Step 29 → Step 3 se mantiene tal cual.
+- El flujo posterior (aprobar PRD → generar presupuesto → propuesta cliente) sigue igual.
 
-- En `index.ts`, donde se llama a `buildTechnicalPrd` y `buildClientProposal`, pasar:
-  - `projectName`: SIEMPRE el valor de la fila `business_projects.name` (no del briefing).
-  - `clientCompany`: tomar de `cnc.client_company_name` ya saneado por el normalizer; si tras saneo sigue pareciendo persona o es vacío, usar `projectName`.
-  - (Opcional) `decisionMaker`: `cnc.founder_or_decision_maker`.
+## Resultado esperado
 
-- `f7-proposal-builder.ts` línea 450 ya hace `CONFIDENCIAL — ${p.client_company}`. Verificamos que `client_company` recibido NO es una variante OCR. Si `client_company === projectName` o vacío, mostrar solo `CONFIDENCIAL — {projectName}`.
-
-- En la portada de la propuesta (líneas ~452), añadir línea `**Proyecto / Producto:** {projectName}` antes de `Cliente / empresa`.
-
-### 4. `index.ts` — invocaciones
-
-En las dos rutas que llaman al normalizer (extract y re-extract, líneas 229 y 419) ya se pasa `projectName, productName`. Confirmar que `productName` NO se setea desde la extracción si el usuario no lo escribió manualmente — debe llegar `undefined` por defecto, no un valor inferido.
-
-En las llamadas a `buildTechnicalPrd` / `buildClientProposal` (donde se generen Steps 29/30), pasar el `projectName` desde la fila `business_projects` directamente, NO desde el briefing.
-
-### 5. Tests
-
-Añadir a `brief-normalizer` un test deno (`brief-normalizer_test.ts` si no existe; si existe, ampliar):
-
-- `ctx.projectName="AFFLUX"`, briefing dice `proposed_product_name="AFLUS"` → output `proposed_product_name="AFFLUX"` y `detected_aliases` incluye `"AFLUS"`.
-- `client_company_name="Alejandro Gordo"`, sin company override → se mueve a `founder_or_decision_maker`, `client_company_name` cae a `projectName`.
-- `proposed_product_name=null`, `ctx.projectName="AFFLUX"` → output `="AFFLUX"`, `canonical_source="user_project_input"`.
-- Detección de aliases por similitud (Levenshtein ≤ 2): `AFFLU`, `Aflu`, `AFLU` se capturan.
-
-Ampliar `f7-proposal-builder_test.ts`:
-- Si `clientCompany` viene vacío o == `projectName`, la cabecera muestra solo el projectName y la portada incluye `Proyecto / Producto`.
-
-### 6. Criterio de aceptación AFFLUX
-
-Tras re-ejecutar la limpieza editorial sobre el Step 2 de AFFLUX, en el brief limpio v12 debe leerse:
-
-```
-> CONFIDENCIAL — AFFLUX
-
-Proyecto / Producto: AFFLUX
-Cliente / empresa: AFLU            (o "AFLU / AFFLUX" si seguimos sin saber)
-Decisor: Alejandro Gordo
-Aliases detectados: AFLUS, AFFLU, Aflu
-```
-
-Y NO debe aparecer `Producto: null`, `Cliente: Alejandro Gordo`, ni `Proyecto: AFLUS`.
-
----
-
-## Archivos a editar
-
-- `supabase/functions/project-wizard-step/brief-normalizer.ts` — aliases, bloqueo de projectName, canonical_source.
-- `supabase/functions/project-wizard-step/clean-brief-builder.ts` — cabecera nueva con projectName y aliases.
-- `supabase/functions/project-wizard-step/f7-proposal-builder.ts` — portada con `Proyecto / Producto`, fallback a projectName si client_company vacío.
-- `supabase/functions/project-wizard-step/f6-prd-builder.ts` — verificar que el título usa `project_name` recibido.
-- `supabase/functions/project-wizard-step/index.ts` — propagar `projectName` desde la fila `business_projects` a builders F6/F7; no inferir `productName` desde la extracción.
-- Tests: `brief-normalizer_test.ts` (nuevo o ampliar), `f7-proposal-builder_test.ts` (ampliar).
-
-## Lo que NO se toca
-
-- Extracción chunked.
-- F2/F3/F4/F5 (Step 25–28).
-- Lógica de scope, PRD técnico ni propuesta más allá de los campos de cabecera/título.
-- Llamadas LLM (todo es determinista).
-
-## Pregunta
-
-Una sola decisión que afecta a la regeneración del brief AFFLUX:
-
-¿La micro-limpieza editorial pendiente (cambio de cabecera + traducciones residuales + Gobernanza + alerta señal 71) la metemos **dentro de este mismo deploy** y la aplicamos automáticamente al Step 2 de AFFLUX al guardar (creando v12), o lo haces tú con el botón **"Aprobar Brief"** una vez deployado?
+Apruebas el briefing → ves un panel de progreso con 5 sub-steps en directo → al terminar (~3-6 min) tienes el PRD técnico listo en el Step 3, sin haber tocado un solo botón del Pipeline QA. Si algo falla, ves exactamente qué paso y por qué.

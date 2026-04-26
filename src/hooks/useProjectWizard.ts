@@ -787,8 +787,18 @@ export const useProjectWizard = (projectId?: string) => {
   // Reemplaza al runChainedPRD legacy. Usa Step 28 (`scope_architecture_v1`)
   // como única fuente de verdad y produce un PRD técnico determinista (sin LLM,
   // sin SQL inventado, sin scoring inventado, sin "Claro aquí tienes…").
-  const runPipelineV2PRD = async (pricingMode: string = 'none') => {
+  //
+  // forceRegenerate=true (default): regenera Steps 25-28 desde cero como nuevas
+  // versiones (las antiguas quedan en histórico). Esto es lo que usamos cuando
+  // se aprueba el briefing, porque el scope tiene que reflejar el brief actual.
+  // Si pasas forceRegenerate=false, reusa los steps existentes (modo manual / debug).
+  const runPipelineV2PRD = async (
+    pricingMode: string = 'none',
+    options?: { forceRegenerate?: boolean },
+  ) => {
     if (!project || !projectId) return;
+
+    const forceRegenerate = options?.forceRegenerate !== false; // default ON
 
     // Validar prerequisito: brief aprobado
     const step2 = steps.find((s) => s.stepNumber === 2);
@@ -799,6 +809,7 @@ export const useProjectWizard = (projectId?: string) => {
 
     setGenerating(true);
     setChainedPhase("alcance");
+    setPipelineV2SubStep({ stepNumber: 25, label: "Construir registro de componentes" });
     try {
       await clearSubsequentSteps(3);
 
@@ -826,23 +837,37 @@ export const useProjectWizard = (projectId?: string) => {
         label: string,
         expectedStepNumber: number,
       ) => {
-        // Idempotente: si el step ya existe en BD, no lo regeneramos.
-        if (await checkStepExists(expectedStepNumber)) {
-          console.info(`[pipeline-v2] ${label} (${action}) — Step ${expectedStepNumber} ya existe, salto`);
+        // Idempotente solo en modo manual. En modo auto-cadena (forceRegenerate=true)
+        // siempre regeneramos para que el scope refleje el brief actual.
+        if (!forceRegenerate && await checkStepExists(expectedStepNumber)) {
+          console.info(`[pipeline-v2] ${label} (${action}) — Step ${expectedStepNumber} ya existe, salto (manual mode)`);
           return { skipped: true };
         }
 
-        console.info(`[pipeline-v2] ${label} (${action})…`);
-        const { data, error } = await supabase.functions.invoke("project-wizard-step", {
-          body: { action, projectId },
-        });
-        if (error) {
-          console.error(`[pipeline-v2] ${action} failed:`, error);
-          throw new Error(`${label} falló: ${error.message || error}`);
-        }
-        if (data?.error) {
-          console.error(`[pipeline-v2] ${action} returned error:`, data.error);
-          throw new Error(`${label}: ${data.error}`);
+        console.info(`[pipeline-v2] ${label} (${action})${forceRegenerate ? " — force regenerate" : ""}…`);
+
+        // 1 reintento automático tras 3s si el primer intento falla por error de red/función.
+        const invokeOnce = async () => {
+          const { data, error } = await supabase.functions.invoke("project-wizard-step", {
+            body: { action, projectId },
+          });
+          if (error) throw new Error(error.message || String(error));
+          if (data?.error) throw new Error(data.error);
+          return data;
+        };
+
+        let data: any;
+        try {
+          data = await invokeOnce();
+        } catch (firstErr: any) {
+          console.warn(`[pipeline-v2] ${action} failed once, retrying in 3s:`, firstErr?.message || firstErr);
+          await new Promise((r) => setTimeout(r, 3000));
+          try {
+            data = await invokeOnce();
+          } catch (secondErr: any) {
+            console.error(`[pipeline-v2] ${action} failed after retry:`, secondErr);
+            throw new Error(`${label} falló: ${secondErr?.message || secondErr}`);
+          }
         }
 
         // Verificación dura en BD: el step debe haberse persistido.
@@ -857,21 +882,26 @@ export const useProjectWizard = (projectId?: string) => {
 
       // F2 + F3 — Component Registry (Step 25)
       setChainedPhase("alcance");
+      setPipelineV2SubStep({ stepNumber: 25, label: "Construir registro de componentes" });
       await callAction("build_registry", "Construir registro de componentes", 25);
 
       // F4a — Gap Audit (Step 26)
+      setPipelineV2SubStep({ stepNumber: 26, label: "Auditoría de gaps" });
       await callAction("audit_f4a_gaps", "Auditoría de gaps", 26);
 
       // F4b — Feasibility Audit (Step 27)
       setChainedPhase("auditoria");
+      setPipelineV2SubStep({ stepNumber: 27, label: "Auditoría de viabilidad" });
       await callAction("audit_f4b_feasibility", "Auditoría de viabilidad", 27);
 
       // F5 — Scope Architect (Step 28)
       setChainedPhase("patrones");
+      setPipelineV2SubStep({ stepNumber: 28, label: "Arquitectura de alcance" });
       await callAction("architect_scope", "Arquitectura de alcance (Step 28)", 28);
 
       // F6 — Technical PRD (Step 29) — NO idempotente: siempre regenera.
       setChainedPhase("prd");
+      setPipelineV2SubStep({ stepNumber: 29, label: "PRD técnico" });
       console.info(`[pipeline-v2] Generando PRD técnico (Step 29)…`);
       const prdResp = await supabase.functions.invoke("project-wizard-step", {
         body: { action: "generate_technical_prd", projectId },

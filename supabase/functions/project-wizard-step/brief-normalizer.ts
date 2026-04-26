@@ -1549,6 +1549,9 @@ export async function normalizeBrief(
   // 3d. Last-resort word-level swap for residual English bridge tokens.
   applyResidualWordSwap(briefing, changes);
 
+  // 3e. Editorial polish — Gobernanza, traducciones residuales y alerta señal 71.
+  applyEditorialPolish(briefing, changes);
+
   // 4. Semantic dedup (uses canonical override from ctx if provided)
   applySemanticDedup(briefing, changes, ctx);
 

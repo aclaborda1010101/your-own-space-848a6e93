@@ -1137,7 +1137,9 @@ export const useProjectWizard = (projectId?: string) => {
         if (stepNumber === 2) {
           setCurrentStep(3);
           setTimeout(() => {
-            runPipelineV2PRD('none').catch((err) => {
+            // Aprobar el brief siempre fuerza regeneración del scope (25→28)
+            // para garantizar que el PRD refleje el brief actual.
+            runPipelineV2PRD('none', { forceRegenerate: true }).catch((err) => {
               console.error("Auto pipeline-v2 PRD failed:", err);
             });
           }, 500);

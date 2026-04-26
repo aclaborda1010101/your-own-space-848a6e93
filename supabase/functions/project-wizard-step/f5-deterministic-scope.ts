@@ -1013,24 +1013,26 @@ function mergeHints(c: any, hints: VerdictHint[]): {
     );
   };
 
-  const data_readiness_blockers: DatasetReadinessBlockerEntry[] = allConsumed.flatMap((c) =>
-    c.blockers
-      .filter((b) => b.type === "data_readiness")
-      .map((b) => {
-        const isMatching = matchingPredicate(c);
-        return {
-          scope_id: c.scope_id,
-          component_id: c.source_ref,
-          component_name: c.name,
-          dataset_required: isMatching ? C03_DATASET.dataset_required : "Pendiente de auditoría de dataset.",
-          current_readiness_pct: 0,
-          min_readiness_for_mvp: 50,
-          unblocking_actions: isMatching
-            ? C03_DATASET.unblocking_actions
-            : ["Realizar auditoría de dataset", "Reportar calidad y volumen", "Definir baseline de volumen mínimo"],
-          reason: b.reason,
-        };
-      }),
+  const data_readiness_blockers: DatasetReadinessBlockerEntry[] = dedupeDataReadinessEntries(
+    allConsumed.flatMap((c) =>
+      c.blockers
+        .filter((b) => b.type === "data_readiness")
+        .map((b) => {
+          const isMatching = matchingPredicate(c);
+          return {
+            scope_id: c.scope_id,
+            component_id: c.source_ref,
+            component_name: c.name,
+            dataset_required: isMatching ? C03_DATASET.dataset_required : "Pendiente de auditoría de dataset.",
+            current_readiness_pct: 0,
+            min_readiness_for_mvp: 50,
+            unblocking_actions: isMatching
+              ? C03_DATASET.unblocking_actions
+              : ["Realizar auditoría de dataset", "Reportar calidad y volumen", "Definir baseline de volumen mínimo"],
+            reason: b.reason,
+          };
+        }),
+    ),
   );
 
   const human_decisions_applied = [

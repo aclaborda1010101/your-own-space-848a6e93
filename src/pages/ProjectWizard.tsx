@@ -85,7 +85,7 @@ const ProjectWizardEdit = () => {
   const [exportMode, setExportMode] = useState<'client' | 'internal'>('client');
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState("");
-  const [forgeOpen, setForgeOpen] = useState(false);
+  // forgeOpen movido a ProjectProposalExport (Paso 5).
   const [autoChainEnabled, setAutoChainEnabled] = useState(() => {
     if (typeof window === "undefined") return true;
     const v = window.localStorage.getItem(`wizard-autochain-${id}`);

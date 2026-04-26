@@ -1866,8 +1866,7 @@ REGLAS PARA deep_patterns:
         .maybeSingle();
       const newVersion29 = existing29 ? existing29.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing29?.id || undefined,
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 29,
         step_name: "Pipeline v2 — F6 Technical PRD",

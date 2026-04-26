@@ -21,7 +21,7 @@ import { ProjectProposalExport } from "@/components/projects/wizard/ProjectPropo
 import { PricingModeSelector } from "@/components/projects/wizard/PricingModeSelector";
 import { ChainedPRDProgress } from "@/components/projects/wizard/ChainedPRDProgress";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { PublishToForgeDialog } from "@/components/projects/wizard/PublishToForgeDialog";
+// PublishToForgeDialog ahora vive dentro de ProjectProposalExport (Paso 5).
 import { ManifestViewer } from "@/components/projects/wizard/ManifestViewer";
 import { PipelineQAPanel } from "@/components/projects/wizard/PipelineQAPanel";
 import { useState, useRef } from "react";

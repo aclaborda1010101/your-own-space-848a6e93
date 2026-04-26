@@ -62,8 +62,7 @@ function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export const ChainedPRDProgress = ({ currentPhase, error, prdSubProgress }: Props) => {
-  const currentIdx = phaseOrder[currentPhase] ?? -1;
+export const ChainedPRDProgress = ({ currentPhase, error, prdSubProgress, pipelineV2SubStep }: Props) => {
   const elapsed = useElapsedTime(prdSubProgress?.startedAt);
 
   // Estimate ETA: ~45s per part average for parts 1-3 (parallel), ~60s each for 4-6
@@ -74,88 +73,147 @@ export const ChainedPRDProgress = ({ currentPhase, error, prdSubProgress }: Prop
   const estimatedRemaining = Math.max(0, estimatedTotal - elapsed);
   const subProgressPct = totalParts > 0 ? Math.round((completedParts / totalParts) * 100) : 0;
 
+  // Modo v2: 5 sub-steps reales (25→29). Modo legacy: 4 fases.
+  const useV2 = !!pipelineV2SubStep;
+  const phasesV2Idx = useV2
+    ? PHASES_V2.findIndex((p) => p.stepNumber === pipelineV2SubStep!.stepNumber)
+    : -1;
+  const currentIdxLegacy = phaseOrder[currentPhase] ?? -1;
+
   return (
     <div className="space-y-3 py-6">
       <div className="flex flex-col items-center gap-1 mb-4">
         <Loader2 className="w-8 h-8 text-primary animate-spin" />
-        <p className="text-sm font-medium text-foreground mt-2">Generando PRD completo...</p>
-        <p className="text-xs text-muted-foreground">Este proceso encadena 3 fases internamente</p>
+        <p className="text-sm font-medium text-foreground mt-2">
+          {useV2 ? "Generando PRD técnico (pipeline v2)…" : "Generando PRD completo…"}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {useV2
+            ? "Pipeline canónico: registry → gaps → viabilidad → scope → PRD"
+            : "Este proceso encadena 3 fases internamente"}
+        </p>
       </div>
 
       <div className="space-y-2 max-w-sm mx-auto">
-        {PHASES.map((phase, idx) => {
-          const isCompleted = currentIdx > idx;
-          const isActive = currentIdx === idx;
-          const isPending = currentIdx < idx;
-
-          return (
-            <div key={phase.key}>
-              <div
-                className={cn(
-                  "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all",
-                  isActive && "bg-primary/10 border border-primary/20",
-                  isCompleted && "bg-muted/30",
-                  isPending && "opacity-40"
-                )}
-              >
-                <div className="shrink-0">
-                  {isCompleted ? (
-                    <div className="w-6 h-6 rounded-full bg-green-500/15 flex items-center justify-center">
-                      <Check className="w-3.5 h-3.5 text-green-500" />
-                    </div>
-                  ) : isActive ? (
-                    <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center">
-                      <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
-                    </div>
-                  ) : (
-                    <div className="w-6 h-6 rounded-full bg-muted/50 flex items-center justify-center">
-                      <Circle className="w-3 h-3 text-muted-foreground/40" />
-                    </div>
+        {useV2
+          ? PHASES_V2.map((phase, idx) => {
+              const isCompleted = phasesV2Idx > idx;
+              const isActive = phasesV2Idx === idx;
+              const isPending = phasesV2Idx < idx;
+              return (
+                <div
+                  key={phase.stepNumber}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all",
+                    isActive && "bg-primary/10 border border-primary/20",
+                    isCompleted && "bg-muted/30",
+                    isPending && "opacity-40"
                   )}
-                </div>
-                <span className={cn(
-                  "text-sm",
-                  isActive && "font-medium text-primary",
-                  isCompleted && "text-muted-foreground line-through",
-                  isPending && "text-muted-foreground"
-                )}>
-                  {phase.label}
-                </span>
-              </div>
-
-              {/* Sub-progress for PRD phase */}
-              {phase.key === "prd" && isActive && prdSubProgress && (
-                <div className="mt-2 mx-4 space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span className="font-medium text-foreground/80">
-                      Parte {completedParts}/{totalParts}: {prdSubProgress.label}
-                    </span>
-                  </div>
-                  <Progress value={subProgressPct} className="h-1.5" />
-                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      <span>{formatTime(elapsed)} transcurrido</span>
-                    </div>
-                    {estimatedRemaining > 0 && (
-                      <span>~{formatTime(estimatedRemaining)} restante</span>
+                >
+                  <div className="shrink-0">
+                    {isCompleted ? (
+                      <div className="w-6 h-6 rounded-full bg-green-500/15 flex items-center justify-center">
+                        <Check className="w-3.5 h-3.5 text-green-500" />
+                      </div>
+                    ) : isActive ? (
+                      <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center">
+                        <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
+                      </div>
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-muted/50 flex items-center justify-center">
+                        <Circle className="w-3 h-3 text-muted-foreground/40" />
+                      </div>
                     )}
                   </div>
-                  {prdSubProgress.partsCompleted.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {prdSubProgress.partsCompleted.map((p, i) => (
-                        <span key={i} className="inline-flex items-center gap-0.5 text-[10px] text-green-600 bg-green-500/10 px-1.5 py-0.5 rounded">
-                          <Check className="w-2.5 h-2.5" />
-                          {p}
+                  <div className="flex-1 min-w-0">
+                    <span className={cn(
+                      "text-sm block",
+                      isActive && "font-medium text-primary",
+                      isCompleted && "text-muted-foreground line-through",
+                      isPending && "text-muted-foreground"
+                    )}>
+                      {phase.label}
+                    </span>
+                    <span className="text-[10px] font-mono text-muted-foreground/60">
+                      Step {phase.stepNumber}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          : PHASES_LEGACY.map((phase, idx) => {
+              const isCompleted = currentIdxLegacy > idx;
+              const isActive = currentIdxLegacy === idx;
+              const isPending = currentIdxLegacy < idx;
+
+              return (
+                <div key={phase.key}>
+                  <div
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all",
+                      isActive && "bg-primary/10 border border-primary/20",
+                      isCompleted && "bg-muted/30",
+                      isPending && "opacity-40"
+                    )}
+                  >
+                    <div className="shrink-0">
+                      {isCompleted ? (
+                        <div className="w-6 h-6 rounded-full bg-green-500/15 flex items-center justify-center">
+                          <Check className="w-3.5 h-3.5 text-green-500" />
+                        </div>
+                      ) : isActive ? (
+                        <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center">
+                          <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
+                        </div>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-muted/50 flex items-center justify-center">
+                          <Circle className="w-3 h-3 text-muted-foreground/40" />
+                        </div>
+                      )}
+                    </div>
+                    <span className={cn(
+                      "text-sm",
+                      isActive && "font-medium text-primary",
+                      isCompleted && "text-muted-foreground line-through",
+                      isPending && "text-muted-foreground"
+                    )}>
+                      {phase.label}
+                    </span>
+                  </div>
+
+                  {/* Sub-progress for PRD phase (legacy) */}
+                  {phase.key === "prd" && isActive && prdSubProgress && (
+                    <div className="mt-2 mx-4 space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span className="font-medium text-foreground/80">
+                          Parte {completedParts}/{totalParts}: {prdSubProgress.label}
                         </span>
-                      ))}
+                      </div>
+                      <Progress value={subProgressPct} className="h-1.5" />
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          <span>{formatTime(elapsed)} transcurrido</span>
+                        </div>
+                        {estimatedRemaining > 0 && (
+                          <span>~{formatTime(estimatedRemaining)} restante</span>
+                        )}
+                      </div>
+                      {prdSubProgress.partsCompleted.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {prdSubProgress.partsCompleted.map((p, i) => (
+                            <span key={i} className="inline-flex items-center gap-0.5 text-[10px] text-green-600 bg-green-500/10 px-1.5 py-0.5 rounded">
+                              <Check className="w-2.5 h-2.5" />
+                              {p}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-            </div>
-          );
-        })}
+              );
+            })}
       </div>
 
       {error && (

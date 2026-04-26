@@ -113,6 +113,112 @@ function looksLikePersonName(s: string): boolean {
   return PERSON_NAME_RE.test(trimmed);
 }
 
+/**
+ * Normaliza una cadena para comparación de aliases:
+ * - lower-case, sin diacríticos, sin signos, espacios colapsados.
+ */
+function normForCompare(s: string): string {
+  if (!s || typeof s !== "string") return "";
+  return s
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "")
+    .trim();
+}
+
+/**
+ * Distancia de Levenshtein simple (sin librería externa). Sólo para
+ * cadenas cortas (nombres de proyecto/producto), suficientemente rápido.
+ */
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const dp: number[] = new Array(b.length + 1);
+  for (let j = 0; j <= b.length; j++) dp[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1]
+        ? prev
+        : 1 + Math.min(prev, dp[j], dp[j - 1]);
+      prev = tmp;
+    }
+  }
+  return dp[b.length];
+}
+
+/**
+ * Decide si `candidate` parece una variante del nombre canónico (typo,
+ * mayúsculas, transcripción defectuosa). NO marca como alias cadenas
+ * totalmente distintas (p. ej. nombre de persona).
+ */
+function looksLikeAliasOf(candidate: string, canonical: string): boolean {
+  const a = normForCompare(candidate);
+  const b = normForCompare(canonical);
+  if (!a || !b) return false;
+  if (a === b) return false; // exacto, no es alias
+  if (a.length < 3 || b.length < 3) return false;
+  // Substring fuerte (Aflu ⊂ Afflux normalizado)
+  if (a.includes(b) || b.includes(a)) return true;
+  // Distancia ≤ 2 en cadenas cortas
+  const lenMin = Math.min(a.length, b.length);
+  const lenMax = Math.max(a.length, b.length);
+  if (lenMax - lenMin > 3) return false;
+  return levenshtein(a, b) <= 2;
+}
+
+/**
+ * Escanea el briefing crudo (campos text-heavy) buscando variantes del
+ * `projectName` canónico para construir `detected_aliases[]`. Sólo añade
+ * aliases que cumplen `looksLikeAliasOf`. Limita a 8 entradas.
+ */
+function collectDetectedAliases(briefing: any, projectName: string, seedAliases: string[] = []): string[] {
+  const found = new Set<string>();
+  // Semillas (valores que ya existían antes de ser sobrescritos por
+  // projectName: client_company_name, proposed_product_name extraídos).
+  for (const s of seedAliases) {
+    if (typeof s !== "string") continue;
+    const t = s.trim();
+    if (t && looksLikeAliasOf(t, projectName)) found.add(t);
+  }
+  const v2 = briefing?.business_extraction_v2 || {};
+  const haystacks: string[] = [];
+  // Strings cortas en campos típicos donde aparece el naming.
+  const SHORT_FIELDS = ["title", "context", "primary_goal"];
+  if (v2.business_model_summary && typeof v2.business_model_summary === "object") {
+    for (const k of SHORT_FIELDS) {
+      const val = v2.business_model_summary[k];
+      if (typeof val === "string") haystacks.push(val);
+    }
+  }
+  if (typeof v2.executive_summary === "string") haystacks.push(v2.executive_summary);
+  if (typeof v2.project_title === "string") haystacks.push(v2.project_title);
+  // source_quotes suele tener cadenas literales de la transcripción.
+  if (Array.isArray(v2.source_quotes)) {
+    for (const q of v2.source_quotes.slice(0, 50)) {
+      if (typeof q === "string") haystacks.push(q);
+      else if (q && typeof q === "object" && typeof q.quote === "string") haystacks.push(q.quote);
+    }
+  }
+  // Tokenizamos sólo palabras de 3-15 chars (filtra ruido).
+  const TOKEN_RE = /\b[A-Za-zÀ-ÿ][A-Za-z0-9À-ÿ.-]{2,14}\b/g;
+  for (const text of haystacks) {
+    const matches = text.match(TOKEN_RE);
+    if (!matches) continue;
+    for (const tok of matches) {
+      if (looksLikeAliasOf(tok, projectName)) found.add(tok);
+      if (found.size >= 32) break; // safety
+    }
+    if (found.size >= 32) break;
+  }
+  // Cap final a 8 entradas, ordenadas por frecuencia aprox (set ya dedupea).
+  return Array.from(found).slice(0, 8);
+}
+
 function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: NormalizationChange[]) {
   const v2 = briefing?.business_extraction_v2;
   if (!v2 || typeof v2 !== "object") return;
@@ -123,17 +229,35 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
   const cnc = v2.client_naming_check;
   const before = { ...cnc };
 
+  // Snapshot de los valores ANTES de tocar nada — alimentan detected_aliases.
+  const seedAliasesFromExtraction: string[] = [];
+  if (typeof cnc.proposed_product_name === "string") seedAliasesFromExtraction.push(cnc.proposed_product_name);
+  if (typeof cnc.client_company_name === "string") seedAliasesFromExtraction.push(cnc.client_company_name);
+  if (Array.isArray(cnc.detected_aliases)) {
+    for (const a of cnc.detected_aliases) if (typeof a === "string") seedAliasesFromExtraction.push(a);
+  }
+
+  // ── Authoritative product/project name ───────────────────────────────
+  // REGLA DE ORO: lo que el usuario escribe en la ficha del proyecto
+  // (`ctx.projectName`) es la fuente de verdad para `proposed_product_name`.
+  // `ctx.productName` solo se usa si el usuario lo escribió manualmente
+  // distinto de projectName.
+  const userProjectName = (ctx.projectName || "").trim();
+  const userProductName = (ctx.productName || "").trim();
+  const canonicalProduct = userProductName || userProjectName;
+
   // Decide the AUTHORITATIVE company name once, with priority:
   //   1. ctx.companyNameOverride (explicit, never wrong)
   //   2. ctx.companyName if it does NOT look like a person name
-  //   3. ctx.productName as a soft fallback
+  //   3. canonicalProduct (último recurso para que NUNCA quede vacío
+  //      o aparezca un nombre de persona como cliente)
   //   4. "[POR CONFIRMAR]"
   const ctxCompanyIsPerson =
     typeof ctx.companyName === "string" && looksLikePersonName(ctx.companyName);
   const authoritativeCompany =
     (ctx.companyNameOverride && ctx.companyNameOverride.trim()) ||
     (ctx.companyName && !ctxCompanyIsPerson ? ctx.companyName.trim() : "") ||
-    (ctx.productName && ctx.productName.trim()) ||
+    canonicalProduct ||
     "[POR CONFIRMAR]";
 
   // 1. If extracted company is a person name, demote to founder.
@@ -210,30 +334,80 @@ function applyNamingSplit(briefing: any, ctx: NormalizationContext, changes: Nor
     }
   }
 
-  // 5. Product name: prefer ctx.productName, else projectName.
-  if (ctx.productName && ctx.productName.trim() && cnc.proposed_product_name !== ctx.productName.trim()) {
-    const prev = cnc.proposed_product_name;
-    cnc.proposed_product_name = ctx.productName.trim();
+  // 4b. Tras todas las reglas, si client_company_name SIGUE pareciendo
+  //     persona o sigue vacío y NO hay companyNameOverride, fijar al
+  //     producto canónico (regla del usuario: "Cliente / empresa: AFFLUX"
+  //     cuando no sepamos cuál es la empresa real).
+  if (
+    !ctx.companyNameOverride &&
+    canonicalProduct &&
+    (
+      !cnc.client_company_name ||
+      (typeof cnc.client_company_name === "string" && cnc.client_company_name.trim().length === 0) ||
+      looksLikePersonName(cnc.client_company_name)
+    )
+  ) {
+    const prev = cnc.client_company_name;
+    cnc.client_company_name = canonicalProduct;
     changes.push({
       type: "naming_split",
-      field: "proposed_product_name",
+      field: "client_company_name",
       before: prev,
-      after: ctx.productName.trim(),
-      reason: "Aplicado productName autoritario desde contexto.",
+      after: canonicalProduct,
+      reason: "client_company_name vacío o persona; fallback al producto canónico.",
     });
+  }
+
+  // 5. Product name: REGLA DE ORO. `canonicalProduct` (derivado de
+  //    ctx.projectName/ctx.productName) sobrescribe SIEMPRE cualquier
+  //    valor que haya puesto el LLM. La única excepción es si el usuario
+  //    no pasó ningún nombre — en cuyo caso respetamos lo que haya.
+  if (canonicalProduct) {
+    if (cnc.proposed_product_name !== canonicalProduct) {
+      const prev = cnc.proposed_product_name;
+      cnc.proposed_product_name = canonicalProduct;
+      cnc.canonical_source = "user_project_input";
+      changes.push({
+        type: "naming_split",
+        field: "proposed_product_name",
+        before: prev,
+        after: canonicalProduct,
+        reason: "Forzado al projectName/productName del usuario (fuente canónica).",
+      });
+    } else {
+      cnc.canonical_source = "user_project_input";
+    }
   } else if (
     !cnc.proposed_product_name ||
     (typeof cnc.proposed_product_name === "string" && cnc.proposed_product_name.trim().length === 0)
   ) {
-    cnc.proposed_product_name = ctx.projectName || null;
-    if (cnc.proposed_product_name) {
-      changes.push({
-        type: "naming_split",
-        field: "proposed_product_name",
-        before: null,
-        after: cnc.proposed_product_name,
-        reason: "Aplicado projectName por defecto.",
-      });
+    cnc.proposed_product_name = null;
+  }
+
+  // 5b. Detected aliases: variantes detectadas en la transcripción que
+  //     NO coinciden con el nombre canónico. Solo pueblan si tenemos
+  //     un canonical contra el que comparar.
+  if (canonicalProduct) {
+    const aliases = collectDetectedAliases(briefing, canonicalProduct, seedAliasesFromExtraction);
+    // Filtramos: nada de aliases que coincidan EXACTAMENTE con el canonical
+    // (case-insensitive, sin signos) — eso es el propio nombre.
+    const canonNorm = normForCompare(canonicalProduct);
+    const filtered = aliases.filter((a) => normForCompare(a) !== canonNorm);
+    if (filtered.length > 0) {
+      const prevAliases = Array.isArray(cnc.detected_aliases) ? cnc.detected_aliases : [];
+      const merged = Array.from(new Set([...prevAliases.filter((s: any) => typeof s === "string"), ...filtered])).slice(0, 8);
+      cnc.detected_aliases = merged;
+      if (JSON.stringify(prevAliases) !== JSON.stringify(merged)) {
+        changes.push({
+          type: "naming_split",
+          field: "detected_aliases",
+          before: prevAliases,
+          after: merged,
+          reason: "Variantes detectadas en transcripción registradas como aliases.",
+        });
+      }
+    } else if (!Array.isArray(cnc.detected_aliases)) {
+      cnc.detected_aliases = [];
     }
   }
 

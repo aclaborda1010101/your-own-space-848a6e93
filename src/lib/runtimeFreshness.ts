@@ -168,6 +168,22 @@ export function ensureRuntimeFreshness(): boolean {
         sessionStorage.removeItem(PREVIEW_RESET_ATTEMPTS_KEY);
       }
 
+      // Detect HTML-vs-bundle mismatch: if Lovable served a fresh index.html
+      // (with a new build timestamp meta) but the iframe is running an older
+      // JS bundle from cache, force one reload so the user sees today's UI
+      // without having to interact first.
+      if (htmlBuildMismatchesBundle()) {
+        const attempts = Number(sessionStorage.getItem(PREVIEW_HTML_MISMATCH_KEY) || "0");
+        if (attempts < PREVIEW_RESET_MAX_ATTEMPTS) {
+          sessionStorage.setItem(PREVIEW_HTML_MISMATCH_KEY, String(attempts + 1));
+          nukeSwAndCaches();
+          setTimeout(navigateToFreshUrl, 200);
+          return true;
+        }
+      } else {
+        sessionStorage.removeItem(PREVIEW_HTML_MISMATCH_KEY);
+      }
+
       return handleBuildChange();
     }
 

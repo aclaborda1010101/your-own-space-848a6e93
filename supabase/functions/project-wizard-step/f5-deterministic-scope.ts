@@ -972,20 +972,22 @@ function mergeHints(c: any, hints: VerdictHint[]): {
     c.required_actions = Array.from(new Set(c.required_actions.map((a) => a.trim()).filter(Boolean)));
   }
 
-  const compliance_blockers: ComplianceBlockerEntry[] = allConsumed.flatMap((c) =>
-    c.blockers
-      .filter((b) => b.type === "compliance")
-      .map((b) => ({
-        scope_id: c.scope_id,
-        component_name: c.name,
-        required_artifacts: b.required_artifacts,
-        reason: b.reason,
-        owner: "DPO / Responsable legal del cliente",
-        deadline_weeks: 4,
-        blocks_design: b.blocks_design ?? false,
-        blocks_internal_testing: b.blocks_internal_testing ?? false,
-        blocks_production: b.blocks_production ?? true,
-      })),
+  const compliance_blockers: ComplianceBlockerEntry[] = dedupeComplianceBlockerEntries(
+    allConsumed.flatMap((c) =>
+      c.blockers
+        .filter((b) => b.type === "compliance")
+        .map((b) => ({
+          scope_id: c.scope_id,
+          component_name: c.name,
+          required_artifacts: b.required_artifacts,
+          reason: b.reason,
+          owner: "DPO / Responsable legal del cliente",
+          deadline_weeks: 4,
+          blocks_design: b.blocks_design ?? false,
+          blocks_internal_testing: b.blocks_internal_testing ?? false,
+          blocks_production: b.blocks_production ?? true,
+        })),
+    ),
   );
 
   // C03-specific dataset description for richer readiness entry

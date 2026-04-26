@@ -327,6 +327,152 @@ function resolveSoulDependency(c: any): "none" | "async" | "hard" {
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
+// Dedupe helpers (blockers + capabilities)
+// ───────────────────────────────────────────────────────────────────────────────
+
+function normalizeText(s: unknown): string {
+  return String(s ?? "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeArtifacts(arr: unknown): string {
+  if (!Array.isArray(arr)) return "";
+  return Array.from(new Set(arr.map((a) => normalizeText(a)))).sort().join("|");
+}
+
+/**
+ * Deduplicate blockers inside a single ScopeComponent.
+ * Two blockers are duplicates if they share type + normalized reason head +
+ * normalized required_artifacts. When merging, OR the blocking flags upward
+ * (the strictest wins) and union artifacts.
+ */
+export function dedupeComponentBlockers(blockers: ScopeBlocker[]): ScopeBlocker[] {
+  const out: ScopeBlocker[] = [];
+  const byKey = new Map<string, ScopeBlocker>();
+  for (const b of blockers ?? []) {
+    if (!b || typeof b !== "object") continue;
+    const reasonHead = normalizeText(b.reason).slice(0, 80);
+    const key = `${b.type}|${reasonHead}|${normalizeArtifacts(b.required_artifacts)}`;
+    const existing = byKey.get(key);
+    if (!existing) {
+      const clone: ScopeBlocker = {
+        type: b.type,
+        blocks_production: !!b.blocks_production,
+        blocks_design: !!b.blocks_design,
+        blocks_internal_testing: !!b.blocks_internal_testing,
+        required_artifacts: Array.from(new Set((b.required_artifacts ?? []).map((s) => String(s)))),
+        reason: b.reason ?? "",
+      };
+      byKey.set(key, clone);
+      out.push(clone);
+    } else {
+      existing.blocks_production = existing.blocks_production || !!b.blocks_production;
+      existing.blocks_design = existing.blocks_design || !!b.blocks_design;
+      existing.blocks_internal_testing = existing.blocks_internal_testing || !!b.blocks_internal_testing;
+      const merged = new Set([...existing.required_artifacts, ...(b.required_artifacts ?? [])]);
+      existing.required_artifacts = Array.from(merged);
+    }
+  }
+  return out;
+}
+
+/**
+ * Detect institutional buyer / Benatar duplicates within the same bucket and
+ * merge them into a single ScopeComponent. Keeps the most specific name
+ * (preferring the one that mentions "Benatar"). Unions blockers, actions,
+ * compliance flags and notes. Logs the merge in the decision log.
+ */
+export function mergeDuplicateScopeComponents(
+  list: ScopeComponent[],
+  decisionLog: ScopeDecisionLogEntry[],
+): ScopeComponent[] {
+  const groups = new Map<string, ScopeComponent[]>();
+  const passThrough: ScopeComponent[] = [];
+  for (const c of list) {
+    const name = normalizeText(c.name);
+    const fam = normalizeText(c.family);
+    const isInstBuyer =
+      fam === "institutional_buyer_detector" ||
+      name.includes("benatar") ||
+      (name.includes("compradores institucionales") && !name.includes("fallecimien"));
+    if (!isInstBuyer) { passThrough.push(c); continue; }
+    const key = "institutional_buyer_detector";
+    const arr = groups.get(key) ?? [];
+    arr.push(c);
+    groups.set(key, arr);
+  }
+  for (const [, members] of groups) {
+    if (members.length === 1) { passThrough.push(members[0]); continue; }
+    const ranked = [...members].sort((a, b) => {
+      const aB = /benatar/i.test(a.name) ? 1 : 0;
+      const bB = /benatar/i.test(b.name) ? 1 : 0;
+      if (aB !== bB) return bB - aB;
+      return b.name.length - a.name.length;
+    });
+    const primary = ranked[0];
+    const others = ranked.slice(1);
+    if (!/benatar/i.test(primary.name)) {
+      primary.name = "Detector de compradores institucionales tipo Benatar";
+    }
+    const allBlockers = [primary.blockers, ...others.map((o) => o.blockers)].flat();
+    primary.blockers = dedupeComponentBlockers(allBlockers);
+    const actions = new Set<string>(primary.required_actions);
+    for (const o of others) for (const a of o.required_actions ?? []) actions.add(a);
+    primary.required_actions = Array.from(actions);
+    const flags = new Set<string>(primary.compliance_flags ?? []);
+    for (const o of others) for (const f of (o.compliance_flags ?? [])) flags.add(f);
+    if (flags.size > 0) primary.compliance_flags = Array.from(flags);
+    const notes = [primary.notes, ...others.map((o) => o.notes)].filter(Boolean).join("\n");
+    if (notes) primary.notes = notes;
+    for (const o of others) {
+      decisionLog.push({
+        source: "deterministic_rule",
+        decision_id: "merge_institutional_buyer_detector",
+        applied_to: o.scope_id,
+        action: `merged_into_${primary.scope_id}`,
+        reason: `Componente funcionalmente duplicado: "${o.name}" fusionado con "${primary.name}".`,
+      });
+    }
+    passThrough.push(primary);
+  }
+  return passThrough;
+}
+
+function dedupeComplianceBlockerEntries(arr: ComplianceBlockerEntry[]): ComplianceBlockerEntry[] {
+  const seen = new Map<string, ComplianceBlockerEntry>();
+  for (const e of arr) {
+    const key = `${e.scope_id}|${normalizeText(e.component_name)}|compliance`;
+    const cur = seen.get(key);
+    if (!cur) {
+      seen.set(key, { ...e, required_artifacts: Array.from(new Set(e.required_artifacts ?? [])) });
+    } else {
+      cur.required_artifacts = Array.from(new Set([...cur.required_artifacts, ...(e.required_artifacts ?? [])]));
+      cur.blocks_production = cur.blocks_production || e.blocks_production;
+      cur.blocks_design = cur.blocks_design || e.blocks_design;
+      cur.blocks_internal_testing = cur.blocks_internal_testing || e.blocks_internal_testing;
+    }
+  }
+  return Array.from(seen.values());
+}
+
+function dedupeDataReadinessEntries(arr: DatasetReadinessBlockerEntry[]): DatasetReadinessBlockerEntry[] {
+  const seen = new Map<string, DatasetReadinessBlockerEntry>();
+  for (const e of arr) {
+    const key = `${e.scope_id}|${e.component_id}|${normalizeText(e.dataset_required)}`;
+    const cur = seen.get(key);
+    if (!cur) {
+      seen.set(key, { ...e, unblocking_actions: Array.from(new Set(e.unblocking_actions ?? [])) });
+    } else {
+      cur.unblocking_actions = Array.from(new Set([...cur.unblocking_actions, ...(e.unblocking_actions ?? [])]));
+    }
+  }
+  return Array.from(seen.values());
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
 // Public: pre-warm
 // ───────────────────────────────────────────────────────────────────────────────
 

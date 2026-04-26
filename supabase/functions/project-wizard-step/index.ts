@@ -1421,8 +1421,7 @@ REGLAS PARA deep_patterns:
 
       const newVersion25 = existing25 ? existing25.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing25?.id || undefined,
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 25,
         step_name: "Pipeline v2 — Registry Build",
@@ -1529,8 +1528,7 @@ REGLAS PARA deep_patterns:
 
       const newVersion26 = existing26 ? existing26.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing26?.id || undefined,
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 26,
         step_name: "Pipeline v2 — Registry Gap Audit (F4a)",
@@ -1636,8 +1634,7 @@ REGLAS PARA deep_patterns:
 
       const newVersion27 = existing27 ? existing27.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing27?.id || undefined,
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 27,
         step_name: "Pipeline v2 — Feasibility Audit (F4b)",
@@ -1781,8 +1778,9 @@ REGLAS PARA deep_patterns:
         .maybeSingle();
       const newVersion28 = existing28 ? existing28.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing28?.id || undefined,
+      // FIX: insert a NEW versioned row each time (do NOT overwrite previous version
+      // by reusing existing28.id — that destroyed approved Step 28 v2 history).
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 28,
         step_name: "Pipeline v2 — F5 Scope Architect",
@@ -1868,8 +1866,7 @@ REGLAS PARA deep_patterns:
         .maybeSingle();
       const newVersion29 = existing29 ? existing29.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing29?.id || undefined,
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 29,
         step_name: "Pipeline v2 — F6 Technical PRD",
@@ -2012,8 +2009,7 @@ REGLAS PARA deep_patterns:
         .maybeSingle();
       const newVersion30 = existing30 ? existing30.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing30?.id || undefined,
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 30,
         step_name: "Pipeline v2 — F7 Client Proposal",
@@ -2092,8 +2088,7 @@ REGLAS PARA deep_patterns:
         .maybeSingle();
       const newVersion31 = existing31 ? existing31.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing31?.id || undefined,
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 31,
         step_name: "Pipeline v2 — F8 Final Deliverables Audit",

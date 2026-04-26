@@ -22,6 +22,42 @@ function clean(s: any): string {
   return String(s).trim();
 }
 
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp: number[] = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0];
+    dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prev : Math.min(prev, dp[j - 1], dp[j]) + 1;
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+
+/**
+ * True si `candidate` parece variante OCR/transcripción de `canonical`.
+ * Reglas simples para evitar falsos positivos:
+ *   - longitud >= 3
+ *   - ambos alfanuméricos
+ *   - mismo prefijo de 2 letras (case-insensitive) o Levenshtein <= 2
+ */
+function looksLikeAlias(candidate: string, canonical: string): boolean {
+  if (!candidate || !canonical) return false;
+  const a = candidate.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const b = canonical.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (a.length < 3 || b.length < 3) return false;
+  if (a === b) return true;
+  if (a.length > 0 && b.length > 0 && a[0] === b[0] && a.length > 1 && b.length > 1 && a[1] === b[1]) {
+    if (Math.abs(a.length - b.length) <= 3) return levenshtein(a, b) <= 3;
+  }
+  return levenshtein(a, b) <= 2;
+}
+
 function bullet(s: string): string {
   return `- ${s}`;
 }
@@ -155,14 +191,27 @@ export function buildCleanBrief(briefing: any, ctx: { projectName: string }): Cl
   // transcripción solo puede aportar `detected_aliases[]`.
   const naming = v2.client_naming_check || {};
   const projectName = clean(ctx.projectName) || "Proyecto";
-  const clientCompany = clean(naming.client_company_name) || projectName;
+  // Si el client_company_name detectado es un alias del projectName
+  // (ej. "AFLU" para "AFFLUX"), usamos directamente el canónico.
+  const rawClient = clean(naming.client_company_name);
+  const clientCompany =
+    rawClient && rawClient !== projectName && looksLikeAlias(rawClient, projectName)
+      ? projectName
+      : (rawClient || projectName);
   const decisionMaker = clean(naming.founder_or_decision_maker);
   const aliases: string[] = Array.isArray(naming.detected_aliases)
     ? naming.detected_aliases.filter((a: any) => typeof a === "string" && a.trim().length > 0)
     : [];
 
+  // Fecha en formato dd/mm/yyyy para la cabecera.
+  const today = new Date();
+  const dd = String(today.getDate()).padStart(2, "0");
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const yyyy = today.getFullYear();
+  const dateStr = `${dd}/${mm}/${yyyy}`;
+
   const headerLines: string[] = [];
-  headerLines.push(`> **CONFIDENCIAL — ${projectName}**`);
+  headerLines.push(`> **CONFIDENCIAL — ${projectName} — ${dateStr}**`);
   headerLines.push("");
   headerLines.push(`# Brief Limpio — ${projectName}`);
   headerLines.push("");

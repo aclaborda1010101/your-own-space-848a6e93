@@ -949,14 +949,14 @@ function applyResidualWordSwap(briefing: any, changes: NormalizationChange[]) {
  * Apply deterministic + residual cleanup directly on a clean-brief markdown
  * string. Used as a final safety net on the pre-rendered _clean_brief_md.
  */
-export function cleanupSpanishMarkdown(md: string): string {
+export function cleanupSpanishMarkdown(md: string, ctx?: { projectName?: string; aliases?: string[] }): string {
   if (!md || typeof md !== "string") return md;
   // Reuse the same phrase map by walking a fake briefing payload.
   const fake = { business_extraction_v2: { __md: md } };
   const dummyChanges: NormalizationChange[] = [];
   applyDeterministicSpanishCleanup(fake, dummyChanges);
   applyResidualWordSwap(fake, dummyChanges);
-  applyEditorialPolish(fake, dummyChanges);
+  applyEditorialPolish(fake, dummyChanges, ctx);
   return fake.business_extraction_v2.__md;
 }
 
@@ -966,11 +966,21 @@ export function cleanupSpanishMarkdown(md: string): string {
  *   2. Traducciones residuales muy específicas no cubiertas arriba.
  *   3. Inyecta alerta señal 71 en open_questions si detecta el patrón
  *      "71%" / "71 visitas" / "señal 71" en cualquier campo del briefing.
+ *   4. Sustituye aliases del proyecto (AFLU, AFLUS, AFFLU…) por el
+ *      `projectName` canónico (AFFLUX) en TODO el cuerpo del briefing.
+ *      La cabecera y `client_company_name` ya usan `projectName`; esto
+ *      limpia las menciones residuales en frases libres.
+ *   5. Corrige typos editoriales conocidos (DNIsy, "all Catastro datos",
+ *      "Monday a HubSpot", etc.).
  *
  * 100 % determinista. Se ejecuta al final del pipeline para que el resto
  * de pasos (LLM y residual swap) no la deshagan.
  */
-function applyEditorialPolish(briefing: any, changes: NormalizationChange[]) {
+function applyEditorialPolish(
+  briefing: any,
+  changes: NormalizationChange[],
+  ctx?: { projectName?: string; aliases?: string[] },
+) {
   const replacements: Array<[RegExp, string]> = [
     // 1. Governance → Gobernanza (preserva RGPD / DPIA / siglas tras él).
     [/\bGovernance\b/g, "Gobernanza"],
@@ -995,7 +1005,55 @@ function applyEditorialPolish(briefing: any, changes: NormalizationChange[]) {
     [/\bDeal Velocity\b/gi, "Velocidad de cierre"],
     [/\bSales Pipeline\b/gi, "Pipeline comercial"],
     [/\bLead Scoring\b/gi, "Puntuación de oportunidades"],
+    // 2b. Frases explicativas adicionales reportadas en v12 AFFLUX.
+    [/\bhas collected\b/gi, "ha recopilado"],
+    [/\bsignificant\b/gi, "significativo"],
+    [/\bCRM data\b/gi, "datos del CRM"],
+    [/\bCall recordings?\b/gi, "Grabaciones de llamadas"],
+    [/\bThe client acknowledges having ['"]?lost millions of euros['"]?/gi,
+      "El cliente reconoce haber 'perdido millones de euros'"],
+    [/\bIneffective or inconsistent follow-?up\b/gi, "Seguimiento ineficaz o inconsistente"],
+    [/\bCost of Individual Property Notes\b/gi, "Coste de notas individuales de inmuebles"],
+    [/\bLost Value in Negotiations\b/gi, "Valor perdido en negociaciones"],
+    [/\bto build a central system\b/gi, "para construir un sistema central"],
+    [/\bDeveloping an AI-?driven system\b/gi, "Desarrollar un sistema impulsado por IA"],
+    [/\bOverwhelm from rapid AI advancements\b/gi, "Saturación por los avances rápidos de la IA"],
+    [/\bRisk of fragmented AI usage\b/gi, "Riesgo de uso fragmentado de la IA"],
+    // 5. Typos editoriales conocidos.
+    [/\bDNIsy\b/g, "DNIs y"],
+    [/\ball Catastro datos\b/gi, "todos los datos del Catastro"],
+    [/\bMonday a HubSpot\b/gi, "de Monday a HubSpot"],
+    [/(?<!de\s)\ba HubSpot\b/g, "a HubSpot"],
   ];
+
+  // 4. Sustitución de aliases → projectName canónico.
+  // Ej: AFLU, AFLUS, AFFLU, Aflu → AFFLUX.
+  // Solo se aplica si projectName tiene >= 4 chars para evitar falsos positivos.
+  const projectName = (ctx?.projectName || "").trim();
+  if (projectName && projectName.length >= 4) {
+    const aliasSet = new Set<string>();
+    if (Array.isArray(ctx?.aliases)) {
+      for (const a of ctx.aliases) if (typeof a === "string" && a.trim()) aliasSet.add(a.trim());
+    }
+    // Auto-detección complementaria desde client_naming_check.detected_aliases.
+    const detected = briefing?.business_extraction_v2?.client_naming_check?.detected_aliases;
+    if (Array.isArray(detected)) {
+      for (const a of detected) if (typeof a === "string" && a.trim()) aliasSet.add(a.trim());
+    }
+    // No reemplazamos el propio projectName.
+    aliasSet.delete(projectName);
+    aliasSet.delete(projectName.toLowerCase());
+    aliasSet.delete(projectName.toUpperCase());
+    // Filtramos aliases muy cortos o no parecidos (evita basura).
+    for (const alias of aliasSet) {
+      if (alias.length < 3) continue;
+      if (!looksLikeAliasOf(alias, projectName)) continue;
+      // Word-boundary, case-sensitive primero (preserva mayúsculas).
+      const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(`\\b${escaped}\\b`, "g");
+      replacements.push([re, projectName]);
+    }
+  }
 
   function walk(node: any, path: string): any {
     if (typeof node === "string") {
@@ -1007,7 +1065,7 @@ function applyEditorialPolish(briefing: any, changes: NormalizationChange[]) {
           field: path,
           before: node,
           after: out,
-          reason: "Pulido editorial determinista (Gobernanza, traducciones residuales).",
+          reason: "Pulido editorial determinista (Gobernanza, traducciones, aliases, typos).",
         });
       }
       return out;
@@ -1015,7 +1073,15 @@ function applyEditorialPolish(briefing: any, changes: NormalizationChange[]) {
     if (Array.isArray(node)) return node.map((item, i) => walk(item, `${path}[${i}]`));
     if (node && typeof node === "object") {
       const out: Record<string, any> = {};
-      for (const [k, v] of Object.entries(node)) out[k] = k.startsWith("_") ? v : walk(v, path ? `${path}.${k}` : k);
+      for (const [k, v] of Object.entries(node)) {
+        // Preservar el bloque de naming intacto: aliases y nombres canónicos
+        // se gestionan aparte y NO deben sufrir sustitución de aliases.
+        if (k === "client_naming_check") {
+          out[k] = v;
+          continue;
+        }
+        out[k] = k.startsWith("_") ? v : walk(v, path ? `${path}.${k}` : k);
+      }
       return out;
     }
     return node;
@@ -1023,6 +1089,23 @@ function applyEditorialPolish(briefing: any, changes: NormalizationChange[]) {
 
   if (briefing.business_extraction_v2) {
     briefing.business_extraction_v2 = walk(briefing.business_extraction_v2, "business_extraction_v2");
+  }
+
+  // Forzar client_company_name = projectName si quedó como alias.
+  const cnc = briefing?.business_extraction_v2?.client_naming_check;
+  if (cnc && projectName && typeof cnc.client_company_name === "string") {
+    const cc = cnc.client_company_name.trim();
+    if (cc && cc !== projectName && looksLikeAliasOf(cc, projectName)) {
+      const prev = cnc.client_company_name;
+      cnc.client_company_name = projectName;
+      changes.push({
+        type: "editorial_polish",
+        field: "client_naming_check.client_company_name",
+        before: prev,
+        after: projectName,
+        reason: `client_company_name ("${prev}") era alias de projectName ("${projectName}"); unificado.`,
+      });
+    }
   }
 
   // Inyectar alerta señal 71 si detectamos el patrón.
@@ -1549,8 +1632,15 @@ export async function normalizeBrief(
   // 3d. Last-resort word-level swap for residual English bridge tokens.
   applyResidualWordSwap(briefing, changes);
 
-  // 3e. Editorial polish — Gobernanza, traducciones residuales y alerta señal 71.
-  applyEditorialPolish(briefing, changes);
+  // 3e. Editorial polish — Gobernanza, traducciones residuales, alerta señal 71,
+  // sustitución de aliases del proyecto y typos.
+  {
+    const detectedAliases = briefing?.business_extraction_v2?.client_naming_check?.detected_aliases;
+    applyEditorialPolish(briefing, changes, {
+      projectName: ctx.projectName,
+      aliases: Array.isArray(detectedAliases) ? detectedAliases : [],
+    });
+  }
 
   // 4. Semantic dedup (uses canonical override from ctx if provided)
   applySemanticDedup(briefing, changes, ctx);

@@ -135,6 +135,36 @@ const ProjectWizardEdit = () => {
   const step4Data = steps.find(s => s.stepNumber === 4);
   const progress = ((currentStep - 1) / TOTAL_STEPS) * 100;
 
+  // Extraer prdText y architecture_manifest del Paso 3 una sola vez (compartido por
+  // Propuesta cliente → Expert Forge y por el visor de manifest en Avanzado / Interno).
+  const { prdFullText, manifestData, prdApproved } = (() => {
+    const step3 = step3Data;
+    const step3Out = step3?.outputData as any;
+    let fullText = "";
+    let manifest: Record<string, unknown> | null = null;
+    if (step3Out) {
+      if (typeof step3Out === "string") {
+        try {
+          const parsed = JSON.parse(step3Out);
+          fullText = parsed.document || parsed.content || parsed.text || step3Out;
+          if (parsed.architecture_manifest) manifest = parsed.architecture_manifest;
+        } catch {
+          fullText = step3Out;
+        }
+      } else if (typeof step3Out === "object") {
+        fullText = step3Out.document || step3Out.content || step3Out.text || "";
+        if (typeof fullText === "object") fullText = JSON.stringify(fullText);
+        if (!fullText || fullText.length < 100) fullText = JSON.stringify(step3Out);
+        if (step3Out.architecture_manifest) manifest = step3Out.architecture_manifest as Record<string, unknown>;
+      }
+    }
+    return {
+      prdFullText: fullText,
+      manifestData: manifest,
+      prdApproved: step3?.status === "approved",
+    };
+  })();
+
   return (
     <main className="p-4 lg:p-6 space-y-5">
       <Breadcrumbs />

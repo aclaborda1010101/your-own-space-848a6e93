@@ -735,6 +735,72 @@ function mergeHints(c: any, hints: VerdictHint[]): {
     }
   }
 
+  // Decision 4 — Valorador de activos / BrainsRE MUST be MVP with conditions.
+  // Identified by name/family because component_id varies. Valuation is part of
+  // the first prioritization system; should not be deferred to F2.
+  const isValuationComp = (sc: ScopeComponent): boolean => {
+    const name = sc.name.toLowerCase();
+    const fam = String(sc.family ?? "").toLowerCase();
+    return (
+      fam === "asset_valuation" ||
+      fam === "valuation_engine" ||
+      name.includes("valorador") ||
+      name.includes("valoración") ||
+      name.includes("valoracion") ||
+      name.includes("brainsre") ||
+      name.includes("brains real")
+    );
+  };
+  for (const phase of ["roadmap_f3", "fast_follow_f2"] as ScopeBucket[]) {
+    const idx = buckets[phase].findIndex(isValuationComp);
+    if (idx !== -1) {
+      const moved = buckets[phase].splice(idx, 1)[0];
+      moved.bucket = "mvp";
+      if (moved.status === "deferred" || moved.status === "rejected" || moved.status === "approved_for_scope") {
+        moved.status = "approved_with_conditions";
+      }
+      const hasDataReadiness = moved.blockers.some((b) => b.type === "data_readiness");
+      if (!hasDataReadiness) {
+        moved.blockers.push({
+          type: "data_readiness",
+          blocks_production: true,
+          blocks_design: false,
+          blocks_internal_testing: true,
+          required_artifacts: ["source_api_validation", "valuation_dataset_baseline", "abstention_rules"],
+          reason: "El valorador requiere validación de la fuente/API BrainsRE y reglas de abstención antes de producción.",
+        });
+      }
+      buckets.mvp.push(moved);
+      decisionLog.push({
+        source: "human_decision",
+        decision_id: "valuation_force_mvp_v1",
+        applied_to: moved.source_ref,
+        action: `moved_from_${phase}_to_mvp`,
+        reason: "El valorador de activos es parte del primer sistema de priorización; entra en MVP con condiciones.",
+      });
+    }
+  }
+
+  // Decision 5 — Normalize COMP-A01 display name to reflect that it covers
+  // both call transcripts AND knowledge/documentation/criteria (no duplicate RAG).
+  for (const phase of ["data_foundation", "mvp", "fast_follow_f2", "roadmap_f3"] as ScopeBucket[]) {
+    const c = buckets[phase].find((sc) => sc.source_ref === "COMP-A01");
+    if (c) {
+      const target = "RAG de conocimiento y conversaciones AFFLUX";
+      if (c.name !== target) {
+        const previous = c.name;
+        c.name = target;
+        decisionLog.push({
+          source: "human_decision",
+          decision_id: "a01_rename_knowledge_rag_v1",
+          applied_to: c.source_ref,
+          action: "renamed_display_name",
+          reason: `Renombrado de "${previous}" a "${target}" para reflejar que cubre conversaciones, llamadas, conocimiento, documentación y criterio comercial sin duplicar componente.`,
+        });
+      }
+    }
+  }
+
   // ── 4. Compute aggregated blocker lists ──────────────────────────────────
   const allConsumed = [
     ...buckets.data_foundation,

@@ -17,13 +17,27 @@ interface Props {
   currentPhase: ChainedPhase;
   error?: string;
   prdSubProgress?: PrdSubProgress | null;
+  /**
+   * Sub-step actual del pipeline v2 (25=registry, 26=gap, 27=feasibility,
+   * 28=scope, 29=prd). Cuando se pasa, se renderizan las 5 fases v2 reales
+   * en lugar de las 4 fases legacy.
+   */
+  pipelineV2SubStep?: { stepNumber: number; label: string } | null;
 }
 
-const PHASES = [
+const PHASES_LEGACY = [
   { key: "alcance" as const, label: "Generando Documento de Alcance" },
   { key: "auditoria" as const, label: "Ejecutando Auditoría IA" },
   { key: "patrones" as const, label: "Detectando Patrones de Alto Valor" },
   { key: "prd" as const, label: "Generando PRD Técnico" },
+];
+
+const PHASES_V2 = [
+  { stepNumber: 25, label: "Construir registro de componentes" },
+  { stepNumber: 26, label: "Auditoría de gaps" },
+  { stepNumber: 27, label: "Auditoría de viabilidad" },
+  { stepNumber: 28, label: "Arquitectura de alcance (Step 28)" },
+  { stepNumber: 29, label: "PRD técnico (Step 29)" },
 ];
 
 const phaseOrder: Record<string, number> = { idle: -1, alcance: 0, auditoria: 1, patrones: 2, prd: 3, done: 4, error: -1 };

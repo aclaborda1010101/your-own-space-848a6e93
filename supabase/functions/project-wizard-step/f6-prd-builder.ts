@@ -94,6 +94,7 @@ export interface TechnicalPrdV1 {
   schema_version: "1.0.0";
   project_name: string;
   client_name: string;
+  decision_maker_name?: string;
   generated_at: string;
   source_step: { step_number: 28; version: number; row_id: string };
   executive_summary: {
@@ -233,6 +234,7 @@ export interface F6Input {
   source_step: { step_number: 28; version: number; row_id: string };
   projectName: string;
   clientName: string;
+  decisionMakerName?: string;
 }
 
 export function buildTechnicalPrd(input: F6Input): F6Output {
@@ -264,6 +266,7 @@ export function buildTechnicalPrd(input: F6Input): F6Output {
     schema_version: "1.0.0",
     project_name: input.projectName,
     client_name: input.clientName,
+    decision_maker_name: input.decisionMakerName,
     generated_at: new Date().toISOString(),
     source_step: input.source_step,
     executive_summary: {
@@ -336,12 +339,31 @@ export function buildTechnicalPrd(input: F6Input): F6Output {
 // Markdown renderer (for PDF export downstream)
 // ───────────────────────────────────────────────────────────────────────────────
 
+function humanizeWeeksWindow(raw: string): string {
+  const s = String(raw ?? "").toLowerCase().trim();
+  if (!s) return "el periodo de captura";
+  const map: Record<string, string> = {
+    weeks_1_to_2: "las semanas 1 y 2",
+    weeks_1_2: "las semanas 1 y 2",
+    weeks_1_to_3: "las semanas 1, 2 y 3",
+    weeks_2_to_4: "las semanas 2 a 4",
+  };
+  if (map[s]) return map[s];
+  // Generic fallback: weeks_X_to_Y → "las semanas X a Y"
+  const m = s.match(/^weeks?_(\d+)(?:_to)?_(\d+)$/);
+  if (m) return `las semanas ${m[1]} a ${m[2]}`;
+  return raw;
+}
+
 export function renderPrdMarkdown(prd: TechnicalPrdV1): string {
   const lines: string[] = [];
   lines.push(`# PRD Técnico de Construcción — ${prd.project_name}`);
   lines.push("");
   lines.push(`> **Cliente / empresa:** ${prd.client_name}`);
-  lines.push(`> **Producto:** ${prd.project_name}`);
+  if (prd.decision_maker_name) {
+    lines.push(`> **Decisor:** ${prd.decision_maker_name}`);
+  }
+  lines.push(`> **Proyecto / Producto:** ${prd.project_name}`);
   lines.push(`> **Fuente de alcance:** \`scope_architecture_v1\` (Step ${prd.source_step.step_number} v${prd.source_step.version}, row \`${prd.source_step.row_id}\`)`);
   lines.push(`> **Generado:** ${prd.generated_at} · **Pipeline:** v2 determinista (sin LLM)`);
   lines.push("");
@@ -448,7 +470,7 @@ export function renderPrdMarkdown(prd: TechnicalPrdV1): string {
   lines.push("## Soul capture plan");
   lines.push("");
   if (prd.soul_capture_plan.required) {
-    lines.push(`- Sesiones: ${prd.soul_capture_plan.sessions} × ${prd.soul_capture_plan.session_duration_min} min (${prd.soul_capture_plan.weeks_window})`);
+    lines.push(`- Sesiones: ${prd.soul_capture_plan.sessions} × ${prd.soul_capture_plan.session_duration_min} min durante ${humanizeWeeksWindow(prd.soul_capture_plan.weeks_window)}`);
     lines.push(`- Hard dependencies: ${prd.soul_capture_plan.hard_dependencies.join(", ") || "—"}`);
     lines.push(`- Async dependencies: ${prd.soul_capture_plan.async_dependencies.join(", ") || "—"}`);
     lines.push(`- Deliverables:`);

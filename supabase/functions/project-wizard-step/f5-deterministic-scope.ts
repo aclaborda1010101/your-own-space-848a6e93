@@ -202,21 +202,40 @@ interface VerdictHint {
   required_actions?: string[];
 }
 
+/**
+ * Normalise a free-text phase to one of: "MVP", "F2", "F3", or "" (unknown).
+ *
+ * Critical: registry components carry `phase: "F3_registry_builder"` which is
+ * the *pipeline* step name, NOT a delivery phase. Accept only delivery phase
+ * tokens (MVP / FAST_FOLLOW / ROADMAP / F1 / F2 / F3 with delivery context).
+ */
+function normalizeDeliveryPhase(raw: string): "MVP" | "F2" | "F3" | "" {
+  const s = String(raw ?? "").toUpperCase().trim();
+  if (!s) return "";
+  // Reject pipeline step names (registry/audit/feasibility builders).
+  if (/REGISTRY_BUILDER|AUDIT|FEASIBILITY|EXTRACTION|ARCHITECT/.test(s)) return "";
+  if (/MVP|F1\b|FOUNDATION/.test(s)) return "MVP";
+  if (/FAST.?FOLLOW|F2\b/.test(s)) return "F2";
+  if (/ROADMAP|F3\b/.test(s)) return "F3";
+  return "";
+}
+
 function bucketFromVerdict(c: any, hint: VerdictHint | undefined): ScopeBucket {
-  const phase = String(hint?.recommended_delivery_phase ?? c?.suggested_delivery_phase ?? c?.phase ?? "")
-    .toUpperCase();
+  const phase = normalizeDeliveryPhase(
+    hint?.recommended_delivery_phase ?? c?.suggested_delivery_phase ?? c?.phase ?? "",
+  );
   const v = hint?.verdict;
 
   if (v === "reject") return "rejected_out_of_scope";
   if (v === "defer") {
-    if (phase.includes("F3") || phase.includes("ROADMAP")) return "roadmap_f3";
+    if (phase === "F3") return "roadmap_f3";
     return "fast_follow_f2";
   }
   if (v === "requires_poc") return "fast_follow_f2";
   // keep / simplify / requires_data_readiness / requires_compliance_review → MVP by default,
   // unless component is explicitly tagged as F2/F3 by F3 builder.
-  if (phase.includes("F3")) return "roadmap_f3";
-  if (phase.includes("F2") && v !== "requires_data_readiness" && v !== "requires_compliance_review") {
+  if (phase === "F3") return "roadmap_f3";
+  if (phase === "F2" && v !== "requires_data_readiness" && v !== "requires_compliance_review") {
     return "fast_follow_f2";
   }
   return "mvp";
@@ -353,19 +372,85 @@ export function runDeterministicPreWarm(
     : [];
   const gaps: any[] = Array.isArray(gapAudit?.gaps) ? gapAudit.gaps : [];
 
-  const reviewByCompId = new Map<string, VerdictHint>();
-  for (const r of reviews) {
-    if (r?.component_id) {
-      reviewByCompId.set(String(r.component_id), {
-        verdict: r.feasibility_verdict,
-        recommended_status: r.recommended_status,
-        recommended_priority: r.recommended_priority,
-        recommended_delivery_phase: r.recommended_delivery_phase,
-        reason: r.reason,
-        required_actions: Array.isArray(r.required_actions) ? r.required_actions : [],
-      });
-    }
+// A component may receive MULTIPLE reviews (e.g. one deterministic DPIA review +
+// one LLM verdict). We MUST merge them so the deterministic compliance signal is
+// not lost when the LLM also weighs in.
+const reviewsByCompId = new Map<string, VerdictHint[]>();
+for (const r of reviews) {
+  if (!r?.component_id) continue;
+  const id = String(r.component_id);
+  const hint: VerdictHint = {
+    verdict: r.feasibility_verdict,
+    recommended_status: r.recommended_status,
+    recommended_priority: r.recommended_priority,
+    recommended_delivery_phase: r.recommended_delivery_phase,
+    reason: r.reason,
+    required_actions: Array.isArray(r.required_actions) ? r.required_actions : [],
+  };
+  const list = reviewsByCompId.get(id) ?? [];
+  list.push(hint);
+  reviewsByCompId.set(id, list);
+}
+
+// Bucket precedence when multiple verdicts disagree (highest precedence wins,
+// EXCEPT compliance, which only attaches a blocker and never demotes the bucket).
+const BUCKET_RANK: Record<ScopeBucket, number> = {
+  rejected_out_of_scope: 5,
+  roadmap_f3: 4,
+  fast_follow_f2: 3,
+  data_foundation: 2,
+  mvp: 1,
+};
+function pickWorstBucket(a: ScopeBucket, b: ScopeBucket): ScopeBucket {
+  return BUCKET_RANK[a] >= BUCKET_RANK[b] ? a : b;
+}
+
+function mergeHints(c: any, hints: VerdictHint[]): {
+  primaryHint: VerdictHint | undefined;
+  bucket: ScopeBucket;
+  blockers: ScopeBlocker[];
+  status: ScopeStatus;
+  required_actions: string[];
+} {
+  if (hints.length === 0) {
+    const bucket = bucketFromVerdict(c, undefined);
+    const { blockers, status } = blockersFromVerdictAndComponent(c, undefined);
+    return { primaryHint: undefined, bucket, blockers, status, required_actions: [] };
   }
+  // Compliance-aware merge: compliance attaches blocker, others drive bucket.
+  let bucket: ScopeBucket | null = null;
+  let status: ScopeStatus = "approved_for_scope";
+  const blockerKeys = new Set<string>();
+  const blockers: ScopeBlocker[] = [];
+  const actions = new Set<string>();
+  let primary: VerdictHint | undefined;
+  // Order: process non-compliance first (drives bucket), then compliance.
+  const nonCompliance = hints.filter((h) => h.verdict !== "requires_compliance_review");
+  const complianceOnly = hints.filter((h) => h.verdict === "requires_compliance_review");
+  for (const h of [...nonCompliance, ...complianceOnly]) {
+    const b = bucketFromVerdict(c, h);
+    bucket = bucket === null ? b : pickWorstBucket(bucket, b);
+    const { blockers: bl, status: st } = blockersFromVerdictAndComponent(c, h);
+    for (const blk of bl) {
+      const key = `${blk.type}:${blk.reason.slice(0, 40)}`;
+      if (!blockerKeys.has(key)) { blockerKeys.add(key); blockers.push(blk); }
+    }
+    if (st === "rejected") status = "rejected";
+    else if (st === "deferred" && status !== "rejected") status = "deferred";
+    else if (st === "approved_with_conditions" && status === "approved_for_scope") {
+      status = "approved_with_conditions";
+    }
+    for (const a of h.required_actions ?? []) actions.add(a);
+    if (!primary || h.verdict !== "requires_compliance_review") primary = h;
+  }
+  return {
+    primaryHint: primary,
+    bucket: bucket ?? "mvp",
+    blockers,
+    status,
+    required_actions: Array.from(actions),
+  };
+}
 
   const decisionLog: ScopeDecisionLogEntry[] = [];
   const buckets: Record<ScopeBucket, ScopeComponent[]> = {
@@ -386,9 +471,12 @@ export function runDeterministicPreWarm(
     if (!compId) continue;
     consumedIds.add(compId);
 
-    const hint = reviewByCompId.get(compId);
-    let bucket = bucketFromVerdict(c, hint);
-    let { blockers, status } = blockersFromVerdictAndComponent(c, hint);
+    const hints = reviewsByCompId.get(compId) ?? [];
+    const merged = mergeHints(c, hints);
+    let bucket = merged.bucket;
+    let { blockers, status } = { blockers: merged.blockers, status: merged.status };
+    const requiredActionsBase = merged.required_actions;
+    const hint = merged.primaryHint;
     const soulDep = resolveSoulDependency(c);
 
     // ── Decision 2 — Benatar forced to F2 ──────────────────────────────────
@@ -444,14 +532,15 @@ export function runDeterministicPreWarm(
       });
     }
 
-    // F4b verdict trace
-    if (hint?.verdict) {
+    // F4b verdict trace (logs each verdict applied to this component).
+    for (const h of hints) {
+      if (!h.verdict) continue;
       decisionLog.push({
         source: "f4b_verdict",
-        decision_id: `f4b_${hint.verdict}`,
+        decision_id: `f4b_${h.verdict}`,
         applied_to: compId,
         action: `assigned_to_${bucket}`,
-        reason: hint.reason ?? "F4b verdict applied.",
+        reason: h.reason ?? "F4b verdict applied.",
       });
     }
 
@@ -467,7 +556,7 @@ export function runDeterministicPreWarm(
       business_job: c?.business_job,
       priority: hint?.recommended_priority ?? c?.priority,
       blockers,
-      required_actions: Array.isArray(hint?.required_actions) ? hint!.required_actions! : [],
+      required_actions: requiredActionsBase,
       soul_dependency: soulDep,
       compliance_flags: Array.isArray(c?.compliance_flags) ? c.compliance_flags : undefined,
     };
@@ -589,9 +678,39 @@ export function runDeterministicPreWarm(
     }
   }
 
-  // Decision 2 v2 — COMP-C03 (Matching activo-inversor) MUST have data_readiness blocker.
+  // Decision 2 v2 — Matching activo-inversor MUST be MVP and have a data_readiness blocker.
+  // Identified by name/family because component_id varies per project (was COMP-C03 in
+  // the canonical demo, COMP-C02 in AFFLUX).
+  const isMatchingComp = (sc: ScopeComponent): boolean => {
+    const name = sc.name.toLowerCase();
+    const fam = String(sc.family ?? "").toLowerCase();
+    return (
+      fam === "matching_engine" ||
+      fam === "asset_investor_matching" ||
+      (name.includes("matching") && (name.includes("activo") || name.includes("inversor") || name.includes("comprador")))
+    );
+  };
+  // First, ensure matching lands in MVP (not roadmap/fast-follow).
+  for (const phase of ["roadmap_f3", "fast_follow_f2"] as ScopeBucket[]) {
+    const idx = buckets[phase].findIndex(isMatchingComp);
+    if (idx !== -1) {
+      const moved = buckets[phase].splice(idx, 1)[0];
+      moved.bucket = "mvp";
+      if (moved.status === "rejected") moved.status = "deferred";
+      buckets.mvp.push(moved);
+      decisionLog.push({
+        source: "human_decision",
+        decision_id: "matching_force_mvp_v2",
+        applied_to: moved.source_ref,
+        action: `moved_from_${phase}_to_mvp`,
+        reason:
+          "Matching activo-inversor entra en MVP con dataset readiness blocker; no se relega a fases posteriores.",
+      });
+    }
+  }
+  // Then, attach data_readiness blocker wherever matching is.
   for (const phase of ["mvp", "fast_follow_f2", "data_foundation"] as ScopeBucket[]) {
-    const c = buckets[phase].find((c) => c.source_ref === "COMP-C03");
+    const c = buckets[phase].find(isMatchingComp);
     if (c) {
       const hasDataReadiness = c.blockers.some((b) => b.type === "data_readiness");
       if (!hasDataReadiness) {
@@ -607,8 +726,8 @@ export function runDeterministicPreWarm(
         if (c.status === "approved_for_scope") c.status = "approved_with_conditions";
         decisionLog.push({
           source: "human_decision",
-          decision_id: "c03_data_readiness_required_v2",
-          applied_to: "COMP-C03",
+          decision_id: "matching_data_readiness_required_v2",
+          applied_to: c.source_ref,
           action: "added_data_readiness_blocker",
           reason: "Matching no puede recomendar sin dataset histórico mínimo.",
         });
@@ -653,19 +772,29 @@ export function runDeterministicPreWarm(
     ],
   };
 
+  const matchingPredicate = (c: ScopeComponent): boolean => {
+    const name = c.name.toLowerCase();
+    const fam = String(c.family ?? "").toLowerCase();
+    return (
+      fam === "matching_engine" ||
+      fam === "asset_investor_matching" ||
+      (name.includes("matching") && (name.includes("activo") || name.includes("inversor") || name.includes("comprador")))
+    );
+  };
+
   const data_readiness_blockers: DatasetReadinessBlockerEntry[] = allConsumed.flatMap((c) =>
     c.blockers
       .filter((b) => b.type === "data_readiness")
       .map((b) => {
-        const isC03 = c.source_ref === "COMP-C03";
+        const isMatching = matchingPredicate(c);
         return {
           scope_id: c.scope_id,
           component_id: c.source_ref,
           component_name: c.name,
-          dataset_required: isC03 ? C03_DATASET.dataset_required : "Pendiente de auditoría de dataset.",
+          dataset_required: isMatching ? C03_DATASET.dataset_required : "Pendiente de auditoría de dataset.",
           current_readiness_pct: 0,
           min_readiness_for_mvp: 50,
-          unblocking_actions: isC03
+          unblocking_actions: isMatching
             ? C03_DATASET.unblocking_actions
             : ["Realizar auditoría de dataset", "Reportar calidad y volumen", "Definir baseline de volumen mínimo"],
           reason: b.reason,
@@ -676,7 +805,7 @@ export function runDeterministicPreWarm(
   const human_decisions_applied = [
     {
       decision_id: "soul_capture_plan_v1",
-      label: "Plan de captura del Soul (4 sesiones x 45min, semanas 1-2)",
+      label: "Plan de captura del Soul (4 sesiones x 45min, semanas 1 y 2)",
       applied_to: allConsumed
         .filter((c) => c.soul_dependency === "hard" || c.soul_dependency === "async")
         .map((c) => c.source_ref),
@@ -701,9 +830,9 @@ export function runDeterministicPreWarm(
       applied_to: allConsumed.filter((c) => c.source_ref === "COMP-C01").map((c) => c.source_ref),
     },
     {
-      decision_id: "c03_data_readiness_required_v2",
-      label: "COMP-C03 (matching activo-inversor) requiere dataset_readiness blocker",
-      applied_to: allConsumed.filter((c) => c.source_ref === "COMP-C03").map((c) => c.source_ref),
+      decision_id: "matching_data_readiness_required_v2",
+      label: "Matching activo-inversor en MVP con dataset_readiness blocker",
+      applied_to: allConsumed.filter(matchingPredicate).map((c) => c.source_ref),
     },
   ];
 

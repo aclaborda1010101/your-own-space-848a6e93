@@ -22,6 +22,12 @@ interface ProjectProposalExportProps {
   proposalData: ProposalData | null;
   proposalGenerating: boolean;
   onGenerate: () => Promise<any>;
+  /** PRD text (markdown) used by Expert Forge publish */
+  prdText?: string;
+  /** Architecture manifest used by Expert Forge publish */
+  architectureManifest?: Record<string, unknown> | null;
+  /** Whether the PRD step is approved (gate for Expert Forge button) */
+  prdApproved?: boolean;
 }
 
 /**

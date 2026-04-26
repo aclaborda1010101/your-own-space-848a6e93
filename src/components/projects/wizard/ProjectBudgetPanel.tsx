@@ -218,67 +218,7 @@ export const ProjectBudgetPanel = ({
     setEditing(false);
   };
 
-  const toggleExportModel = (idx: number) => {
-    setSelectedExportModels(prev =>
-      prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
-    );
-  };
-
-  const handleExportPdf = async () => {
-    if (!displayData || selectedExportModels.length === 0) return;
-    setExportingPdf(true);
-    try {
-      const selectedModelsData = displayData.monetization_models.filter((_, i) => selectedExportModels.includes(i));
-
-      // In client mode, strip sensitive internal data
-      const isClient = budgetExportMode === 'client';
-      const filteredData: any = {
-        ...displayData,
-        monetization_models: selectedModelsData.map(m => {
-          if (!isClient) return m;
-          const { your_margin_pct, ...rest } = m;
-          return rest;
-        }),
-      };
-      if (isClient && filteredData.development) {
-        const { your_cost_eur, margin_pct, ...devRest } = filteredData.development;
-        filteredData.development = devRest;
-      }
-
-      const { data, error } = await supabase.functions.invoke("generate-document", {
-        body: {
-          projectId,
-          stepNumber: 6,
-          content: filteredData,
-          contentType: "json",
-          projectName: projectName || "Proyecto",
-          company,
-          date: new Date().toISOString().split("T")[0],
-          version: "v1",
-          exportMode: budgetExportMode,
-        },
-      });
-      if (error) throw error;
-      if (!data?.url) throw new Error("No download URL returned");
-
-      const response = await fetch(data.url);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = data.fileName || `presupuesto-${projectName || "proyecto"}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-      toast.success("Presupuesto PDF descargado");
-    } catch (err: any) {
-      console.error("Budget PDF export error:", err);
-      toast.error("Error al generar PDF: " + (err.message || "Error desconocido"));
-    } finally {
-      setExportingPdf(false);
-    }
-  };
+  // Handlers de export PDF eliminados: la propuesta cliente vive en el Paso 5.
 
   const displayData = editing ? editData : budgetData;
 

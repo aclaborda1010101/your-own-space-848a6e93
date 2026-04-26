@@ -949,14 +949,14 @@ function applyResidualWordSwap(briefing: any, changes: NormalizationChange[]) {
  * Apply deterministic + residual cleanup directly on a clean-brief markdown
  * string. Used as a final safety net on the pre-rendered _clean_brief_md.
  */
-export function cleanupSpanishMarkdown(md: string): string {
+export function cleanupSpanishMarkdown(md: string, ctx?: { projectName?: string; aliases?: string[] }): string {
   if (!md || typeof md !== "string") return md;
   // Reuse the same phrase map by walking a fake briefing payload.
   const fake = { business_extraction_v2: { __md: md } };
   const dummyChanges: NormalizationChange[] = [];
   applyDeterministicSpanishCleanup(fake, dummyChanges);
   applyResidualWordSwap(fake, dummyChanges);
-  applyEditorialPolish(fake, dummyChanges);
+  applyEditorialPolish(fake, dummyChanges, ctx);
   return fake.business_extraction_v2.__md;
 }
 

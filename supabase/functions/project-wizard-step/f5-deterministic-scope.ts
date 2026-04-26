@@ -772,19 +772,29 @@ function mergeHints(c: any, hints: VerdictHint[]): {
     ],
   };
 
+  const matchingPredicate = (c: ScopeComponent): boolean => {
+    const name = c.name.toLowerCase();
+    const fam = String(c.family ?? "").toLowerCase();
+    return (
+      fam === "matching_engine" ||
+      fam === "asset_investor_matching" ||
+      (name.includes("matching") && (name.includes("activo") || name.includes("inversor") || name.includes("comprador")))
+    );
+  };
+
   const data_readiness_blockers: DatasetReadinessBlockerEntry[] = allConsumed.flatMap((c) =>
     c.blockers
       .filter((b) => b.type === "data_readiness")
       .map((b) => {
-        const isC03 = c.source_ref === "COMP-C03";
+        const isMatching = matchingPredicate(c);
         return {
           scope_id: c.scope_id,
           component_id: c.source_ref,
           component_name: c.name,
-          dataset_required: isC03 ? C03_DATASET.dataset_required : "Pendiente de auditoría de dataset.",
+          dataset_required: isMatching ? C03_DATASET.dataset_required : "Pendiente de auditoría de dataset.",
           current_readiness_pct: 0,
           min_readiness_for_mvp: 50,
-          unblocking_actions: isC03
+          unblocking_actions: isMatching
             ? C03_DATASET.unblocking_actions
             : ["Realizar auditoría de dataset", "Reportar calidad y volumen", "Definir baseline de volumen mínimo"],
           reason: b.reason,
@@ -795,7 +805,7 @@ function mergeHints(c: any, hints: VerdictHint[]): {
   const human_decisions_applied = [
     {
       decision_id: "soul_capture_plan_v1",
-      label: "Plan de captura del Soul (4 sesiones x 45min, semanas 1-2)",
+      label: "Plan de captura del Soul (4 sesiones x 45min, semanas 1 y 2)",
       applied_to: allConsumed
         .filter((c) => c.soul_dependency === "hard" || c.soul_dependency === "async")
         .map((c) => c.source_ref),
@@ -820,9 +830,9 @@ function mergeHints(c: any, hints: VerdictHint[]): {
       applied_to: allConsumed.filter((c) => c.source_ref === "COMP-C01").map((c) => c.source_ref),
     },
     {
-      decision_id: "c03_data_readiness_required_v2",
-      label: "COMP-C03 (matching activo-inversor) requiere dataset_readiness blocker",
-      applied_to: allConsumed.filter((c) => c.source_ref === "COMP-C03").map((c) => c.source_ref),
+      decision_id: "matching_data_readiness_required_v2",
+      label: "Matching activo-inversor en MVP con dataset_readiness blocker",
+      applied_to: allConsumed.filter(matchingPredicate).map((c) => c.source_ref),
     },
   ];
 

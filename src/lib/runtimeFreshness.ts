@@ -10,6 +10,7 @@ declare const __APP_BUILD_ID__: string;
 const BUILD_KEY = "__jarvis_build_id";
 const RELOAD_DONE = "__jarvis_reloaded";
 const PREVIEW_RESET_ATTEMPTS_KEY = "__jarvis_preview_sw_reset_attempts";
+const PREVIEW_HTML_MISMATCH_KEY = "__jarvis_preview_html_mismatch_attempts";
 const PREVIEW_RESET_MAX_ATTEMPTS = 2;
 let sleepDetectorInstalled = false;
 
@@ -136,6 +137,28 @@ function installSleepDetector(): void {
   sleepDetectorInstalled = true;
 }
 
+// ── HTML-vs-bundle mismatch (preview only) ──────────────────────
+// Lovable's preview iframe sometimes serves a fresh `index.html` (with the
+// latest build timestamp in `<meta name="x-build-ts">` or in the inline
+// `__APP_BUILD_TS__` global) while the JS bundle is still the old cached chunk.
+// Detect that mismatch so we can force exactly one reload to pick up the new
+// bundle, instead of waiting for the user to interact.
+function htmlBuildMismatchesBundle(): boolean {
+  try {
+    const meta = document.querySelector('meta[name="x-build-ts"]')?.getAttribute("content");
+    const htmlBuild =
+      (typeof meta === "string" && meta.trim()) ||
+      (typeof (window as any).__APP_BUILD_TS__ === "string" && (window as any).__APP_BUILD_TS__) ||
+      "";
+    if (!htmlBuild) return false;
+    const bundleBuild = getCurrentBuild();
+    if (!bundleBuild) return false;
+    return htmlBuild !== bundleBuild;
+  } catch {
+    return false;
+  }
+}
+
 // ── Main entry ──────────────────────────────────────────────────
 
 export function ensureRuntimeFreshness(): boolean {
@@ -166,6 +189,22 @@ export function ensureRuntimeFreshness(): boolean {
         }
       } else {
         sessionStorage.removeItem(PREVIEW_RESET_ATTEMPTS_KEY);
+      }
+
+      // Detect HTML-vs-bundle mismatch: if Lovable served a fresh index.html
+      // (with a new build timestamp meta) but the iframe is running an older
+      // JS bundle from cache, force one reload so the user sees today's UI
+      // without having to interact first.
+      if (htmlBuildMismatchesBundle()) {
+        const attempts = Number(sessionStorage.getItem(PREVIEW_HTML_MISMATCH_KEY) || "0");
+        if (attempts < PREVIEW_RESET_MAX_ATTEMPTS) {
+          sessionStorage.setItem(PREVIEW_HTML_MISMATCH_KEY, String(attempts + 1));
+          nukeSwAndCaches();
+          setTimeout(navigateToFreshUrl, 200);
+          return true;
+        }
+      } else {
+        sessionStorage.removeItem(PREVIEW_HTML_MISMATCH_KEY);
       }
 
       return handleBuildChange();

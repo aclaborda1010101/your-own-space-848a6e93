@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -54,12 +54,13 @@ import { useNavigate } from "react-router-dom";
 const Dashboard = () => {
   const navigate = useNavigate();
   const { settings: userSettings } = useUserSettings();
-  const { checkIn, setCheckIn, registerCheckIn, loading: checkInLoading, saving, isRegistered, prefilledFromWhoop } = useCheckIn();
+  const { checkIn, setCheckIn, registerCheckIn, loading: checkInLoading, saving, isRegistered, prefilledFromWhoop, refetch: refetchCheckIn } = useCheckIn();
 
   const { 
     tasks, 
     loading: tasksLoading, 
     toggleComplete, 
+    refetch: refetchTasks,
   } = useTasks();
   const { events, loading: calendarLoading, connected: calendarConnected, fetchEvents } = useCalendar();
   const { plan, loading: planLoading, generatePlan } = useJarvisCore();
@@ -68,6 +69,21 @@ const Dashboard = () => {
   const { profile } = useUserProfile();
   const { data: whoopData, isLoading: whoopLoading } = useJarvisWhoopData();
   const { history: whoopHistory } = useWhoopHistory(7);
+
+  // Revalidate dashboard data when the tab becomes visible again. Lovable's
+  // preview iframe can keep an old bundle in memory while the user is on
+  // another tab; this ensures the visible cards refresh on first focus
+  // instead of showing stale data until the user interacts.
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      try { refetchCheckIn?.(); } catch {}
+      try { refetchTasks?.(); } catch {}
+      try { fetchEvents?.(); } catch {}
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [refetchCheckIn, refetchTasks, fetchEvents]);
 
   const {
     layout, profiles, activeProfileId, isLoaded,

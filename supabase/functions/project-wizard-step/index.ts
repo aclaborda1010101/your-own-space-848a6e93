@@ -1831,7 +1831,7 @@ REGLAS PARA deep_patterns:
 
       const { data: projectRow } = await supabase
         .from("business_projects")
-        .select("name, company")
+        .select("name, company, client_company, decision_maker_name")
         .eq("id", projectId)
         .single();
 
@@ -1839,7 +1839,16 @@ REGLAS PARA deep_patterns:
         scope: step28Row.output_data.scope_architecture_v1,
         source_step: { step_number: 28, version: step28Row.version, row_id: step28Row.id },
         projectName: stepData?.projectName ?? projectRow?.name ?? "Proyecto",
-        clientName: stepData?.companyName ?? projectRow?.company ?? "Cliente",
+        clientName:
+          stepData?.clientCompany ??
+          (projectRow as any)?.client_company ??
+          projectRow?.name ??
+          "Cliente",
+        decisionMakerName:
+          stepData?.decisionMakerName ??
+          (projectRow as any)?.decision_maker_name ??
+          projectRow?.company ??
+          undefined,
       });
 
       const prdMarkdown = renderPrdMarkdown(f6.technical_prd_v1);

@@ -678,9 +678,39 @@ function mergeHints(c: any, hints: VerdictHint[]): {
     }
   }
 
-  // Decision 2 v2 — COMP-C03 (Matching activo-inversor) MUST have data_readiness blocker.
+  // Decision 2 v2 — Matching activo-inversor MUST be MVP and have a data_readiness blocker.
+  // Identified by name/family because component_id varies per project (was COMP-C03 in
+  // the canonical demo, COMP-C02 in AFFLUX).
+  const isMatchingComp = (sc: ScopeComponent): boolean => {
+    const name = sc.name.toLowerCase();
+    const fam = String(sc.family ?? "").toLowerCase();
+    return (
+      fam === "matching_engine" ||
+      fam === "asset_investor_matching" ||
+      (name.includes("matching") && (name.includes("activo") || name.includes("inversor") || name.includes("comprador")))
+    );
+  };
+  // First, ensure matching lands in MVP (not roadmap/fast-follow).
+  for (const phase of ["roadmap_f3", "fast_follow_f2"] as ScopeBucket[]) {
+    const idx = buckets[phase].findIndex(isMatchingComp);
+    if (idx !== -1) {
+      const moved = buckets[phase].splice(idx, 1)[0];
+      moved.bucket = "mvp";
+      if (moved.status === "rejected") moved.status = "deferred";
+      buckets.mvp.push(moved);
+      decisionLog.push({
+        source: "human_decision",
+        decision_id: "matching_force_mvp_v2",
+        applied_to: moved.source_ref,
+        action: `moved_from_${phase}_to_mvp`,
+        reason:
+          "Matching activo-inversor entra en MVP con dataset readiness blocker; no se relega a fases posteriores.",
+      });
+    }
+  }
+  // Then, attach data_readiness blocker wherever matching is.
   for (const phase of ["mvp", "fast_follow_f2", "data_foundation"] as ScopeBucket[]) {
-    const c = buckets[phase].find((c) => c.source_ref === "COMP-C03");
+    const c = buckets[phase].find(isMatchingComp);
     if (c) {
       const hasDataReadiness = c.blockers.some((b) => b.type === "data_readiness");
       if (!hasDataReadiness) {
@@ -696,8 +726,8 @@ function mergeHints(c: any, hints: VerdictHint[]): {
         if (c.status === "approved_for_scope") c.status = "approved_with_conditions";
         decisionLog.push({
           source: "human_decision",
-          decision_id: "c03_data_readiness_required_v2",
-          applied_to: "COMP-C03",
+          decision_id: "matching_data_readiness_required_v2",
+          applied_to: c.source_ref,
           action: "added_data_readiness_blocker",
           reason: "Matching no puede recomendar sin dataset histórico mínimo.",
         });

@@ -372,19 +372,85 @@ export function runDeterministicPreWarm(
     : [];
   const gaps: any[] = Array.isArray(gapAudit?.gaps) ? gapAudit.gaps : [];
 
-  const reviewByCompId = new Map<string, VerdictHint>();
-  for (const r of reviews) {
-    if (r?.component_id) {
-      reviewByCompId.set(String(r.component_id), {
-        verdict: r.feasibility_verdict,
-        recommended_status: r.recommended_status,
-        recommended_priority: r.recommended_priority,
-        recommended_delivery_phase: r.recommended_delivery_phase,
-        reason: r.reason,
-        required_actions: Array.isArray(r.required_actions) ? r.required_actions : [],
-      });
-    }
+// A component may receive MULTIPLE reviews (e.g. one deterministic DPIA review +
+// one LLM verdict). We MUST merge them so the deterministic compliance signal is
+// not lost when the LLM also weighs in.
+const reviewsByCompId = new Map<string, VerdictHint[]>();
+for (const r of reviews) {
+  if (!r?.component_id) continue;
+  const id = String(r.component_id);
+  const hint: VerdictHint = {
+    verdict: r.feasibility_verdict,
+    recommended_status: r.recommended_status,
+    recommended_priority: r.recommended_priority,
+    recommended_delivery_phase: r.recommended_delivery_phase,
+    reason: r.reason,
+    required_actions: Array.isArray(r.required_actions) ? r.required_actions : [],
+  };
+  const list = reviewsByCompId.get(id) ?? [];
+  list.push(hint);
+  reviewsByCompId.set(id, list);
+}
+
+// Bucket precedence when multiple verdicts disagree (highest precedence wins,
+// EXCEPT compliance, which only attaches a blocker and never demotes the bucket).
+const BUCKET_RANK: Record<ScopeBucket, number> = {
+  rejected_out_of_scope: 5,
+  roadmap_f3: 4,
+  fast_follow_f2: 3,
+  data_foundation: 2,
+  mvp: 1,
+};
+function pickWorstBucket(a: ScopeBucket, b: ScopeBucket): ScopeBucket {
+  return BUCKET_RANK[a] >= BUCKET_RANK[b] ? a : b;
+}
+
+function mergeHints(c: any, hints: VerdictHint[]): {
+  primaryHint: VerdictHint | undefined;
+  bucket: ScopeBucket;
+  blockers: ScopeBlocker[];
+  status: ScopeStatus;
+  required_actions: string[];
+} {
+  if (hints.length === 0) {
+    const bucket = bucketFromVerdict(c, undefined);
+    const { blockers, status } = blockersFromVerdictAndComponent(c, undefined);
+    return { primaryHint: undefined, bucket, blockers, status, required_actions: [] };
   }
+  // Compliance-aware merge: compliance attaches blocker, others drive bucket.
+  let bucket: ScopeBucket | null = null;
+  let status: ScopeStatus = "approved_for_scope";
+  const blockerKeys = new Set<string>();
+  const blockers: ScopeBlocker[] = [];
+  const actions = new Set<string>();
+  let primary: VerdictHint | undefined;
+  // Order: process non-compliance first (drives bucket), then compliance.
+  const nonCompliance = hints.filter((h) => h.verdict !== "requires_compliance_review");
+  const complianceOnly = hints.filter((h) => h.verdict === "requires_compliance_review");
+  for (const h of [...nonCompliance, ...complianceOnly]) {
+    const b = bucketFromVerdict(c, h);
+    bucket = bucket === null ? b : pickWorstBucket(bucket, b);
+    const { blockers: bl, status: st } = blockersFromVerdictAndComponent(c, h);
+    for (const blk of bl) {
+      const key = `${blk.type}:${blk.reason.slice(0, 40)}`;
+      if (!blockerKeys.has(key)) { blockerKeys.add(key); blockers.push(blk); }
+    }
+    if (st === "rejected") status = "rejected";
+    else if (st === "deferred" && status !== "rejected") status = "deferred";
+    else if (st === "approved_with_conditions" && status === "approved_for_scope") {
+      status = "approved_with_conditions";
+    }
+    for (const a of h.required_actions ?? []) actions.add(a);
+    if (!primary || h.verdict !== "requires_compliance_review") primary = h;
+  }
+  return {
+    primaryHint: primary,
+    bucket: bucket ?? "mvp",
+    blockers,
+    status,
+    required_actions: Array.from(actions),
+  };
+}
 
   const decisionLog: ScopeDecisionLogEntry[] = [];
   const buckets: Record<ScopeBucket, ScopeComponent[]> = {

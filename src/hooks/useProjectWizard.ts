@@ -74,6 +74,8 @@ export const useProjectWizard = (projectId?: string) => {
   const [normalizing, setNormalizing] = useState(false);
   const [chainedPhase, setChainedPhase] = useState<ChainedPhase>("idle");
   const [prdSubProgress, setPrdSubProgress] = useState<{ currentPart: number; totalParts: number; label: string; partsCompleted: string[]; startedAt: string } | null>(null);
+  // Granularidad real del pipeline v2 (5 sub-steps: 25→26→27→28→29).
+  const [pipelineV2SubStep, setPipelineV2SubStep] = useState<{ stepNumber: number; label: string } | null>(null);
   const autosaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load project data ────────────────────────────────────────────────

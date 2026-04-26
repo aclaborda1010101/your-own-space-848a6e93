@@ -974,7 +974,8 @@ export const useProjectWizard = (projectId?: string) => {
       }
 
       setChainedPhase("done");
-      toast.success("PRD Técnico generado desde Step 28 (pipeline v2)");
+      setPipelineV2SubStep(null);
+      toast.success(`PRD Técnico generado · Step 29 v${step29Row.version} (${prdMeta.components_total || 0} componentes)`);
       await loadProject();
       return mirroredOutput;
     } catch (e: any) {
@@ -983,7 +984,10 @@ export const useProjectWizard = (projectId?: string) => {
       toast.error(e.message || "Error generando PRD desde el pipeline v2");
     } finally {
       setGenerating(false);
-      setTimeout(() => setChainedPhase("idle"), 2000);
+      setTimeout(() => {
+        setChainedPhase("idle");
+        setPipelineV2SubStep(null);
+      }, 2000);
     }
   };
 

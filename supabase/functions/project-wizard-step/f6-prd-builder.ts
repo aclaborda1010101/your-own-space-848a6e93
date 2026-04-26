@@ -339,6 +339,22 @@ export function buildTechnicalPrd(input: F6Input): F6Output {
 // Markdown renderer (for PDF export downstream)
 // ───────────────────────────────────────────────────────────────────────────────
 
+function humanizeWeeksWindow(raw: string): string {
+  const s = String(raw ?? "").toLowerCase().trim();
+  if (!s) return "el periodo de captura";
+  const map: Record<string, string> = {
+    weeks_1_to_2: "las semanas 1 y 2",
+    weeks_1_2: "las semanas 1 y 2",
+    weeks_1_to_3: "las semanas 1, 2 y 3",
+    weeks_2_to_4: "las semanas 2 a 4",
+  };
+  if (map[s]) return map[s];
+  // Generic fallback: weeks_X_to_Y → "las semanas X a Y"
+  const m = s.match(/^weeks?_(\d+)(?:_to)?_(\d+)$/);
+  if (m) return `las semanas ${m[1]} a ${m[2]}`;
+  return raw;
+}
+
 export function renderPrdMarkdown(prd: TechnicalPrdV1): string {
   const lines: string[] = [];
   lines.push(`# PRD Técnico de Construcción — ${prd.project_name}`);

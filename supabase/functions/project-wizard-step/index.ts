@@ -1634,8 +1634,7 @@ REGLAS PARA deep_patterns:
 
       const newVersion27 = existing27 ? existing27.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing27?.id || undefined,
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 27,
         step_name: "Pipeline v2 — Feasibility Audit (F4b)",

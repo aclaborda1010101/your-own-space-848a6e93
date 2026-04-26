@@ -65,7 +65,8 @@ const stepLabels: Record<number, string> = {
   1: "Entrada",
   2: "Briefing",
   3: "PRD Técnico",
-  4: "Descripción MVP",
+  4: "Presupuesto",
+  5: "Propuesta cliente",
 };
 
 const ProjectWizardEdit = () => {

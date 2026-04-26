@@ -47,11 +47,16 @@ export const ProjectProposalExport = ({
   proposalData,
   proposalGenerating,
   onGenerate,
+  prdText = "",
+  architectureManifest = null,
+  prdApproved = false,
 }: ProjectProposalExportProps) => {
   const [downloading, setDownloading] = useState(false);
+  const [forgeOpen, setForgeOpen] = useState(false);
 
   const canGenerate = budgetStatus === "approved";
   const hasProposal = !!proposalData?.proposalMarkdown;
+  const canPublishForge = hasProposal && prdApproved && prdText.length >= 1000;
   const jargonWarnings: string[] =
     proposalData?.proposal_meta?.internal_jargon_warnings || [];
 

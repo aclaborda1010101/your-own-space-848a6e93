@@ -95,7 +95,6 @@ export const ProjectBudgetPanel = ({
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState<BudgetData | null>(null);
   const [approving, setApproving] = useState(false);
-  const [approving, setApproving] = useState(false);
   // Vista global del panel: cliente oculta márgenes, costes internos, horas
   const [viewMode, setViewMode] = useState<'internal' | 'client'>('internal');
   const isClientView = viewMode === 'client';
@@ -103,8 +102,6 @@ export const ProjectBudgetPanel = ({
   useEffect(() => {
     if (budgetData) {
       setEditData(structuredClone(budgetData));
-      // Auto-select all models for export
-      setSelectedExportModels(budgetData.monetization_models?.map((_, i) => i) || []);
     }
   }, [budgetData]);
 

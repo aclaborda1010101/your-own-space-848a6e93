@@ -1528,8 +1528,7 @@ REGLAS PARA deep_patterns:
 
       const newVersion26 = existing26 ? existing26.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing26?.id || undefined,
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 26,
         step_name: "Pipeline v2 — Registry Gap Audit (F4a)",

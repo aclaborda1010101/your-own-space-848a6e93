@@ -161,8 +161,15 @@ export function buildCleanBrief(briefing: any, ctx: { projectName: string }): Cl
     ? naming.detected_aliases.filter((a: any) => typeof a === "string" && a.trim().length > 0)
     : [];
 
+  // Fecha en formato dd/mm/yyyy para la cabecera.
+  const today = new Date();
+  const dd = String(today.getDate()).padStart(2, "0");
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const yyyy = today.getFullYear();
+  const dateStr = `${dd}/${mm}/${yyyy}`;
+
   const headerLines: string[] = [];
-  headerLines.push(`> **CONFIDENCIAL — ${projectName}**`);
+  headerLines.push(`> **CONFIDENCIAL — ${projectName} — ${dateStr}**`);
   headerLines.push("");
   headerLines.push(`# Brief Limpio — ${projectName}`);
   headerLines.push("");

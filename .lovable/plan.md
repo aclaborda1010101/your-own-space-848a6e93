@@ -1,126 +1,123 @@
+# Plan: Naming canónico bloqueado por `projectName` del usuario
 
-# Simplificación del wizard de proyecto
+## Diagnóstico
 
-Diagnóstico de lo que ves hoy en `/projects/wizard/:id` vs lo que debería verse según tu feedback.
+El sistema ya separa `client_company_name`, `founder_or_decision_maker` y `proposed_product_name` en `brief-normalizer.ts`, pero:
+
+1. La cabecera del brief limpio dice `CONFIDENCIAL — Alejandro Gordo` o `— AFLU` porque toma `client_company_name` y este puede acabar mal extraído.
+2. No existe el campo `detected_aliases[]` ni `canonical_source`, así que las variantes (`AFLU`, `AFLUS`, `AFFLU`, `Aflu`) se cuelan en lugar de quedar etiquetadas como aliases.
+3. `proposed_product_name` se sobreescribe SOLO si `ctx.productName` existe; si no, cae a `projectName`. Pero el LLM puede meter ahí `Alejandro Gordo` en pasos posteriores y nada lo bloquea.
+4. La cabecera del brief limpio NO usa `projectName` como ancla principal.
+5. `f6-prd-builder` y `f7-proposal-builder` reciben `projectName/clientName` desde `index.ts`, pero hay que confirmar que el `clientName` que reciben es `client_company_name` ya saneado y NO una variante OCR.
+
+## Regla de oro
+
+> Lo que el usuario escribe en la ficha del proyecto (`projectName`) es la fuente de verdad para Producto/Proyecto/Título. La transcripción solo aporta `detected_aliases[]`.
 
 ---
 
-## 1. Sidebar izquierda (ProjectWizardStepper) — quitar ruido interno
+## Cambios
 
-**Hoy:** la sidebar muestra 8 fases:
-`Entrada · Briefing · Alcance · Auditoría IA · Patrones · PRD Técnico · Descripción MVP · Expert Forge`
+### 1. `supabase/functions/project-wizard-step/brief-normalizer.ts`
 
-**Problema:** `Alcance`, `Auditoría IA` y `Patrones` son fases internas del pipeline v2 que se ejecutan automáticamente al pulsar "Generar PRD Técnico (v2)" (steps 25→26→27→28→29 en el backend). El usuario no debe verlas como pasos clicables.
+**a) Forzar `proposed_product_name = ctx.projectName` SIEMPRE.**
+Hoy solo se aplica si `ctx.productName` existe o si está vacío. Cambiar la lógica para que `projectName` (cuando se pasa) sobrescriba cualquier valor del LLM y se registre el cambio en `_normalization_log`. `ctx.productName` solo se usa si el usuario lo pasa explícitamente distinto.
 
-**Cambio:** dejar la sidebar con sólo 5 fases visibles:
+**b) Generar `detected_aliases[]`.**
+Antes de sobrescribir, comparar `cnc.proposed_product_name` actual con `ctx.projectName` (case-insensitive, normalización Unicode). Si difiere y parece variante (Levenshtein ≤ 2 o substring/superstring), guardar el valor anterior en `cnc.detected_aliases`. También escanear `client_company_name` extraído inicialmente y los `_source_chunks` de la extracción cruda en busca de tokens parecidos a `projectName` que NO coincidan exactamente; dedupe + cap a 8.
+
+**c) Añadir `canonical_source: "user_project_input"`** cuando `projectName` se aplica como producto.
+
+**d) Bloqueo de promoción persona→cliente.**
+Si tras pasar todas las reglas `client_company_name` sigue siendo igual a `founder_or_decision_maker` o sigue pareciendo persona y NO hay `companyNameOverride`, fijar `client_company_name = projectName` y registrar el cambio (la regla 2 del usuario: `Cliente / empresa: AFFLUX` cuando no hay otra cosa).
+
+**e) Nunca permitir `proposed_product_name = null` si `projectName` existe.**
+
+### 2. `supabase/functions/project-wizard-step/clean-brief-builder.ts`
+
+**a) Cabecera nueva** (líneas 153-159), tomando `projectName` como ancla:
 
 ```
-1. Entrada
-2. Briefing
-3. PRD Técnico         ← engloba alcance/auditoría/patrones internamente
-4. Presupuesto         ← antes era "Descripción MVP" (ver punto 4)
-5. Propuesta cliente   ← antes era el dialog de Expert Forge separado
+# Brief Limpio — {projectName}
+
+> **CONFIDENCIAL — {projectName}**
+
+**Proyecto / Producto:** {projectName}
+**Cliente / empresa:** {client_company_name || projectName}
+**Decisor:** {founder_or_decision_maker || "n/d"}
+{si detected_aliases.length} **Aliases detectados:** AFLU, AFLUS, AFFLU…
 ```
 
-Internamente el `ChainedPRDProgress` ya muestra el sub-progreso (alcance / auditoría / patrones / PRD), así que no se pierde visibilidad cuando está corriendo — pero deja de ser una lista de "pasos" del usuario.
+**b) Eliminar la frase** `_Generado automáticamente desde la extracción cruda…_` (ya estaba pendiente del mensaje anterior; cerramos aquí).
 
-**Archivos:**
-- `src/components/projects/wizard/ProjectWizardStepper.tsx`: reducir `PIPELINE_PHASES` a esas 5 entradas. Mantener la lógica de `chainedPhase` para que durante la generación del PRD se muestre el spinner en la fila "PRD Técnico" sin desglose.
+**c) Añadir `projectName` como prop obligatorio** y pasarlo siempre desde `index.ts` (ya se hace en líneas 237 y 433 de `index.ts`).
 
----
+### 3. `supabase/functions/project-wizard-step/f6-prd-builder.ts` y `f7-proposal-builder.ts`
 
-## 2. Paso 4 — Quitar el bloque "Exportar Presupuesto a PDF"
+**Asegurar que reciben y usan `projectName` saneado**:
 
-**Hoy:** dentro de `ProjectBudgetPanel.tsx` (líneas 809–897) hay un bloque completo con:
-- Toggle "Cliente / Interno"
-- Checkboxes de modelos
-- Botón "Exportar PDF Cliente" / "Exportar PDF Interno"
+- En `index.ts`, donde se llama a `buildTechnicalPrd` y `buildClientProposal`, pasar:
+  - `projectName`: SIEMPRE el valor de la fila `business_projects.name` (no del briefing).
+  - `clientCompany`: tomar de `cnc.client_company_name` ya saneado por el normalizer; si tras saneo sigue pareciendo persona o es vacío, usar `projectName`.
+  - (Opcional) `decisionMaker`: `cnc.founder_or_decision_maker`.
 
-**Problema:** al cliente nunca se le entrega el presupuesto suelto, se le entrega la propuesta. Este bloque sólo confunde.
+- `f7-proposal-builder.ts` línea 450 ya hace `CONFIDENCIAL — ${p.client_company}`. Verificamos que `client_company` recibido NO es una variante OCR. Si `client_company === projectName` o vacío, mostrar solo `CONFIDENCIAL — {projectName}`.
 
-**Cambio:**
-- Eliminar todo el bloque (líneas 809–897).
-- Eliminar también los imports/estado asociados que queden huérfanos (`selectedExportModels`, `budgetExportMode`, `exportingPdf`, `handleExportPdf`, `Lock`, `Users`, etc., revisando que no se usen en otro sitio del panel).
+- En la portada de la propuesta (líneas ~452), añadir línea `**Proyecto / Producto:** {projectName}` antes de `Cliente / empresa`.
 
-**Resultado:** el Paso 4 queda con generar / editar / aprobar el presupuesto. Punto.
+### 4. `index.ts` — invocaciones
 
----
+En las dos rutas que llaman al normalizer (extract y re-extract, líneas 229 y 419) ya se pasa `projectName, productName`. Confirmar que `productName` NO se setea desde la extracción si el usuario no lo escribió manualmente — debe llegar `undefined` por defecto, no un valor inferido.
 
-## 3. Paso 5 — "Propuesta cliente" ya existe como `ProjectProposalExport`
+En las llamadas a `buildTechnicalPrd` / `buildClientProposal` (donde se generen Steps 29/30), pasar el `projectName` desde la fila `business_projects` directamente, NO desde el briefing.
 
-Ya se renderiza correctamente debajo del Paso 4 cuando hay budget + PRD (`ProjectWizard.tsx` líneas 438–459) y tiene los dos botones que pediste:
-- "Generar propuesta cliente"
-- "Descargar propuesta cliente PDF"
+### 5. Tests
 
-**Cambio menor:** que el título del card sea claramente **"Paso 5 · Propuesta cliente"** (ya lo es) y que sea el lugar donde **también** vive el botón de Expert Forge (ver punto 5). Sin tocar la lógica de F7 que acabamos de arreglar.
+Añadir a `brief-normalizer` un test deno (`brief-normalizer_test.ts` si no existe; si existe, ampliar):
 
----
+- `ctx.projectName="AFFLUX"`, briefing dice `proposed_product_name="AFLUS"` → output `proposed_product_name="AFFLUX"` y `detected_aliases` incluye `"AFLUS"`.
+- `client_company_name="Alejandro Gordo"`, sin company override → se mueve a `founder_or_decision_maker`, `client_company_name` cae a `projectName`.
+- `proposed_product_name=null`, `ctx.projectName="AFFLUX"` → output `="AFFLUX"`, `canonical_source="user_project_input"`.
+- Detección de aliases por similitud (Levenshtein ≤ 2): `AFFLU`, `Aflu`, `AFLU` se capturan.
 
-## 4. ¿Qué pasa con "Descripción MVP" (paso 4 actual)?
+Ampliar `f7-proposal-builder_test.ts`:
+- Si `clientCompany` viene vacío o == `projectName`, la cabecera muestra solo el projectName y la portada incluye `Proyecto / Producto`.
 
-**Hoy:** es un step del wizard con su propio botón "Generar Descripción MVP". Tu mensaje dice "déjala si quieres".
+### 6. Criterio de aceptación AFFLUX
 
-**Propuesta:** moverla al panel **"Avanzado / Interno"** (ya colapsado por defecto) como bloque opcional, y que el "Paso 4" visible en la sidebar pase a ser **Presupuesto** (que es lo que el usuario realmente hace después del PRD). Así:
+Tras re-ejecutar la limpieza editorial sobre el Step 2 de AFFLUX, en el brief limpio v12 debe leerse:
 
-- Sidebar: Entrada → Briefing → PRD → Presupuesto → Propuesta cliente.
-- Header / progress: `currentStep` 1..5 con esos labels.
-- "Descripción MVP" sigue existiendo en backend (step 4 de DB) pero como herramienta interna, no como paso obligatorio del flujo comercial.
+```
+> CONFIDENCIAL — AFFLUX
 
-Si prefieres dejarla como paso visible, dilo y la mantengo en la sidebar como paso 4 y el Presupuesto sería paso 5 y la Propuesta paso 6. Mi recomendación es la primera (más limpio), pero es decisión tuya — pregunto en la sección final.
+Proyecto / Producto: AFFLUX
+Cliente / empresa: AFLU            (o "AFLU / AFFLUX" si seguimos sin saber)
+Decisor: Alejandro Gordo
+Aliases detectados: AFLUS, AFFLU, Aflu
+```
 
----
-
-## 5. Expert Forge — moverlo al Paso 5 (Propuesta cliente)
-
-**Hoy:** el botón "Publicar en Expert Forge" está dentro del `CollapsibleCard` "Avanzado / Interno", colapsado por defecto. Por eso no lo ves desde fuera.
-
-**Cambio:** sacarlo del bloque interno y meterlo dentro del card de Paso 5 (`ProjectProposalExport`) como un tercer botón al lado de "Generar / Descargar propuesta", con el copy:
-
-> Una vez aprobada la propuesta, publica el proyecto en Expert Forge para materializar los componentes (RAGs + especialistas).
-
-Quedaría:
-- Generar propuesta cliente
-- Descargar propuesta cliente PDF
-- **Publicar en Expert Forge** (deshabilitado hasta que la propuesta esté generada)
-
-Mantiene el `PublishToForgeDialog` y `ManifestViewer` que ya existen, sólo cambia el sitio donde se invocan.
+Y NO debe aparecer `Producto: null`, `Cliente: Alejandro Gordo`, ni `Proyecto: AFLUS`.
 
 ---
 
-## 6. Panel "Avanzado / Interno" — mantener para QA
+## Archivos a editar
 
-El `PipelineQAPanel` con los botones de cada subpaso (build_registry, audit_f4a, audit_f4b, architect_scope, generate_technical_prd, generate_client_proposal, audit_final_deliverables) **se queda dentro del CollapsibleCard "Avanzado / Interno"** colapsado por defecto. Es la herramienta que usamos para depurar cuando algo sale mal (como esta semana). No estorba porque está plegado.
+- `supabase/functions/project-wizard-step/brief-normalizer.ts` — aliases, bloqueo de projectName, canonical_source.
+- `supabase/functions/project-wizard-step/clean-brief-builder.ts` — cabecera nueva con projectName y aliases.
+- `supabase/functions/project-wizard-step/f7-proposal-builder.ts` — portada con `Proyecto / Producto`, fallback a projectName si client_company vacío.
+- `supabase/functions/project-wizard-step/f6-prd-builder.ts` — verificar que el título usa `project_name` recibido.
+- `supabase/functions/project-wizard-step/index.ts` — propagar `projectName` desde la fila `business_projects` a builders F6/F7; no inferir `productName` desde la extracción.
+- Tests: `brief-normalizer_test.ts` (nuevo o ampliar), `f7-proposal-builder_test.ts` (ampliar).
 
-Mismo trato para:
-- `ProjectDocumentsPanel` (descarga histórica de documentos por step)
-- `ProjectActivityTimeline`
-- `ManifestViewer`
+## Lo que NO se toca
 
----
+- Extracción chunked.
+- F2/F3/F4/F5 (Step 25–28).
+- Lógica de scope, PRD técnico ni propuesta más allá de los campos de cabecera/título.
+- Llamadas LLM (todo es determinista).
 
-## Resumen de archivos a tocar
+## Pregunta
 
-| Archivo | Cambio |
-|---|---|
-| `src/components/projects/wizard/ProjectWizardStepper.tsx` | Reducir `PIPELINE_PHASES` a 5 fases visibles y mapear los DB-steps correctos |
-| `src/components/projects/wizard/ProjectBudgetPanel.tsx` | Eliminar bloque "Exportar Presupuesto a PDF" (líneas 809–897) y limpiar estado huérfano |
-| `src/components/projects/wizard/ProjectProposalExport.tsx` | Añadir botón "Publicar en Expert Forge" + integrar `PublishToForgeDialog` |
-| `src/pages/ProjectWizard.tsx` | Actualizar `stepLabels`, `TOTAL_STEPS`, mover Expert Forge fuera de "Avanzado / Interno", recolocar "Descripción MVP" según decisión del punto 4 |
+Una sola decisión que afecta a la regeneración del brief AFFLUX:
 
-No se toca:
-- Backend / edge functions (F0–F7 quedan igual, ya está corregido)
-- Lógica de `useProjectWizard.ts`
-- Lógica del pipeline encadenado (`chainedPhase`, `prdSubProgress`)
-- `PipelineQAPanel` (sigue como herramienta interna)
-
----
-
-## Pregunta antes de implementar
-
-**Sobre "Descripción MVP" (step 4 actual del wizard):**
-- (a) Sacarlo de la sidebar y dejarlo solo en "Avanzado / Interno" como bloque opcional. La sidebar queda en 5 pasos limpios.
-- (b) Mantenerlo como paso visible. La sidebar pasa a 6 pasos: Entrada · Briefing · PRD · Descripción MVP · Presupuesto · Propuesta cliente.
-
-Mi recomendación: **(a)**, porque la "Descripción MVP" se solapa con lo que el PRD técnico y la propuesta cliente ya describen, y es lo que estaba haciendo que el flujo se vea recargado.
-
-Cuando apruebes el plan, pásame también qué opción prefieres del punto 4 y lo implemento de un tirón.
+¿La micro-limpieza editorial pendiente (cambio de cabecera + traducciones residuales + Gobernanza + alerta señal 71) la metemos **dentro de este mismo deploy** y la aplicamos automáticamente al Step 2 de AFFLUX al guardar (creando v12), o lo haces tú con el botón **"Aprobar Brief"** una vez deployado?

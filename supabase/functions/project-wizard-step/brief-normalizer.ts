@@ -956,7 +956,104 @@ export function cleanupSpanishMarkdown(md: string): string {
   const dummyChanges: NormalizationChange[] = [];
   applyDeterministicSpanishCleanup(fake, dummyChanges);
   applyResidualWordSwap(fake, dummyChanges);
+  applyEditorialPolish(fake, dummyChanges);
   return fake.business_extraction_v2.__md;
+}
+
+/**
+ * Editorial polish — micro-limpieza determinista pedida por el usuario:
+ *   1. Governance → Gobernanza (RGPD/DPIA, etc.).
+ *   2. Traducciones residuales muy específicas no cubiertas arriba.
+ *   3. Inyecta alerta señal 71 en open_questions si detecta el patrón
+ *      "71%" / "71 visitas" / "señal 71" en cualquier campo del briefing.
+ *
+ * 100 % determinista. Se ejecuta al final del pipeline para que el resto
+ * de pasos (LLM y residual swap) no la deshagan.
+ */
+function applyEditorialPolish(briefing: any, changes: NormalizationChange[]) {
+  const replacements: Array<[RegExp, string]> = [
+    // 1. Governance → Gobernanza (preserva RGPD / DPIA / siglas tras él).
+    [/\bGovernance\b/g, "Gobernanza"],
+    [/\bgovernance\b/g, "gobernanza"],
+    // 2. Traducciones residuales puntuales.
+    [/\bCost of Unrecorded Calls\b/gi, "Coste de llamadas no grabadas"],
+    [/\bUnrecorded Calls\b/gi, "Llamadas no grabadas"],
+    [/\bLost Deal Analysis\b/gi, "Análisis de oportunidades perdidas"],
+    [/\bLost Deals\b/gi, "Oportunidades perdidas"],
+    [/\bMissed Opportunities\b/gi, "Oportunidades no aprovechadas"],
+    [/\bConversion Uplift\b/gi, "Mejora de conversión"],
+    [/\bRevenue Uplift\b/gi, "Mejora de ingresos"],
+    [/\bChurn Reduction\b/gi, "Reducción de abandono"],
+    [/\bData Readiness\b/gi, "Madurez de datos"],
+    [/\bDigital Maturity\b/gi, "Madurez digital"],
+    [/\bAI Opportunity\b/gi, "Oportunidad de IA"],
+    [/\bQuick Wins\b/gi, "Victorias rápidas"],
+    [/\bPilot Phase\b/gi, "Fase piloto"],
+    [/\bRoll-?out\b/gi, "Despliegue"],
+    [/\bStakeholders?\b/gi, "Interesados"],
+    [/\bDecision Makers?\b/gi, "Decisores"],
+    [/\bDeal Velocity\b/gi, "Velocidad de cierre"],
+    [/\bSales Pipeline\b/gi, "Pipeline comercial"],
+    [/\bLead Scoring\b/gi, "Puntuación de oportunidades"],
+  ];
+
+  function walk(node: any, path: string): any {
+    if (typeof node === "string") {
+      let out = node;
+      for (const [from, to] of replacements) out = out.replace(from, to);
+      if (out !== node) {
+        changes.push({
+          type: "editorial_polish",
+          field: path,
+          before: node,
+          after: out,
+          reason: "Pulido editorial determinista (Gobernanza, traducciones residuales).",
+        });
+      }
+      return out;
+    }
+    if (Array.isArray(node)) return node.map((item, i) => walk(item, `${path}[${i}]`));
+    if (node && typeof node === "object") {
+      const out: Record<string, any> = {};
+      for (const [k, v] of Object.entries(node)) out[k] = k.startsWith("_") ? v : walk(v, path ? `${path}.${k}` : k);
+      return out;
+    }
+    return node;
+  }
+
+  if (briefing.business_extraction_v2) {
+    briefing.business_extraction_v2 = walk(briefing.business_extraction_v2, "business_extraction_v2");
+  }
+
+  // Inyectar alerta señal 71 si detectamos el patrón.
+  const v2 = briefing?.business_extraction_v2;
+  if (!v2) return;
+  const haystack = JSON.stringify(v2);
+  const has71Pct = /\b71\s*%/.test(haystack);
+  const has71Visits = /\b71\s+visitas?\b/i.test(haystack);
+  const has71Signal = /se[ñn]al\s+71\b/i.test(haystack);
+  if (!has71Pct && !has71Visits && !has71Signal) return;
+
+  if (!Array.isArray(v2.open_questions)) v2.open_questions = [];
+  const alertText = "Revisar señal 71: confirmar si se refiere a 71% de no respuesta o a 71 visitas en 9 meses sin cierre.";
+  const exists = v2.open_questions.some((q: any) => {
+    const txt = typeof q === "string" ? q : (q?.question || q?.title || "");
+    return /se[ñn]al\s+71/i.test(txt);
+  });
+  if (exists) return;
+
+  v2.open_questions.push({
+    title: "Revisión manual: señal 71",
+    question: alertText,
+    _source: "editorial_polish",
+    _inferred_by: "normalizer_editorial_polish_v1",
+  });
+  changes.push({
+    type: "editorial_polish_alert",
+    field: "open_questions",
+    after: alertText,
+    reason: "Alerta señal 71 inyectada por pulido editorial.",
+  });
 }
 
 // ── 4. Semantic dedup ────────────────────────────────────────────────
@@ -1451,6 +1548,9 @@ export async function normalizeBrief(
 
   // 3d. Last-resort word-level swap for residual English bridge tokens.
   applyResidualWordSwap(briefing, changes);
+
+  // 3e. Editorial polish — Gobernanza, traducciones residuales y alerta señal 71.
+  applyEditorialPolish(briefing, changes);
 
   // 4. Semantic dedup (uses canonical override from ctx if provided)
   applySemanticDedup(briefing, changes, ctx);

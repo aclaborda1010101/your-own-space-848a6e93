@@ -10,6 +10,7 @@ declare const __APP_BUILD_ID__: string;
 const BUILD_KEY = "__jarvis_build_id";
 const RELOAD_DONE = "__jarvis_reloaded";
 const PREVIEW_RESET_ATTEMPTS_KEY = "__jarvis_preview_sw_reset_attempts";
+const PREVIEW_HTML_MISMATCH_KEY = "__jarvis_preview_html_mismatch_attempts";
 const PREVIEW_RESET_MAX_ATTEMPTS = 2;
 let sleepDetectorInstalled = false;
 

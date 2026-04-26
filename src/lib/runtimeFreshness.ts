@@ -137,6 +137,28 @@ function installSleepDetector(): void {
   sleepDetectorInstalled = true;
 }
 
+// ── HTML-vs-bundle mismatch (preview only) ──────────────────────
+// Lovable's preview iframe sometimes serves a fresh `index.html` (with the
+// latest build timestamp in `<meta name="x-build-ts">` or in the inline
+// `__APP_BUILD_TS__` global) while the JS bundle is still the old cached chunk.
+// Detect that mismatch so we can force exactly one reload to pick up the new
+// bundle, instead of waiting for the user to interact.
+function htmlBuildMismatchesBundle(): boolean {
+  try {
+    const meta = document.querySelector('meta[name="x-build-ts"]')?.getAttribute("content");
+    const htmlBuild =
+      (typeof meta === "string" && meta.trim()) ||
+      (typeof (window as any).__APP_BUILD_TS__ === "string" && (window as any).__APP_BUILD_TS__) ||
+      "";
+    if (!htmlBuild) return false;
+    const bundleBuild = getCurrentBuild();
+    if (!bundleBuild) return false;
+    return htmlBuild !== bundleBuild;
+  } catch {
+    return false;
+  }
+}
+
 // ── Main entry ──────────────────────────────────────────────────
 
 export function ensureRuntimeFreshness(): boolean {

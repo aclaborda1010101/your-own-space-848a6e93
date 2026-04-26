@@ -1421,8 +1421,7 @@ REGLAS PARA deep_patterns:
 
       const newVersion25 = existing25 ? existing25.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing25?.id || undefined,
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 25,
         step_name: "Pipeline v2 — Registry Build",

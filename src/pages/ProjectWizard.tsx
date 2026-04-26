@@ -266,7 +266,21 @@ const ProjectWizardEdit = () => {
             <ProjectWizardStepper
               steps={steps}
               currentStep={currentStep}
-              onNavigate={navigateToStep}
+              onNavigate={(step) => {
+                if (step === 4) {
+                  document
+                    .getElementById("budget-internal-card")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  return;
+                }
+                if (step === 5) {
+                  document
+                    .getElementById("proposal-export-card")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  return;
+                }
+                navigateToStep(step);
+              }}
               maxUnlockedStep={maxUnlocked}
               chainedPhase={chainedPhase}
               internalStepStatuses={internalStepStatuses}

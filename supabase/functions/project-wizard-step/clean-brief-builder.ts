@@ -151,12 +151,34 @@ export function buildCleanBrief(briefing: any, ctx: { projectName: string }): Cl
   });
 
   // Compose final markdown.
+  // REGLA DE ORO: el `projectName` que escribió el usuario manda. La
+  // transcripción solo puede aportar `detected_aliases[]`.
   const naming = v2.client_naming_check || {};
-  const header = `# Brief Limpio — ${clean(ctx.projectName) || "Proyecto"}\n\n` +
-    `> **Cliente:** ${clean(naming.client_company_name) || "n/d"}` +
-    `${naming.founder_or_decision_maker ? ` · **Decisor:** ${clean(naming.founder_or_decision_maker)}` : ""}` +
-    `${naming.proposed_product_name ? ` · **Producto:** ${clean(naming.proposed_product_name)}` : ""}\n\n` +
-    `_Generado automáticamente desde la extracción cruda. Para auditoría completa con evidencias y origen por bloque, ver "Brief Crudo (debug)"._\n`;
+  const projectName = clean(ctx.projectName) || "Proyecto";
+  const clientCompany = clean(naming.client_company_name) || projectName;
+  const decisionMaker = clean(naming.founder_or_decision_maker);
+  const aliases: string[] = Array.isArray(naming.detected_aliases)
+    ? naming.detected_aliases.filter((a: any) => typeof a === "string" && a.trim().length > 0)
+    : [];
+
+  const headerLines: string[] = [];
+  headerLines.push(`> **CONFIDENCIAL — ${projectName}**`);
+  headerLines.push("");
+  headerLines.push(`# Brief Limpio — ${projectName}`);
+  headerLines.push("");
+  headerLines.push(`**Proyecto / Producto:** ${projectName}`);
+  headerLines.push(`**Cliente / empresa:** ${clientCompany}`);
+  if (decisionMaker) {
+    headerLines.push(`**Decisor:** ${decisionMaker}`);
+  } else {
+    headerLines.push(`**Decisor:** n/d`);
+  }
+  if (aliases.length > 0) {
+    headerLines.push(`**Aliases detectados:** ${aliases.join(", ")}`);
+  }
+  headerLines.push("");
+
+  const header = headerLines.join("\n");
 
   const body = sections.map((s) => `## ${s.title}\n\n${s.markdown}`).join("\n\n");
   const markdown = `${header}\n${body}\n`;

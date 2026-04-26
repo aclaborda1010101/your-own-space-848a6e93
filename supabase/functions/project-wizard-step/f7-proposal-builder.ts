@@ -233,7 +233,11 @@ export function buildClientProposal(input: F7Input): F7Output {
     throw new Error("EMPTY_SCOPE: el alcance aprobado en Step 28 está vacío.");
   }
 
-  const clientCompany = (input.clientCompany ?? input.clientName ?? "Cliente").trim();
+  // REGLA DE ORO: si no hay clientCompany real, mostrar el projectName
+  // del usuario (nunca dejar "Cliente" genérico ni una variante OCR).
+  const projectNameClean = (input.projectName || "").trim() || "Proyecto";
+  const rawClientCompany = (input.clientCompany ?? input.clientName ?? "").trim();
+  const clientCompany = rawClientCompany.length > 0 ? rawClientCompany : projectNameClean;
   const decisionMakerName = input.decisionMakerName?.trim() || undefined;
 
   const currency = commercialTerms.currency ?? "EUR";
@@ -445,15 +449,21 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
   const lines: string[] = [];
 
   // ── Cabecera ──
+  // REGLA DE ORO: el title y el CONFIDENCIAL salen del project_name (lo
+  // que escribió el usuario). client_company puede ser "AFLU / AFFLUX" o
+  // similar y se muestra solo en la portada como dato adicional.
+  const headerCompany = p.client_company && p.client_company !== p.project_name
+    ? p.client_company
+    : p.project_name;
   lines.push(`# Propuesta — ${p.project_name}`);
   lines.push("");
-  lines.push(`> **CONFIDENCIAL — ${p.client_company}**`);
+  lines.push(`> **CONFIDENCIAL — ${p.project_name}**`);
   lines.push("");
-  lines.push(`**Cliente / empresa:** ${p.client_company}`);
+  lines.push(`**Proyecto / Producto:** ${p.project_name}`);
+  lines.push(`**Cliente / empresa:** ${headerCompany}`);
   if (p.decision_maker_name) {
     lines.push(`**Decisor:** ${p.decision_maker_name}`);
   }
-  lines.push(`**Producto:** ${p.project_name}`);
   lines.push(`**Fecha:** ${p.generated_at.substring(0, 10)} · **Validez:** ${p.validity_days} días`);
   lines.push("");
 

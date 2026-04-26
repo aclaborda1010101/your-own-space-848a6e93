@@ -95,10 +95,11 @@ Deno.test("F7: markdown uses ES headers and shows cliente/decisor", () => {
   const jargon = detectInternalJargon(md);
   assertEquals(jargon, []);
   assert(md.includes("# Propuesta — AFFLUX"));
-  assert(md.includes("CONFIDENCIAL — AFLU / AFFLUX"));
+  // REGLA DE ORO: CONFIDENCIAL usa el projectName del usuario, no client_company.
+  assert(md.includes("CONFIDENCIAL — AFFLUX"));
+  assert(md.includes("**Proyecto / Producto:** AFFLUX"));
   assert(md.includes("**Cliente / empresa:** AFLU / AFFLUX"));
   assert(md.includes("**Decisor:** Alejandro Gordo"));
-  assert(md.includes("**Producto:** AFFLUX"));
 });
 
 Deno.test("F7: phased pricing — meta counts coherent", () => {

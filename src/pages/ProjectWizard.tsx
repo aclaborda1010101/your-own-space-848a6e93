@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Loader2, ArrowLeft, Briefcase, Pencil, Rocket } from "lucide-react";
+import { Loader2, ArrowLeft, Briefcase, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectWizard } from "@/hooks/useProjectWizard";
 import { ProjectWizardStepper } from "@/components/projects/wizard/ProjectWizardStepper";
@@ -21,14 +21,14 @@ import { ProjectProposalExport } from "@/components/projects/wizard/ProjectPropo
 import { PricingModeSelector } from "@/components/projects/wizard/PricingModeSelector";
 import { ChainedPRDProgress } from "@/components/projects/wizard/ChainedPRDProgress";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { PublishToForgeDialog } from "@/components/projects/wizard/PublishToForgeDialog";
+// PublishToForgeDialog ahora vive dentro de ProjectProposalExport (Paso 5).
 import { ManifestViewer } from "@/components/projects/wizard/ManifestViewer";
 import { PipelineQAPanel } from "@/components/projects/wizard/PipelineQAPanel";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
 
-const TOTAL_STEPS = 4;
-const TOTAL_PIPELINE_PHASES = 8;
+const TOTAL_STEPS = 5;
+const TOTAL_PIPELINE_PHASES = 5;
 
 const ProjectWizardNew = () => {
   const navigate = useNavigate();
@@ -65,7 +65,8 @@ const stepLabels: Record<number, string> = {
   1: "Entrada",
   2: "Briefing",
   3: "PRD Técnico",
-  4: "Descripción MVP",
+  4: "Presupuesto",
+  5: "Propuesta cliente",
 };
 
 const ProjectWizardEdit = () => {
@@ -84,7 +85,7 @@ const ProjectWizardEdit = () => {
   const [exportMode, setExportMode] = useState<'client' | 'internal'>('client');
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState("");
-  const [forgeOpen, setForgeOpen] = useState(false);
+  // forgeOpen movido a ProjectProposalExport (Paso 5).
   const [autoChainEnabled, setAutoChainEnabled] = useState(() => {
     if (typeof window === "undefined") return true;
     const v = window.localStorage.getItem(`wizard-autochain-${id}`);
@@ -133,6 +134,36 @@ const ProjectWizardEdit = () => {
   const step3Data = steps.find(s => s.stepNumber === 3);
   const step4Data = steps.find(s => s.stepNumber === 4);
   const progress = ((currentStep - 1) / TOTAL_STEPS) * 100;
+
+  // Extraer prdText y architecture_manifest del Paso 3 una sola vez (compartido por
+  // Propuesta cliente → Expert Forge y por el visor de manifest en Avanzado / Interno).
+  const { prdFullText, manifestData, prdApproved } = (() => {
+    const step3 = step3Data;
+    const step3Out = step3?.outputData as any;
+    let fullText = "";
+    let manifest: Record<string, unknown> | null = null;
+    if (step3Out) {
+      if (typeof step3Out === "string") {
+        try {
+          const parsed = JSON.parse(step3Out);
+          fullText = parsed.document || parsed.content || parsed.text || step3Out;
+          if (parsed.architecture_manifest) manifest = parsed.architecture_manifest;
+        } catch {
+          fullText = step3Out;
+        }
+      } else if (typeof step3Out === "object") {
+        fullText = step3Out.document || step3Out.content || step3Out.text || "";
+        if (typeof fullText === "object") fullText = JSON.stringify(fullText);
+        if (!fullText || fullText.length < 100) fullText = JSON.stringify(step3Out);
+        if (step3Out.architecture_manifest) manifest = step3Out.architecture_manifest as Record<string, unknown>;
+      }
+    }
+    return {
+      prdFullText: fullText,
+      manifestData: manifest,
+      prdApproved: step3?.status === "approved",
+    };
+  })();
 
   return (
     <main className="p-4 lg:p-6 space-y-5">
@@ -265,7 +296,21 @@ const ProjectWizardEdit = () => {
             <ProjectWizardStepper
               steps={steps}
               currentStep={currentStep}
-              onNavigate={navigateToStep}
+              onNavigate={(step) => {
+                if (step === 4) {
+                  document
+                    .getElementById("budget-internal-card")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  return;
+                }
+                if (step === 5) {
+                  document
+                    .getElementById("proposal-export-card")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  return;
+                }
+                navigateToStep(step);
+              }}
               maxUnlockedStep={maxUnlocked}
               chainedPhase={chainedPhase}
               internalStepStatuses={internalStepStatuses}
@@ -378,43 +423,21 @@ const ProjectWizardEdit = () => {
             </>
           )}
 
-          {currentStep === 4 && (
-            <ProjectWizardGenericStep
-              stepNumber={4}
-              stepName="Descripción MVP"
-              description="Genera una descripción detallada del Minimum Viable Product con funcionalidades core, criterios de éxito y plan de lanzamiento."
-              outputData={step4Data?.outputData || null}
-              generating={generating}
-              onGenerate={async () => {
-                await runGenericStep(4, "generate_mvp");
-              }}
-              onApprove={async () => {
-                await approveStep(4, undefined, { autoChain: autoChainEnabled });
-              }}
-              generateLabel="Generar Descripción MVP"
-              isMarkdown={true}
-              projectId={id}
-              projectName={project.name}
-              company={project.company}
-              version={step4Data?.version || 1}
-              onUpdateOutputData={(newData) => updateStepOutputData(4, newData)}
-              exportMode={exportMode}
-              onExportModeChange={setExportMode}
-              status={step4Data?.status}
-            />
-          )}
+          {/*
+            Paso 4 (Descripción MVP) movido a la sección "Avanzado / Interno":
+            no es parte del flujo comercial principal y se solapa con el PRD y
+            la propuesta cliente. Sigue accesible desde abajo.
+          */}
         </div>
       </div>
 
 
       {/* Paso 4 — Budget panel — disponible cuando exista el PRD (aprobado o no) */}
       {(() => {
-        const step3 = steps.find(s => s.stepNumber === 3);
-        const hasPRD = !!step3?.outputData;
-        const prdApproved = step3?.status === "approved";
+        const hasPRD = !!step3Data?.outputData;
         if (!hasPRD) return null;
         return (
-          <div className="space-y-2">
+          <div id="budget-internal-card" className="space-y-2 scroll-mt-4">
             {!prdApproved && (
               <div className="text-xs text-muted-foreground border border-dashed border-border/40 rounded-md px-3 py-2 bg-muted/20">
                 El PRD aún no está aprobado. Puedes ir trabajando el presupuesto; al aprobar el PRD se incorporará automáticamente al pipeline.
@@ -435,11 +458,11 @@ const ProjectWizardEdit = () => {
         );
       })()}
 
-      {/* Paso 5 — Propuesta cliente (F7) — disponible cuando exista presupuesto */}
-      {budgetData && steps.find(s => s.stepNumber === 3)?.outputData && (() => {
+      {/* Paso 5 — Propuesta cliente (F7) + Expert Forge — disponible cuando exista presupuesto */}
+      {budgetData && step3Data?.outputData && (() => {
         const budgetApproved = budgetStatus === "approved";
         return (
-          <div className="space-y-2">
+          <div id="proposal-export-card" className="space-y-2 scroll-mt-4">
             {!budgetApproved && (
               <div className="text-xs text-muted-foreground border border-dashed border-border/40 rounded-md px-3 py-2 bg-muted/20">
                 El presupuesto aún no está aprobado. Puedes generar la propuesta en borrador para revisar antes de cerrarla.
@@ -453,6 +476,9 @@ const ProjectWizardEdit = () => {
               proposalData={proposalData}
               proposalGenerating={proposalGenerating}
               onGenerate={generateClientProposal}
+              prdText={prdFullText}
+              architectureManifest={manifestData}
+              prdApproved={prdApproved}
             />
           </div>
         );
@@ -474,56 +500,49 @@ const ProjectWizardEdit = () => {
           {/* QA · Pipeline v2 — herramienta de debug */}
           {id && <PipelineQAPanel projectId={id} />}
 
-          {steps.find(s => s.stepNumber === 3)?.status === "approved" && (() => {
-            const step3Out = steps.find(s => s.stepNumber === 3)?.outputData;
-            let fullPrdText = "";
-            let manifestData: Record<string, unknown> | null = null;
-            if (step3Out) {
-              if (typeof step3Out === "string") {
-                try {
-                  const parsed = JSON.parse(step3Out);
-                  fullPrdText = parsed.document || parsed.content || parsed.text || step3Out;
-                  if (parsed.architecture_manifest) manifestData = parsed.architecture_manifest;
-                } catch {
-                  fullPrdText = step3Out;
-                }
-              } else if (typeof step3Out === "object") {
-                fullPrdText = step3Out.document || step3Out.content || step3Out.text || "";
-                if (typeof fullPrdText === "object") fullPrdText = JSON.stringify(fullPrdText);
-                if (!fullPrdText || fullPrdText.length < 100) fullPrdText = JSON.stringify(step3Out);
-                if (step3Out.architecture_manifest) manifestData = step3Out.architecture_manifest as Record<string, unknown>;
-              }
-            }
-            const prdTooShort = fullPrdText.length < 1000;
-            return (
-              <>
-                <div className="flex justify-end items-center gap-2">
-                  {prdTooShort && (
-                    <span className="text-xs text-destructive">⚠️ PRD muy corto ({fullPrdText.length} chars)</span>
-                  )}
-                  <span className="text-xs text-muted-foreground">{fullPrdText.length.toLocaleString()} chars</span>
-                  {manifestData && <span className="text-xs text-primary">📋 Manifest incluido</span>}
-                  <Button variant="outline" className="gap-2" onClick={() => {
-                    if (prdTooShort) { toast.error("El PRD está vacío o incompleto. Regenera el Paso 3."); return; }
-                    setForgeOpen(true);
-                  }}>
-                    <Rocket className="h-4 w-4" />
-                    Publicar en Expert Forge
-                  </Button>
-                </div>
-                {manifestData && <ManifestViewer manifest={manifestData} />}
-                <PublishToForgeDialog
-                  open={forgeOpen}
-                  onOpenChange={setForgeOpen}
-                  projectId={id!}
-                  projectName={project.name}
-                  projectDescription={project.company || ""}
-                  prdText={fullPrdText}
-                  architectureManifest={manifestData}
-                />
-              </>
-            );
-          })()}
+          {/* Visor del manifest de arquitectura (lectura) — sin botón Forge,
+              que ahora vive en el card de Paso 5 · Propuesta cliente. */}
+          {prdApproved && manifestData && (
+            <div className="space-y-2">
+              <div className="flex justify-end items-center gap-2 text-xs text-muted-foreground">
+                <span>{prdFullText.length.toLocaleString()} chars</span>
+                <span className="text-primary">📋 Manifest incluido</span>
+              </div>
+              <ManifestViewer manifest={manifestData} />
+            </div>
+          )}
+
+          {/* Descripción MVP (opcional) — fuera del flujo comercial principal */}
+          {step3Data?.outputData && (
+            <div className="border-t border-border/40 pt-4">
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Descripción MVP — opcional. El alcance ya está cubierto por el PRD y la propuesta cliente.
+              </p>
+              <ProjectWizardGenericStep
+                stepNumber={4}
+                stepName="Descripción MVP"
+                description="Genera una descripción detallada del Minimum Viable Product con funcionalidades core, criterios de éxito y plan de lanzamiento."
+                outputData={step4Data?.outputData || null}
+                generating={generating}
+                onGenerate={async () => {
+                  await runGenericStep(4, "generate_mvp");
+                }}
+                onApprove={async () => {
+                  await approveStep(4, undefined, { autoChain: autoChainEnabled });
+                }}
+                generateLabel="Generar Descripción MVP"
+                isMarkdown={true}
+                projectId={id}
+                projectName={project.name}
+                company={project.company}
+                version={step4Data?.version || 1}
+                onUpdateOutputData={(newData) => updateStepOutputData(4, newData)}
+                exportMode={exportMode}
+                onExportModeChange={setExportMode}
+                status={step4Data?.status}
+              />
+            </div>
+          )}
 
           <ProjectDocumentsPanel
             projectId={id!}

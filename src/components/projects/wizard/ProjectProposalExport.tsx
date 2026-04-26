@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { FileText, Loader2, Download, Sparkles, AlertCircle } from "lucide-react";
+import { FileText, Loader2, Download, Sparkles, AlertCircle, Rocket } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { PublishToForgeDialog } from "./PublishToForgeDialog";
 
 interface ProposalData {
   proposalMarkdown?: string;
@@ -21,6 +22,12 @@ interface ProjectProposalExportProps {
   proposalData: ProposalData | null;
   proposalGenerating: boolean;
   onGenerate: () => Promise<any>;
+  /** PRD text (markdown) used by Expert Forge publish */
+  prdText?: string;
+  /** Architecture manifest used by Expert Forge publish */
+  architectureManifest?: Record<string, unknown> | null;
+  /** Whether the PRD step is approved (gate for Expert Forge button) */
+  prdApproved?: boolean;
 }
 
 /**
@@ -40,11 +47,16 @@ export const ProjectProposalExport = ({
   proposalData,
   proposalGenerating,
   onGenerate,
+  prdText = "",
+  architectureManifest = null,
+  prdApproved = false,
 }: ProjectProposalExportProps) => {
   const [downloading, setDownloading] = useState(false);
+  const [forgeOpen, setForgeOpen] = useState(false);
 
   const canGenerate = budgetStatus === "approved";
   const hasProposal = !!proposalData?.proposalMarkdown;
+  const canPublishForge = hasProposal && prdApproved && prdText.length >= 1000;
   const jargonWarnings: string[] =
     proposalData?.proposal_meta?.internal_jargon_warnings || [];
 
@@ -159,6 +171,48 @@ export const ProjectProposalExport = ({
             {downloading ? "Generando PDF..." : "Descargar propuesta cliente PDF"}
           </Button>
         </div>
+
+        {/* Expert Forge — materializa el proyecto tras aprobar la propuesta */}
+        <div className="rounded-lg border border-border/60 bg-muted/10 p-3 space-y-2">
+          <div className="flex items-start gap-2">
+            <Rocket className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-foreground">
+                Materializar en Expert Forge
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Una vez aprobada la propuesta, publica el proyecto en Expert Forge
+                para crear automáticamente los componentes (RAGs + especialistas).
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => {
+              if (!canPublishForge) {
+                toast.error("Genera la propuesta y aprueba el PRD antes de publicar");
+                return;
+              }
+              setForgeOpen(true);
+            }}
+            disabled={!canPublishForge}
+            variant="outline"
+            size="sm"
+            className="gap-2 w-full sm:w-auto"
+          >
+            <Rocket className="w-3.5 h-3.5" />
+            Publicar en Expert Forge
+          </Button>
+        </div>
+
+        <PublishToForgeDialog
+          open={forgeOpen}
+          onOpenChange={setForgeOpen}
+          projectId={projectId}
+          projectName={projectName}
+          projectDescription={company}
+          prdText={prdText}
+          architectureManifest={architectureManifest}
+        />
 
         {hasProposal && (
           <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-1.5">

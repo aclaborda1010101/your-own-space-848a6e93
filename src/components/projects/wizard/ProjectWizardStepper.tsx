@@ -18,12 +18,9 @@ export interface PipelinePhase {
 export const PIPELINE_PHASES: PipelinePhase[] = [
   { id: "entrada",     label: "Entrada",               uiStep: 1, dbStep: 1 },
   { id: "briefing",    label: "Briefing",              uiStep: 2, dbStep: 2 },
-  { id: "alcance",     label: "Alcance",               uiStep: 3, dbStep: 10, chainedKey: "alcance" },
-  { id: "auditoria",   label: "Auditoría IA",          uiStep: 3, dbStep: 11, chainedKey: "auditoria" },
-  { id: "patrones",    label: "Patrones",              uiStep: 3, dbStep: 12, chainedKey: "patrones" },
   { id: "prd",         label: "PRD Técnico",           uiStep: 3, dbStep: 3,  chainedKey: "prd" },
-  { id: "mvp",         label: "Descripción MVP",       uiStep: 4, dbStep: 4 },
-  { id: "forge",       label: "Expert Forge",          uiStep: 4, dbStep: 300 },
+  { id: "presupuesto", label: "Presupuesto",           uiStep: 4, dbStep: 6 },
+  { id: "propuesta",   label: "Propuesta cliente",     uiStep: 5, dbStep: 30 },
 ];
 
 type PhaseVisualStatus = "completed" | "processing" | "locked" | "current" | "pending";

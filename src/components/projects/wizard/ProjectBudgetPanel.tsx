@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { Calculator, Loader2, TrendingUp, Server, Package, Star, AlertTriangle, Pencil, Save, X, Download, FileText, Users, Lock, Eye, EyeOff, CheckCircle2 } from "lucide-react";
+import { Calculator, Loader2, TrendingUp, Server, Package, Star, AlertTriangle, Pencil, Save, X, Users, Eye, EyeOff, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { budgetToCommercialTermsV1 } from "@/lib/budgetToCommercialTerms";
@@ -94,9 +94,6 @@ export const ProjectBudgetPanel = ({
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState<BudgetData | null>(null);
-  const [selectedExportModels, setSelectedExportModels] = useState<number[]>([]);
-  const [exportingPdf, setExportingPdf] = useState(false);
-  const [budgetExportMode, setBudgetExportMode] = useState<'internal' | 'client'>('client');
   const [approving, setApproving] = useState(false);
   // Vista global del panel: cliente oculta márgenes, costes internos, horas
   const [viewMode, setViewMode] = useState<'internal' | 'client'>('internal');
@@ -105,8 +102,6 @@ export const ProjectBudgetPanel = ({
   useEffect(() => {
     if (budgetData) {
       setEditData(structuredClone(budgetData));
-      // Auto-select all models for export
-      setSelectedExportModels(budgetData.monetization_models?.map((_, i) => i) || []);
     }
   }, [budgetData]);
 
@@ -223,67 +218,7 @@ export const ProjectBudgetPanel = ({
     setEditing(false);
   };
 
-  const toggleExportModel = (idx: number) => {
-    setSelectedExportModels(prev =>
-      prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
-    );
-  };
-
-  const handleExportPdf = async () => {
-    if (!displayData || selectedExportModels.length === 0) return;
-    setExportingPdf(true);
-    try {
-      const selectedModelsData = displayData.monetization_models.filter((_, i) => selectedExportModels.includes(i));
-
-      // In client mode, strip sensitive internal data
-      const isClient = budgetExportMode === 'client';
-      const filteredData: any = {
-        ...displayData,
-        monetization_models: selectedModelsData.map(m => {
-          if (!isClient) return m;
-          const { your_margin_pct, ...rest } = m;
-          return rest;
-        }),
-      };
-      if (isClient && filteredData.development) {
-        const { your_cost_eur, margin_pct, ...devRest } = filteredData.development;
-        filteredData.development = devRest;
-      }
-
-      const { data, error } = await supabase.functions.invoke("generate-document", {
-        body: {
-          projectId,
-          stepNumber: 6,
-          content: filteredData,
-          contentType: "json",
-          projectName: projectName || "Proyecto",
-          company,
-          date: new Date().toISOString().split("T")[0],
-          version: "v1",
-          exportMode: budgetExportMode,
-        },
-      });
-      if (error) throw error;
-      if (!data?.url) throw new Error("No download URL returned");
-
-      const response = await fetch(data.url);
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = data.fileName || `presupuesto-${projectName || "proyecto"}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-      toast.success("Presupuesto PDF descargado");
-    } catch (err: any) {
-      console.error("Budget PDF export error:", err);
-      toast.error("Error al generar PDF: " + (err.message || "Error desconocido"));
-    } finally {
-      setExportingPdf(false);
-    }
-  };
+  // Handlers de export PDF eliminados: la propuesta cliente vive en el Paso 5.
 
   const displayData = editing ? editData : budgetData;
 
@@ -806,95 +741,7 @@ export const ProjectBudgetPanel = ({
               </p>
             )}
 
-            {/* ── Export PDF section ── */}
-            {displayData.monetization_models && displayData.monetization_models.length > 0 && (
-              <div className="space-y-3 border-t border-border/50 pt-4 mt-4">
-                <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
-                  <FileText className="w-4 h-4 text-primary" />
-                  Exportar Presupuesto a PDF
-                </h4>
-                <p className="text-xs text-muted-foreground">
-                  Selecciona el modo de exportación y los modelos a incluir.
-                </p>
-
-                {/* Export mode toggle */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setBudgetExportMode('client')}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
-                      budgetExportMode === 'client'
-                        ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20 text-foreground"
-                        : "border-border/50 text-muted-foreground hover:border-border"
-                    }`}
-                  >
-                    <Users className="w-3.5 h-3.5" />
-                    Cliente
-                    <span className="text-[10px] text-muted-foreground font-normal">Sin márgenes ni costes internos</span>
-                  </button>
-                  <button
-                    onClick={() => setBudgetExportMode('internal')}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
-                      budgetExportMode === 'internal'
-                        ? "border-amber-500/40 bg-amber-500/5 ring-1 ring-amber-500/20 text-foreground"
-                        : "border-border/50 text-muted-foreground hover:border-border"
-                    }`}
-                  >
-                    <Lock className="w-3.5 h-3.5" />
-                    Interno
-                    <span className="text-[10px] text-muted-foreground font-normal">Con márgenes y análisis completo</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {displayData.monetization_models.map((model, idx) => (
-                    <label
-                      key={idx}
-                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                        selectedExportModels.includes(idx)
-                          ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20"
-                          : "border-border/50 hover:border-border"
-                      }`}
-                    >
-                      <Checkbox
-                        checked={selectedExportModels.includes(idx)}
-                        onCheckedChange={() => toggleExportModel(idx)}
-                        className="mt-0.5 shrink-0"
-                      />
-                      <div className="min-w-0">
-                        <span className="text-sm font-medium text-foreground">{model.name}</span>
-                        {model.setup_price_eur && (
-                          <span className="text-[11px] text-muted-foreground ml-2">Setup: €{model.setup_price_eur}</span>
-                        )}
-                        {model.monthly_price_eur && (
-                          <span className="text-[11px] text-muted-foreground ml-2">Mensual: €{model.monthly_price_eur}</span>
-                        )}
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                <div className="flex items-center gap-3">
-                  <Button
-                    onClick={handleExportPdf}
-                    disabled={selectedExportModels.length === 0 || exportingPdf}
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5"
-                  >
-                    {exportingPdf ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Download className="w-3.5 h-3.5" />
-                    )}
-                    {exportingPdf ? "Generando..." : budgetExportMode === 'client' ? "Exportar PDF Cliente" : "Exportar PDF Interno"}
-                  </Button>
-                  {selectedExportModels.length > 0 && (
-                    <Badge variant="secondary" className="text-[10px]">
-                      {selectedExportModels.length} de {displayData.monetization_models.length} modelo{displayData.monetization_models.length > 1 ? "s" : ""}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            )}
+            {/* Bloque export presupuesto eliminado: el cliente recibe la propuesta (Paso 5), no el presupuesto. */}
           </div>
         )}
       </div>

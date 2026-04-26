@@ -202,21 +202,40 @@ interface VerdictHint {
   required_actions?: string[];
 }
 
+/**
+ * Normalise a free-text phase to one of: "MVP", "F2", "F3", or "" (unknown).
+ *
+ * Critical: registry components carry `phase: "F3_registry_builder"` which is
+ * the *pipeline* step name, NOT a delivery phase. Accept only delivery phase
+ * tokens (MVP / FAST_FOLLOW / ROADMAP / F1 / F2 / F3 with delivery context).
+ */
+function normalizeDeliveryPhase(raw: string): "MVP" | "F2" | "F3" | "" {
+  const s = String(raw ?? "").toUpperCase().trim();
+  if (!s) return "";
+  // Reject pipeline step names (registry/audit/feasibility builders).
+  if (/REGISTRY_BUILDER|AUDIT|FEASIBILITY|EXTRACTION|ARCHITECT/.test(s)) return "";
+  if (/MVP|F1\b|FOUNDATION/.test(s)) return "MVP";
+  if (/FAST.?FOLLOW|F2\b/.test(s)) return "F2";
+  if (/ROADMAP|F3\b/.test(s)) return "F3";
+  return "";
+}
+
 function bucketFromVerdict(c: any, hint: VerdictHint | undefined): ScopeBucket {
-  const phase = String(hint?.recommended_delivery_phase ?? c?.suggested_delivery_phase ?? c?.phase ?? "")
-    .toUpperCase();
+  const phase = normalizeDeliveryPhase(
+    hint?.recommended_delivery_phase ?? c?.suggested_delivery_phase ?? c?.phase ?? "",
+  );
   const v = hint?.verdict;
 
   if (v === "reject") return "rejected_out_of_scope";
   if (v === "defer") {
-    if (phase.includes("F3") || phase.includes("ROADMAP")) return "roadmap_f3";
+    if (phase === "F3") return "roadmap_f3";
     return "fast_follow_f2";
   }
   if (v === "requires_poc") return "fast_follow_f2";
   // keep / simplify / requires_data_readiness / requires_compliance_review → MVP by default,
   // unless component is explicitly tagged as F2/F3 by F3 builder.
-  if (phase.includes("F3")) return "roadmap_f3";
-  if (phase.includes("F2") && v !== "requires_data_readiness" && v !== "requires_compliance_review") {
+  if (phase === "F3") return "roadmap_f3";
+  if (phase === "F2" && v !== "requires_data_readiness" && v !== "requires_compliance_review") {
     return "fast_follow_f2";
   }
   return "mvp";

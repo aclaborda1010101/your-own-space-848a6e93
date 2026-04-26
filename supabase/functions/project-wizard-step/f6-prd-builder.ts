@@ -94,6 +94,7 @@ export interface TechnicalPrdV1 {
   schema_version: "1.0.0";
   project_name: string;
   client_name: string;
+  decision_maker_name?: string;
   generated_at: string;
   source_step: { step_number: 28; version: number; row_id: string };
   executive_summary: {
@@ -233,6 +234,7 @@ export interface F6Input {
   source_step: { step_number: 28; version: number; row_id: string };
   projectName: string;
   clientName: string;
+  decisionMakerName?: string;
 }
 
 export function buildTechnicalPrd(input: F6Input): F6Output {
@@ -264,6 +266,7 @@ export function buildTechnicalPrd(input: F6Input): F6Output {
     schema_version: "1.0.0",
     project_name: input.projectName,
     client_name: input.clientName,
+    decision_maker_name: input.decisionMakerName,
     generated_at: new Date().toISOString(),
     source_step: input.source_step,
     executive_summary: {

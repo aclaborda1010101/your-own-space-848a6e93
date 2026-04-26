@@ -1781,8 +1781,9 @@ REGLAS PARA deep_patterns:
         .maybeSingle();
       const newVersion28 = existing28 ? existing28.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing28?.id || undefined,
+      // FIX: insert a NEW versioned row each time (do NOT overwrite previous version
+      // by reusing existing28.id — that destroyed approved Step 28 v2 history).
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 28,
         step_name: "Pipeline v2 — F5 Scope Architect",

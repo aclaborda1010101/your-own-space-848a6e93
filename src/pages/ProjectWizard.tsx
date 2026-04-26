@@ -423,43 +423,21 @@ const ProjectWizardEdit = () => {
             </>
           )}
 
-          {currentStep === 4 && (
-            <ProjectWizardGenericStep
-              stepNumber={4}
-              stepName="Descripción MVP"
-              description="Genera una descripción detallada del Minimum Viable Product con funcionalidades core, criterios de éxito y plan de lanzamiento."
-              outputData={step4Data?.outputData || null}
-              generating={generating}
-              onGenerate={async () => {
-                await runGenericStep(4, "generate_mvp");
-              }}
-              onApprove={async () => {
-                await approveStep(4, undefined, { autoChain: autoChainEnabled });
-              }}
-              generateLabel="Generar Descripción MVP"
-              isMarkdown={true}
-              projectId={id}
-              projectName={project.name}
-              company={project.company}
-              version={step4Data?.version || 1}
-              onUpdateOutputData={(newData) => updateStepOutputData(4, newData)}
-              exportMode={exportMode}
-              onExportModeChange={setExportMode}
-              status={step4Data?.status}
-            />
-          )}
+          {/*
+            Paso 4 (Descripción MVP) movido a la sección "Avanzado / Interno":
+            no es parte del flujo comercial principal y se solapa con el PRD y
+            la propuesta cliente. Sigue accesible desde abajo.
+          */}
         </div>
       </div>
 
 
       {/* Paso 4 — Budget panel — disponible cuando exista el PRD (aprobado o no) */}
       {(() => {
-        const step3 = steps.find(s => s.stepNumber === 3);
-        const hasPRD = !!step3?.outputData;
-        const prdApproved = step3?.status === "approved";
+        const hasPRD = !!step3Data?.outputData;
         if (!hasPRD) return null;
         return (
-          <div className="space-y-2">
+          <div id="budget-internal-card" className="space-y-2 scroll-mt-4">
             {!prdApproved && (
               <div className="text-xs text-muted-foreground border border-dashed border-border/40 rounded-md px-3 py-2 bg-muted/20">
                 El PRD aún no está aprobado. Puedes ir trabajando el presupuesto; al aprobar el PRD se incorporará automáticamente al pipeline.
@@ -480,11 +458,11 @@ const ProjectWizardEdit = () => {
         );
       })()}
 
-      {/* Paso 5 — Propuesta cliente (F7) — disponible cuando exista presupuesto */}
-      {budgetData && steps.find(s => s.stepNumber === 3)?.outputData && (() => {
+      {/* Paso 5 — Propuesta cliente (F7) + Expert Forge — disponible cuando exista presupuesto */}
+      {budgetData && step3Data?.outputData && (() => {
         const budgetApproved = budgetStatus === "approved";
         return (
-          <div className="space-y-2">
+          <div id="proposal-export-card" className="space-y-2 scroll-mt-4">
             {!budgetApproved && (
               <div className="text-xs text-muted-foreground border border-dashed border-border/40 rounded-md px-3 py-2 bg-muted/20">
                 El presupuesto aún no está aprobado. Puedes generar la propuesta en borrador para revisar antes de cerrarla.
@@ -498,6 +476,9 @@ const ProjectWizardEdit = () => {
               proposalData={proposalData}
               proposalGenerating={proposalGenerating}
               onGenerate={generateClientProposal}
+              prdText={prdFullText}
+              architectureManifest={manifestData}
+              prdApproved={prdApproved}
             />
           </div>
         );

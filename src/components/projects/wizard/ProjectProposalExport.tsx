@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CollapsibleCard } from "@/components/dashboard/CollapsibleCard";
-import { FileText, Loader2, Download, Sparkles, AlertCircle } from "lucide-react";
+import { FileText, Loader2, Download, Sparkles, AlertCircle, Rocket } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { PublishToForgeDialog } from "./PublishToForgeDialog";
 
 interface ProposalData {
   proposalMarkdown?: string;

@@ -801,6 +801,17 @@ function mergeHints(c: any, hints: VerdictHint[]): {
     }
   }
 
+  // ── 3.5. Dedupe duplicate ScopeComponents (institutional buyer / Benatar) ─
+  // Step 25 / F4b sometimes emit two near-identical components (e.g.
+  // "Detector de compradores institucionales" + "Detector de compradores
+  // institucionales (Benatar)"). Merge them in scope so the PRD does not show
+  // a duplicate fast-follow item.
+  for (const phase of [
+    "data_foundation", "mvp", "fast_follow_f2", "roadmap_f3", "rejected_out_of_scope",
+  ] as ScopeBucket[]) {
+    buckets[phase] = mergeDuplicateScopeComponents(buckets[phase], decisionLog);
+  }
+
   // ── 4. Compute aggregated blocker lists ──────────────────────────────────
   const allConsumed = [
     ...buckets.data_foundation,
@@ -808,6 +819,12 @@ function mergeHints(c: any, hints: VerdictHint[]): {
     ...buckets.fast_follow_f2,
     ...buckets.roadmap_f3,
   ];
+
+  // Dedupe internal blockers per component (type + reason + artifacts).
+  for (const c of [...allConsumed, ...buckets.rejected_out_of_scope]) {
+    c.blockers = dedupeComponentBlockers(c.blockers);
+    c.required_actions = Array.from(new Set(c.required_actions.map((a) => a.trim()).filter(Boolean)));
+  }
 
   const compliance_blockers: ComplianceBlockerEntry[] = allConsumed.flatMap((c) =>
     c.blockers

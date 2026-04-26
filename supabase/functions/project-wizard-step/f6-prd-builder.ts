@@ -344,7 +344,10 @@ export function renderPrdMarkdown(prd: TechnicalPrdV1): string {
   lines.push(`# PRD Técnico de Construcción — ${prd.project_name}`);
   lines.push("");
   lines.push(`> **Cliente / empresa:** ${prd.client_name}`);
-  lines.push(`> **Producto:** ${prd.project_name}`);
+  if (prd.decision_maker_name) {
+    lines.push(`> **Decisor:** ${prd.decision_maker_name}`);
+  }
+  lines.push(`> **Proyecto / Producto:** ${prd.project_name}`);
   lines.push(`> **Fuente de alcance:** \`scope_architecture_v1\` (Step ${prd.source_step.step_number} v${prd.source_step.version}, row \`${prd.source_step.row_id}\`)`);
   lines.push(`> **Generado:** ${prd.generated_at} · **Pipeline:** v2 determinista (sin LLM)`);
   lines.push("");
@@ -451,7 +454,7 @@ export function renderPrdMarkdown(prd: TechnicalPrdV1): string {
   lines.push("## Soul capture plan");
   lines.push("");
   if (prd.soul_capture_plan.required) {
-    lines.push(`- Sesiones: ${prd.soul_capture_plan.sessions} × ${prd.soul_capture_plan.session_duration_min} min (${prd.soul_capture_plan.weeks_window})`);
+    lines.push(`- Sesiones: ${prd.soul_capture_plan.sessions} × ${prd.soul_capture_plan.session_duration_min} min durante ${humanizeWeeksWindow(prd.soul_capture_plan.weeks_window)}`);
     lines.push(`- Hard dependencies: ${prd.soul_capture_plan.hard_dependencies.join(", ") || "—"}`);
     lines.push(`- Async dependencies: ${prd.soul_capture_plan.async_dependencies.join(", ") || "—"}`);
     lines.push(`- Deliverables:`);

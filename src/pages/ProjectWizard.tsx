@@ -27,8 +27,8 @@ import { PipelineQAPanel } from "@/components/projects/wizard/PipelineQAPanel";
 import { useState, useRef } from "react";
 import { toast } from "sonner";
 
-const TOTAL_STEPS = 4;
-const TOTAL_PIPELINE_PHASES = 8;
+const TOTAL_STEPS = 5;
+const TOTAL_PIPELINE_PHASES = 5;
 
 const ProjectWizardNew = () => {
   const navigate = useNavigate();

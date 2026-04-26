@@ -1624,8 +1624,15 @@ export async function normalizeBrief(
   // 3d. Last-resort word-level swap for residual English bridge tokens.
   applyResidualWordSwap(briefing, changes);
 
-  // 3e. Editorial polish — Gobernanza, traducciones residuales y alerta señal 71.
-  applyEditorialPolish(briefing, changes);
+  // 3e. Editorial polish — Gobernanza, traducciones residuales, alerta señal 71,
+  // sustitución de aliases del proyecto y typos.
+  {
+    const detectedAliases = briefing?.business_extraction_v2?.client_naming_check?.detected_aliases;
+    applyEditorialPolish(briefing, changes, {
+      projectName: ctx.projectName,
+      aliases: Array.isArray(detectedAliases) ? detectedAliases : [],
+    });
+  }
 
   // 4. Semantic dedup (uses canonical override from ctx if provided)
   applySemanticDedup(briefing, changes, ctx);

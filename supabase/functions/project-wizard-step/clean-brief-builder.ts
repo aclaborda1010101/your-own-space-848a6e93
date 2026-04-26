@@ -155,7 +155,13 @@ export function buildCleanBrief(briefing: any, ctx: { projectName: string }): Cl
   // transcripción solo puede aportar `detected_aliases[]`.
   const naming = v2.client_naming_check || {};
   const projectName = clean(ctx.projectName) || "Proyecto";
-  const clientCompany = clean(naming.client_company_name) || projectName;
+  // Si el client_company_name detectado es un alias del projectName
+  // (ej. "AFLU" para "AFFLUX"), usamos directamente el canónico.
+  const rawClient = clean(naming.client_company_name);
+  const clientCompany =
+    rawClient && rawClient !== projectName && looksLikeAlias(rawClient, projectName)
+      ? projectName
+      : (rawClient || projectName);
   const decisionMaker = clean(naming.founder_or_decision_maker);
   const aliases: string[] = Array.isArray(naming.detected_aliases)
     ? naming.detected_aliases.filter((a: any) => typeof a === "string" && a.trim().length > 0)

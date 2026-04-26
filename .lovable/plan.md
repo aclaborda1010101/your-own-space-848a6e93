@@ -1,50 +1,126 @@
-# Diagnóstico
 
-El preview de Lovable te muestra una versión obsoleta del Dashboard (de hace meses) hasta que escribes/interactúas. Esto es un fallo de cache de iframe + bundle del preview, no del código de negocio.
+# Simplificación del wizard de proyecto
 
-**Causas probables:**
+Diagnóstico de lo que ves hoy en `/projects/wizard/:id` vs lo que debería verse según tu feedback.
 
-1. **`runtimeFreshness.ts` solo invalida cuando detecta `__APP_BUILD_ID__` cambiado**, pero ese build ID no se actualiza en cada deploy del preview de Lovable, solo en builds de producción. Por eso el Dashboard renderizado queda "congelado" hasta que React monta y empieza a refetch al primer evento del usuario (focus/click/escribir).
+---
 
-2. **El comentario `// cache-bust:` en `src/main.tsx` está fechado el 2026-04-25T21:05** — no se ha actualizado desde la última sesión de trabajo intenso, por lo que el bundler de Lovable puede estar sirviendo el chunk anterior.
+## 1. Sidebar izquierda (ProjectWizardStepper) — quitar ruido interno
 
-3. **No hay revalidación en mount** del Dashboard: los hooks (`useCheckIn`, `useTasks`, `useCalendar`) cargan datos en `useEffect` pero si el bundle viene de cache, los efectos pueden estar leyendo de una versión vieja del estado en memoria del iframe.
+**Hoy:** la sidebar muestra 8 fases:
+`Entrada · Briefing · Alcance · Auditoría IA · Patrones · PRD Técnico · Descripción MVP · Expert Forge`
 
-# Plan de arreglo (3 cambios mínimos, sin tocar lógica de negocio)
+**Problema:** `Alcance`, `Auditoría IA` y `Patrones` son fases internas del pipeline v2 que se ejecutan automáticamente al pulsar "Generar PRD Técnico (v2)" (steps 25→26→27→28→29 en el backend). El usuario no debe verlas como pasos clicables.
 
-### 1. Forzar cache-bust del bundle
-- Actualizar `src/main.tsx` línea 1 con timestamp actual (`// cache-bust: 2026-04-26T07:00`).
-- Esto fuerza a Vite/Lovable a regenerar el chunk principal y al iframe a descargar bundle nuevo.
+**Cambio:** dejar la sidebar con sólo 5 fases visibles:
 
-### 2. Endurecer `runtimeFreshness` para el preview
-En `src/lib/runtimeFreshness.ts`:
-- En la rama `isPreview()`, además del check actual de Service Worker controller, **comparar el timestamp del HTML servido vs el del bundle cargado**. Si el `index.html` indica un build distinto al que tiene el JS en memoria, forzar `navigateToFreshUrl()` una sola vez.
-- Implementación concreta: leer `<meta name="x-build-ts">` del `document.head` (lo añade Lovable en cada deploy) y compararlo con `__APP_BUILD_ID__`. Si difieren, `nukeSwAndCaches()` + `navigateToFreshUrl()`.
-- Mantener el límite de `PREVIEW_RESET_MAX_ATTEMPTS = 2` para no entrar en loop.
+```
+1. Entrada
+2. Briefing
+3. PRD Técnico         ← engloba alcance/auditoría/patrones internamente
+4. Presupuesto         ← antes era "Descripción MVP" (ver punto 4)
+5. Propuesta cliente   ← antes era el dialog de Expert Forge separado
+```
 
-### 3. Revalidación al volver a la pestaña en el Dashboard
-En `src/pages/Dashboard.tsx`:
-- Añadir un `useEffect` que escuche `visibilitychange` y, cuando `document.visibilityState === "visible"`, dispare un re-fetch ligero de `useCheckIn`, `useTasks`, `useCalendar` (las funciones `refresh`/`refetch` que ya exponen).
-- Esto garantiza que aunque el bundle quede en cache, los datos visibles se refresquen al primer foco — eliminando la sensación de "Dashboard de hace meses".
+Internamente el `ChainedPRDProgress` ya muestra el sub-progreso (alcance / auditoría / patrones / PRD), así que no se pierde visibilidad cuando está corriendo — pero deja de ser una lista de "pasos" del usuario.
 
-# Lo que NO voy a tocar
+**Archivos:**
+- `src/components/projects/wizard/ProjectWizardStepper.tsx`: reducir `PIPELINE_PHASES` a esas 5 entradas. Mantener la lógica de `chainedPhase` para que durante la generación del PRD se muestre el spinner en la fila "PRD Técnico" sin desglose.
 
-- Lógica de F7/Step 30/proposal builder (ya está estable).
-- Pipeline v2 (Step 25–29).
-- Auth, hooks de datos, layout, navegación.
-- Service Worker (sigue desactivado, correcto).
+---
 
-# Criterios de aceptación
+## 2. Paso 4 — Quitar el bloque "Exportar Presupuesto a PDF"
 
-1. Al abrir el preview, el Dashboard muestra datos actuales **antes** de cualquier interacción del usuario.
-2. Si Lovable redeploya el preview, una sola recarga deja el bundle al día (no hace falta hard-refresh manual).
-3. Volver a la pestaña tras dejarla en background actualiza tareas/check-in/calendario sin recargar.
-4. No hay loops de reload (máximo 2 intentos por sesión).
+**Hoy:** dentro de `ProjectBudgetPanel.tsx` (líneas 809–897) hay un bloque completo con:
+- Toggle "Cliente / Interno"
+- Checkboxes de modelos
+- Botón "Exportar PDF Cliente" / "Exportar PDF Interno"
 
-# Archivos a editar
+**Problema:** al cliente nunca se le entrega el presupuesto suelto, se le entrega la propuesta. Este bloque sólo confunde.
 
-- `src/main.tsx` (1 línea)
-- `src/lib/runtimeFreshness.ts` (~15 líneas en la rama preview)
-- `src/pages/Dashboard.tsx` (1 `useEffect` nuevo, ~10 líneas)
+**Cambio:**
+- Eliminar todo el bloque (líneas 809–897).
+- Eliminar también los imports/estado asociados que queden huérfanos (`selectedExportModels`, `budgetExportMode`, `exportingPdf`, `handleExportPdf`, `Lock`, `Users`, etc., revisando que no se usen en otro sitio del panel).
 
-¿Apruebas?
+**Resultado:** el Paso 4 queda con generar / editar / aprobar el presupuesto. Punto.
+
+---
+
+## 3. Paso 5 — "Propuesta cliente" ya existe como `ProjectProposalExport`
+
+Ya se renderiza correctamente debajo del Paso 4 cuando hay budget + PRD (`ProjectWizard.tsx` líneas 438–459) y tiene los dos botones que pediste:
+- "Generar propuesta cliente"
+- "Descargar propuesta cliente PDF"
+
+**Cambio menor:** que el título del card sea claramente **"Paso 5 · Propuesta cliente"** (ya lo es) y que sea el lugar donde **también** vive el botón de Expert Forge (ver punto 5). Sin tocar la lógica de F7 que acabamos de arreglar.
+
+---
+
+## 4. ¿Qué pasa con "Descripción MVP" (paso 4 actual)?
+
+**Hoy:** es un step del wizard con su propio botón "Generar Descripción MVP". Tu mensaje dice "déjala si quieres".
+
+**Propuesta:** moverla al panel **"Avanzado / Interno"** (ya colapsado por defecto) como bloque opcional, y que el "Paso 4" visible en la sidebar pase a ser **Presupuesto** (que es lo que el usuario realmente hace después del PRD). Así:
+
+- Sidebar: Entrada → Briefing → PRD → Presupuesto → Propuesta cliente.
+- Header / progress: `currentStep` 1..5 con esos labels.
+- "Descripción MVP" sigue existiendo en backend (step 4 de DB) pero como herramienta interna, no como paso obligatorio del flujo comercial.
+
+Si prefieres dejarla como paso visible, dilo y la mantengo en la sidebar como paso 4 y el Presupuesto sería paso 5 y la Propuesta paso 6. Mi recomendación es la primera (más limpio), pero es decisión tuya — pregunto en la sección final.
+
+---
+
+## 5. Expert Forge — moverlo al Paso 5 (Propuesta cliente)
+
+**Hoy:** el botón "Publicar en Expert Forge" está dentro del `CollapsibleCard` "Avanzado / Interno", colapsado por defecto. Por eso no lo ves desde fuera.
+
+**Cambio:** sacarlo del bloque interno y meterlo dentro del card de Paso 5 (`ProjectProposalExport`) como un tercer botón al lado de "Generar / Descargar propuesta", con el copy:
+
+> Una vez aprobada la propuesta, publica el proyecto en Expert Forge para materializar los componentes (RAGs + especialistas).
+
+Quedaría:
+- Generar propuesta cliente
+- Descargar propuesta cliente PDF
+- **Publicar en Expert Forge** (deshabilitado hasta que la propuesta esté generada)
+
+Mantiene el `PublishToForgeDialog` y `ManifestViewer` que ya existen, sólo cambia el sitio donde se invocan.
+
+---
+
+## 6. Panel "Avanzado / Interno" — mantener para QA
+
+El `PipelineQAPanel` con los botones de cada subpaso (build_registry, audit_f4a, audit_f4b, architect_scope, generate_technical_prd, generate_client_proposal, audit_final_deliverables) **se queda dentro del CollapsibleCard "Avanzado / Interno"** colapsado por defecto. Es la herramienta que usamos para depurar cuando algo sale mal (como esta semana). No estorba porque está plegado.
+
+Mismo trato para:
+- `ProjectDocumentsPanel` (descarga histórica de documentos por step)
+- `ProjectActivityTimeline`
+- `ManifestViewer`
+
+---
+
+## Resumen de archivos a tocar
+
+| Archivo | Cambio |
+|---|---|
+| `src/components/projects/wizard/ProjectWizardStepper.tsx` | Reducir `PIPELINE_PHASES` a 5 fases visibles y mapear los DB-steps correctos |
+| `src/components/projects/wizard/ProjectBudgetPanel.tsx` | Eliminar bloque "Exportar Presupuesto a PDF" (líneas 809–897) y limpiar estado huérfano |
+| `src/components/projects/wizard/ProjectProposalExport.tsx` | Añadir botón "Publicar en Expert Forge" + integrar `PublishToForgeDialog` |
+| `src/pages/ProjectWizard.tsx` | Actualizar `stepLabels`, `TOTAL_STEPS`, mover Expert Forge fuera de "Avanzado / Interno", recolocar "Descripción MVP" según decisión del punto 4 |
+
+No se toca:
+- Backend / edge functions (F0–F7 quedan igual, ya está corregido)
+- Lógica de `useProjectWizard.ts`
+- Lógica del pipeline encadenado (`chainedPhase`, `prdSubProgress`)
+- `PipelineQAPanel` (sigue como herramienta interna)
+
+---
+
+## Pregunta antes de implementar
+
+**Sobre "Descripción MVP" (step 4 actual del wizard):**
+- (a) Sacarlo de la sidebar y dejarlo solo en "Avanzado / Interno" como bloque opcional. La sidebar queda en 5 pasos limpios.
+- (b) Mantenerlo como paso visible. La sidebar pasa a 6 pasos: Entrada · Briefing · PRD · Descripción MVP · Presupuesto · Propuesta cliente.
+
+Mi recomendación: **(a)**, porque la "Descripción MVP" se solapa con lo que el PRD técnico y la propuesta cliente ya describen, y es lo que estaba haciendo que el flujo se vea recargado.
+
+Cuando apruebes el plan, pásame también qué opción prefieres del punto 4 y lo implemento de un tirón.

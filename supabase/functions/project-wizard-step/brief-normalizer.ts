@@ -1073,7 +1073,15 @@ function applyEditorialPolish(
     if (Array.isArray(node)) return node.map((item, i) => walk(item, `${path}[${i}]`));
     if (node && typeof node === "object") {
       const out: Record<string, any> = {};
-      for (const [k, v] of Object.entries(node)) out[k] = k.startsWith("_") ? v : walk(v, path ? `${path}.${k}` : k);
+      for (const [k, v] of Object.entries(node)) {
+        // Preservar el bloque de naming intacto: aliases y nombres canónicos
+        // se gestionan aparte y NO deben sufrir sustitución de aliases.
+        if (k === "client_naming_check") {
+          out[k] = v;
+          continue;
+        }
+        out[k] = k.startsWith("_") ? v : walk(v, path ? `${path}.${k}` : k);
+      }
       return out;
     }
     return node;

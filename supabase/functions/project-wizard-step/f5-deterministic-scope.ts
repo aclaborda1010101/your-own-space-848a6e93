@@ -471,9 +471,12 @@ function mergeHints(c: any, hints: VerdictHint[]): {
     if (!compId) continue;
     consumedIds.add(compId);
 
-    const hint = reviewByCompId.get(compId);
-    let bucket = bucketFromVerdict(c, hint);
-    let { blockers, status } = blockersFromVerdictAndComponent(c, hint);
+    const hints = reviewsByCompId.get(compId) ?? [];
+    const merged = mergeHints(c, hints);
+    let bucket = merged.bucket;
+    let { blockers, status } = { blockers: merged.blockers, status: merged.status };
+    const requiredActionsBase = merged.required_actions;
+    const hint = merged.primaryHint;
     const soulDep = resolveSoulDependency(c);
 
     // ── Decision 2 — Benatar forced to F2 ──────────────────────────────────
@@ -529,14 +532,15 @@ function mergeHints(c: any, hints: VerdictHint[]): {
       });
     }
 
-    // F4b verdict trace
-    if (hint?.verdict) {
+    // F4b verdict trace (logs each verdict applied to this component).
+    for (const h of hints) {
+      if (!h.verdict) continue;
       decisionLog.push({
         source: "f4b_verdict",
-        decision_id: `f4b_${hint.verdict}`,
+        decision_id: `f4b_${h.verdict}`,
         applied_to: compId,
         action: `assigned_to_${bucket}`,
-        reason: hint.reason ?? "F4b verdict applied.",
+        reason: h.reason ?? "F4b verdict applied.",
       });
     }
 
@@ -552,7 +556,7 @@ function mergeHints(c: any, hints: VerdictHint[]): {
       business_job: c?.business_job,
       priority: hint?.recommended_priority ?? c?.priority,
       blockers,
-      required_actions: Array.isArray(hint?.required_actions) ? hint!.required_actions! : [],
+      required_actions: requiredActionsBase,
       soul_dependency: soulDep,
       compliance_flags: Array.isArray(c?.compliance_flags) ? c.compliance_flags : undefined,
     };

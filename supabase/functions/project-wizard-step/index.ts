@@ -2088,8 +2088,7 @@ REGLAS PARA deep_patterns:
         .maybeSingle();
       const newVersion31 = existing31 ? existing31.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").upsert({
-        id: existing31?.id || undefined,
+      await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 31,
         step_name: "Pipeline v2 — F8 Final Deliverables Audit",

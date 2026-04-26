@@ -1522,6 +1522,7 @@ export const useProjectWizard = (projectId?: string) => {
     normalizing,
     chainedPhase,
     prdSubProgress,
+    pipelineV2SubStep,
     internalStepStatuses,
     stepNames: STEP_NAMES,
     createWizardProject,

@@ -367,6 +367,22 @@ export function budgetToCommercialTermsV1(
     taxes: "IVA no incluido. Se aplicará el tipo vigente.",
     currency: "EUR",
     validity_days: 30,
+    implementation_override: budget.implementation_override
+      ? {
+          mvp_weeks:
+            typeof budget.implementation_override.mvp_weeks === "number" &&
+            budget.implementation_override.mvp_weeks > 0
+              ? budget.implementation_override.mvp_weeks
+              : undefined,
+          fast_follow_weeks:
+            typeof budget.implementation_override.fast_follow_weeks === "number" &&
+            budget.implementation_override.fast_follow_weeks >= 0
+              ? budget.implementation_override.fast_follow_weeks
+              : undefined,
+          start_date: budget.implementation_override.start_date?.trim() || undefined,
+          notes: budget.implementation_override.notes?.trim() || undefined,
+        }
+      : undefined,
 
     // Internal audit
     selected_models: models,

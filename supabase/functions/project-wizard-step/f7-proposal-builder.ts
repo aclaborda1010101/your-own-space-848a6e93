@@ -708,7 +708,10 @@ export function commercialTermsFromBudgetData(budget: any): CommercialTermsV1 | 
     : undefined;
   const rawSetup = developmentTotal && developmentTotal > 0 ? developmentTotal : setupParsed?.min;
   const rawSetupMax = developmentTotal && setupParsed?.min !== developmentTotal ? undefined : setupParsed?.max;
-  const monthly = monthlyParsed?.min ?? (typeof budget?.recurring_monthly?.total_monthly_eur === "number" ? budget.recurring_monthly.total_monthly_eur : undefined);
+  const recurringTotal = typeof budget?.recurring_monthly?.total_monthly_eur === "number" && budget.recurring_monthly.total_monthly_eur > 0
+    ? budget.recurring_monthly.total_monthly_eur
+    : undefined;
+  const monthly = recurringTotal ?? monthlyParsed?.min;
   const crRaw = budget?.consulting_retainer ?? {};
   const consultingEnabled = !!crRaw.enabled || (crRaw.monthly_fee_eur ?? 0) > 0 || (crRaw.monthly_hours ?? 0) > 0;
   const discountPct = Math.max(0, Math.min(100, Number(crRaw.discount_pct ?? 50)));
@@ -724,9 +727,9 @@ export function commercialTermsFromBudgetData(budget: any): CommercialTermsV1 | 
       ? setupFeeMax !== undefined ? `${fmtEuroNumber(setupFee)} - ${fmtEuroNumber(setupFeeMax)} EUR` : `${fmtEuroNumber(setupFee)} EUR`
       : setupParsed?.display,
     monthly_retainer: monthly,
-    monthly_retainer_max: monthlyParsed?.max,
+    monthly_retainer_max: recurringTotal !== undefined ? undefined : monthlyParsed?.max,
     monthly_retainer_display: monthly !== undefined
-      ? monthlyParsed?.max !== undefined ? `${fmtEuroNumber(monthly)} - ${fmtEuroNumber(monthlyParsed.max)} EUR` : `${fmtEuroNumber(monthly)} EUR`
+      ? recurringTotal === undefined && monthlyParsed?.max !== undefined ? `${fmtEuroNumber(monthly)} - ${fmtEuroNumber(monthlyParsed.max)} EUR` : `${fmtEuroNumber(monthly)} EUR`
       : monthlyParsed?.display,
     ai_usage_cost_policy: "Costes de IA/API no incluidos por defecto, facturados según consumo real.",
     payment_terms: scrubInternalLeak(budget?.pricing_notes) || "50% al inicio del proyecto y 50% contra entrega del MVP. Mensualidades, en su caso, facturadas a mes vencido.",

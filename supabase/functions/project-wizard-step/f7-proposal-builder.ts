@@ -1024,41 +1024,26 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
   lines.push(`**Modalidad:** ${modelLabel}`);
   lines.push("");
 
-  // Helper: prefiere display si está; si no, formatea el número.
-  const displaySetup = p.budget.setup_fee_display ??
-    (p.budget.setup_fee !== undefined ? fmtMoney(p.budget.setup_fee, c) : undefined);
-  const displayMonthly = p.budget.monthly_retainer_display ??
-    (p.budget.monthly_retainer !== undefined ? fmtMoney(p.budget.monthly_retainer, c) : undefined);
-
   const cr = p.budget.consulting_retainer;
   const consultingActive = !!cr?.enabled;
 
-  if (displaySetup) {
-    if (consultingActive && cr?.setup_fee_before_discount !== undefined) {
-      const beforeDisplay =
-        cr.setup_fee_max_before_discount !== undefined
-          ? `${fmtMoney(cr.setup_fee_before_discount, c)} - ${fmtMoney(cr.setup_fee_max_before_discount, c)}`
-          : fmtMoney(cr.setup_fee_before_discount, c);
-      lines.push(`- **Cuota inicial (desarrollo):** ~~${beforeDisplay}~~ → **${displaySetup}**`);
-      lines.push(`  - _Descuento del ${cr.discount_pct}% aplicado por contratación de Consultoría/Asesoría IA recurrente._`);
-    } else {
-      lines.push(`- **Cuota inicial (desarrollo):** ${displaySetup}`);
-    }
+  // Tabla principal: dos opciones (estándar vs con asesoría IA).
+  // Solo se renderiza si tenemos cifras numéricas claras.
+  const tableLines = renderTwoOptionBudgetTable(p.budget, c);
+  const renderedTable = tableLines.length > 0;
+  for (const l of tableLines) lines.push(l);
+
+  // Fallback si no hay cifras numéricas (rangos, modelos por fases, etc.):
+  // mostramos las cadenas de display tal cual.
+  if (!renderedTable) {
+    const displaySetup = p.budget.setup_fee_display ??
+      (p.budget.setup_fee !== undefined ? fmtMoney(p.budget.setup_fee, c) : undefined);
+    const displayMonthly = p.budget.monthly_retainer_display ??
+      (p.budget.monthly_retainer !== undefined ? fmtMoney(p.budget.monthly_retainer, c) : undefined);
+    if (displaySetup) lines.push(`- **Coste de desarrollo inicial:** ${displaySetup}`);
+    if (displayMonthly) lines.push(`- **Coste de mantenimiento mensual:** ${displayMonthly}`);
   }
-  if (displayMonthly) {
-    lines.push(`- **Mensualidad recurrente:** ${displayMonthly}`);
-  }
-  // Total de referencia (orientativo a 12 meses) — solo si tenemos números
-  // numéricos exactos (no rangos). Si hay rango (max definido), no calculamos.
-  if (
-    p.budget.setup_fee !== undefined &&
-    p.budget.monthly_retainer !== undefined &&
-    p.budget.setup_fee_max === undefined &&
-    p.budget.monthly_retainer_max === undefined
-  ) {
-    const total12 = p.budget.setup_fee + p.budget.monthly_retainer * 12;
-    lines.push(`- **Total estimado primer año:** ${fmtMoney(total12, c)} _(cuota inicial + 12 mensualidades)_`);
-  }
+
   if (p.budget.phase_prices && p.budget.phase_prices.length > 0) {
     lines.push("- **Precios por fase:**");
     for (const ph of p.budget.phase_prices) {
@@ -1071,40 +1056,25 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
       lines.push(`  - **${a.name}**${a.price !== undefined ? `: ${fmtMoney(a.price, c)}` : ""}${a.description ? ` — ${a.description}` : ""}`);
     }
   }
-  if (p.budget.ai_usage_cost_policy) {
+  if (!renderedTable && p.budget.ai_usage_cost_policy) {
     lines.push("");
     lines.push(`**Costes de IA / terceros:** ${p.budget.ai_usage_cost_policy}`);
   }
-  if (p.budget.taxes) {
+  if (!renderedTable && p.budget.taxes) {
     lines.push("");
     lines.push(`**Impuestos:** ${p.budget.taxes}`);
   }
 
-  // ── Tabla comparativa con/sin consultoría IA (solo si aplica) ──
-  for (const l of renderBudgetComparisonTable(p.budget, c)) lines.push(l);
   lines.push("");
 
-  // ── Bloque destacado: Consultoría / Asesoría IA recurrente ──
+  // Bloque informativo opcional sobre la asesoría IA (si aplica), sin repetir cifras.
   if (consultingActive && cr) {
-    section("Consultoría / Asesoría IA recurrente");
+    section("Asesoría e inteligencia artificial recurrente");
     lines.push(
-      `Servicio mensual de acompañamiento estratégico y técnico que reduce la cuota inicial de desarrollo en un **${cr.discount_pct}%**.`,
+      `Servicio mensual de acompañamiento estratégico y técnico${cr.monthly_hours > 0 ? ` con **${cr.monthly_hours} horas** incluidas al mes` : ""}.`,
     );
     lines.push("");
-    lines.push(`- **Cuota mensual:** ${fmtMoney(cr.monthly_fee_eur, c)}/mes`);
-    if (cr.monthly_hours > 0) {
-      lines.push(`- **Horas incluidas:** ${cr.monthly_hours} h/mes de mentoría, asesoría y consultoría.`);
-    }
-    if (cr.setup_fee_before_discount !== undefined) {
-      const beforeDisplay =
-        cr.setup_fee_max_before_discount !== undefined
-          ? `${fmtMoney(cr.setup_fee_before_discount, c)} - ${fmtMoney(cr.setup_fee_max_before_discount, c)}`
-          : fmtMoney(cr.setup_fee_before_discount, c);
-      lines.push(`- **Importe original del desarrollo:** ${beforeDisplay}`);
-      if (displaySetup) {
-        lines.push(`- **Importe con descuento aplicado:** **${displaySetup}**`);
-      }
-    }
+    lines.push("Incluye mentoría, asesoría y consultoría sobre el uso, evolución y aprovechamiento de los componentes de IA del producto, así como prioridades de roadmap.");
     if (cr.notes) {
       lines.push("");
       lines.push(`_${cr.notes}_`);

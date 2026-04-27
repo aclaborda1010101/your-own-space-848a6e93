@@ -72,6 +72,13 @@ interface BudgetData {
     start_date?: string;
     notes?: string;
   };
+  consulting_retainer?: {
+    enabled?: boolean;
+    monthly_fee_eur?: number;
+    monthly_hours?: number;
+    discount_pct?: number;
+    notes?: string;
+  };
 }
 
 interface ProjectBudgetPanelProps {
@@ -148,21 +155,85 @@ export const ProjectBudgetPanel = ({
     };
   }, []);
 
+  // ── Sync setup_price del modelo recomendado con total_development_eur ──
+  // Devuelve el primer importe numérico del string ("13.500" o "13.000-15.000" → 13500).
+  const parseFirstAmount = (raw: string | undefined): number | null => {
+    if (!raw) return null;
+    const m = raw.match(/[\d.,]+/);
+    if (!m) return null;
+    const cleaned = m[0].replace(/\./g, "").replace(",", ".");
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  };
+  const formatAmount = (n: number): string =>
+    Math.round(n).toLocaleString("es-ES", { useGrouping: true });
+
+  const recommendedIdx = (data: BudgetData): number => {
+    if (!data.monetization_models?.length) return -1;
+    if (data.recommended_model) {
+      const i = data.monetization_models.findIndex((m) => m.name === data.recommended_model);
+      if (i >= 0) return i;
+    }
+    return 0;
+  };
+
+  /** ¿Está sincronizado el setup_price del modelo recomendado con total_development_eur? */
+  const isSetupSynced = (data: BudgetData | null): boolean => {
+    if (!data) return true;
+    const dev = data.development?.total_development_eur;
+    const idx = recommendedIdx(data);
+    if (dev == null || idx < 0) return true;
+    const setup = parseFirstAmount(data.monetization_models?.[idx]?.setup_price_eur);
+    if (setup == null) return true; // sin importe → no aplicable
+    // Tolerancia 1% para evitar parpadeo por redondeos.
+    return Math.abs(setup - dev) <= Math.max(50, dev * 0.01);
+  };
+
+  /** Propaga total_development_eur al setup_price del modelo recomendado (mantiene rango si lo había). */
+  const syncSetupWithDev = (data: BudgetData): BudgetData => {
+    const dev = data.development?.total_development_eur;
+    const idx = recommendedIdx(data);
+    if (dev == null || idx < 0 || !data.monetization_models) return data;
+    const models = [...data.monetization_models];
+    const current = models[idx]?.setup_price_eur;
+    const isRange = current && /[-–—]/.test(current);
+    let next: string;
+    if (isRange) {
+      // Mantener proporción del rango original sobre el nuevo total.
+      const parts = current.split(/[-–—]/).map((s) => parseFirstAmount(s)).filter((n): n is number => n != null);
+      if (parts.length === 2 && parts[0] > 0) {
+        const ratio = parts[1] / parts[0];
+        next = `${formatAmount(dev)}-${formatAmount(dev * ratio)}`;
+      } else {
+        next = formatAmount(dev);
+      }
+    } else {
+      next = formatAmount(dev);
+    }
+    models[idx] = { ...models[idx], setup_price_eur: next };
+    return { ...data, monetization_models: models };
+  };
+
+  /** Aplica recalc desarrollo y, si estaba sincronizado, propaga al setup_price del modelo recomendado. */
+  const applyDevChange = (data: BudgetData): BudgetData => {
+    const wasSynced = isSetupSynced(editData);
+    const next = recalcDevelopment(data);
+    return wasSynced ? syncSetupWithDev(next) : next;
+  };
+
   const updatePhaseHours = (idx: number, hours: number) => {
     if (!editData) return;
     const phases = [...editData.development.phases];
     const rate = editData.development.hourly_rate_eur || 0;
     phases[idx] = { ...phases[idx], hours, cost_eur: Math.round(hours * rate) };
-    const next = recalcDevelopment({ ...editData, development: { ...editData.development, phases } });
-    setEditData(next);
+    setEditData(applyDevChange({ ...editData, development: { ...editData.development, phases } }));
   };
 
   const updatePhaseCost = (idx: number, cost_eur: number) => {
     if (!editData) return;
     const phases = [...editData.development.phases];
     phases[idx] = { ...phases[idx], cost_eur };
-    const next = recalcDevelopment({ ...editData, development: { ...editData.development, phases } });
-    setEditData(next);
+    setEditData(applyDevChange({ ...editData, development: { ...editData.development, phases } }));
   };
 
   const updateHourlyRate = (rate: number) => {
@@ -171,11 +242,10 @@ export const ProjectBudgetPanel = ({
       ...p,
       cost_eur: Math.round(p.hours * rate),
     }));
-    const next = recalcDevelopment({
+    setEditData(applyDevChange({
       ...editData,
       development: { ...editData.development, hourly_rate_eur: rate, phases },
-    });
-    setEditData(next);
+    }));
   };
 
   const updateRecurringItem = (idx: number, cost_eur: number) => {
@@ -620,6 +690,32 @@ export const ProjectBudgetPanel = ({
                                 ) : (
                                   <span className="text-foreground font-medium ml-1">€{model.setup_price_eur}</span>
                                 )}
+                                {/* Sync indicator: solo en modelo recomendado y si hay total de desarrollo. */}
+                                {isRecommended &&
+                                  displayData.development?.total_development_eur != null &&
+                                  parseFirstAmount(model.setup_price_eur) != null &&
+                                  !isSetupSynced(displayData) && (
+                                    <>
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[9px] px-1.5 py-0 border-amber-500/40 text-amber-600 bg-amber-500/5"
+                                        title={`Total desarrollo (${displayData.development.total_development_eur.toLocaleString()} €) ≠ setup del cliente`}
+                                      >
+                                        Override
+                                      </Badge>
+                                      {editing && (
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 px-1.5 text-[10px]"
+                                          onClick={() => editData && setEditData(syncSetupWithDev(editData))}
+                                        >
+                                          Sincronizar
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
                               </div>
                             )}
                             {(model.monthly_price_eur || editing) && (
@@ -723,6 +819,167 @@ export const ProjectBudgetPanel = ({
                     );
                   })}
                 </div>
+              </div>
+            )}
+
+            {/* F7.2 — Consultoría/Asesoría IA recurrente mensual */}
+            {(editing || displayData.consulting_retainer?.enabled) && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <TrendingUp className="w-4 h-4 text-primary" />
+                  Consultoría / Asesoría IA recurrente
+                  <span className="text-[10px] font-normal text-muted-foreground">
+                    (mensual · reduce el coste de desarrollo)
+                  </span>
+                </h4>
+                <Card className={`border-border/50 ${displayData.consulting_retainer?.enabled ? "ring-1 ring-primary/30 bg-primary/5" : ""}`}>
+                  <CardContent className="p-3 space-y-2.5">
+                    {editing ? (
+                      <>
+                        <label className="flex items-start gap-2 text-xs cursor-pointer">
+                          <Checkbox
+                            checked={editData?.consulting_retainer?.enabled ?? false}
+                            onCheckedChange={(checked) => {
+                              if (!editData) return;
+                              setEditData({
+                                ...editData,
+                                consulting_retainer: {
+                                  ...editData.consulting_retainer,
+                                  enabled: checked === true,
+                                  discount_pct: editData.consulting_retainer?.discount_pct ?? 50,
+                                },
+                              });
+                            }}
+                            className="mt-0.5 shrink-0"
+                          />
+                          <span className="text-foreground">
+                            <span className="font-medium">Activar consultoría/asesoría recurrente.</span>{" "}
+                            <span className="text-muted-foreground">
+                              Si está activa, el desarrollo se reduce al{" "}
+                              {100 - (editData?.consulting_retainer?.discount_pct ?? 50)}%
+                              del importe original.
+                            </span>
+                          </span>
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <label className="text-xs space-y-1">
+                            <span className="text-muted-foreground">Cuota mensual (€)</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              placeholder="ej. 1500"
+                              value={editData?.consulting_retainer?.monthly_fee_eur ?? ""}
+                              onChange={(e) => {
+                                if (!editData) return;
+                                const v = e.target.value === "" ? undefined : Number(e.target.value);
+                                setEditData({
+                                  ...editData,
+                                  consulting_retainer: { ...editData.consulting_retainer, monthly_fee_eur: v },
+                                });
+                              }}
+                              className="h-8 text-sm"
+                            />
+                          </label>
+                          <label className="text-xs space-y-1">
+                            <span className="text-muted-foreground">Horas/mes incluidas</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              placeholder="ej. 8"
+                              value={editData?.consulting_retainer?.monthly_hours ?? ""}
+                              onChange={(e) => {
+                                if (!editData) return;
+                                const v = e.target.value === "" ? undefined : Number(e.target.value);
+                                setEditData({
+                                  ...editData,
+                                  consulting_retainer: { ...editData.consulting_retainer, monthly_hours: v },
+                                });
+                              }}
+                              className="h-8 text-sm"
+                            />
+                          </label>
+                          <label className="text-xs space-y-1">
+                            <span className="text-muted-foreground">% descuento desarrollo</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              placeholder="50"
+                              value={editData?.consulting_retainer?.discount_pct ?? ""}
+                              onChange={(e) => {
+                                if (!editData) return;
+                                const v = e.target.value === "" ? undefined : Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                                setEditData({
+                                  ...editData,
+                                  consulting_retainer: { ...editData.consulting_retainer, discount_pct: v },
+                                });
+                              }}
+                              className="h-8 text-sm"
+                            />
+                          </label>
+                        </div>
+                        <label className="text-xs space-y-1 block">
+                          <span className="text-muted-foreground">Notas / alcance (opcional)</span>
+                          <Input
+                            type="text"
+                            placeholder="Ej: revisión mensual, mentoría a equipo, ajustes de prompts…"
+                            value={editData?.consulting_retainer?.notes ?? ""}
+                            onChange={(e) => {
+                              if (!editData) return;
+                              setEditData({
+                                ...editData,
+                                consulting_retainer: { ...editData.consulting_retainer, notes: e.target.value || undefined },
+                              });
+                            }}
+                            className="h-8 text-sm"
+                          />
+                        </label>
+                        {editData?.consulting_retainer?.enabled &&
+                          displayData.development?.total_development_eur != null && (
+                            <div className="border-t border-border/50 pt-2 text-xs flex justify-between">
+                              <span className="text-muted-foreground">
+                                Desarrollo con descuento ({editData.consulting_retainer.discount_pct ?? 50}%):
+                              </span>
+                              <span className="font-medium text-primary">
+                                €{Math.round(
+                                  displayData.development.total_development_eur *
+                                    (1 - (editData.consulting_retainer.discount_pct ?? 50) / 100),
+                                ).toLocaleString()}
+                                {" "}
+                                <span className="text-muted-foreground line-through">
+                                  €{displayData.development.total_development_eur.toLocaleString()}
+                                </span>
+                              </span>
+                            </div>
+                          )}
+                      </>
+                    ) : (
+                      <div className="text-xs space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Cuota mensual</span>
+                          <span className="font-medium text-foreground">
+                            €{(displayData.consulting_retainer?.monthly_fee_eur ?? 0).toLocaleString()}/mes
+                          </span>
+                        </div>
+                        {displayData.consulting_retainer?.monthly_hours ? (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Horas incluidas</span>
+                            <span className="text-foreground">{displayData.consulting_retainer.monthly_hours}h/mes</span>
+                          </div>
+                        ) : null}
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Descuento sobre desarrollo</span>
+                          <span className="text-foreground">{displayData.consulting_retainer?.discount_pct ?? 50}%</span>
+                        </div>
+                        {displayData.consulting_retainer?.notes && (
+                          <p className="text-muted-foreground italic mt-1">
+                            {displayData.consulting_retainer.notes}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             )}
 

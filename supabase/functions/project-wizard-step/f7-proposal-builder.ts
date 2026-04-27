@@ -45,6 +45,16 @@ export interface CommercialTermsV1 {
   notes?: string;
   /** F7.1 — Override manual del cronograma de implementación. */
   implementation_override?: ImplementationOverride;
+  /** F7.2 — Consultoría/asesoría IA recurrente que reduce el coste de desarrollo. */
+  consulting_retainer?: {
+    enabled: boolean;
+    monthly_fee_eur: number;
+    monthly_hours: number;
+    discount_pct: number;
+    notes?: string;
+    setup_fee_before_discount?: number;
+    setup_fee_max_before_discount?: number;
+  };
 }
 
 export interface ProposalScopeItem {
@@ -131,6 +141,16 @@ export interface ClientProposalV1 {
     optional_addons?: Array<{ name: string; price?: number; description?: string }>;
     ai_usage_cost_policy?: string;
     taxes?: string;
+    /** F7.2 — Consultoría/asesoría IA recurrente. Renderizada al cliente. */
+    consulting_retainer?: {
+      enabled: boolean;
+      monthly_fee_eur: number;
+      monthly_hours: number;
+      discount_pct: number;
+      notes?: string;
+      setup_fee_before_discount?: number;
+      setup_fee_max_before_discount?: number;
+    };
   };
   payment_terms: string;
   support_terms?: string;
@@ -602,6 +622,7 @@ export function buildClientProposal(input: F7Input): F7Output {
       optional_addons: commercialTerms.optional_addons,
       ai_usage_cost_policy: commercialTerms.ai_usage_cost_policy,
       taxes: commercialTerms.taxes,
+      consulting_retainer: commercialTerms.consulting_retainer,
     },
     payment_terms: scrubInternalLeak(commercialTerms.payment_terms) ||
       "50% al inicio del proyecto y 50% contra entrega del MVP. Mensualidades, en su caso, facturadas a mes vencido.",
@@ -798,11 +819,30 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
   const displayMonthly = p.budget.monthly_retainer_display ??
     (p.budget.monthly_retainer !== undefined ? fmtMoney(p.budget.monthly_retainer, c) : undefined);
 
+  const cr = p.budget.consulting_retainer;
   if (displaySetup) {
-    lines.push(`- **Cuota inicial:** ${displaySetup}`);
+    lines.push(`- **Cuota inicial (desarrollo):** ${displaySetup}`);
+    if (cr?.enabled && cr.setup_fee_before_discount !== undefined) {
+      const beforeDisplay =
+        cr.setup_fee_max_before_discount !== undefined
+          ? `${fmtMoney(cr.setup_fee_before_discount, c)} - ${fmtMoney(cr.setup_fee_max_before_discount, c)}`
+          : fmtMoney(cr.setup_fee_before_discount, c);
+      lines.push(
+        `  - _Importe original: ${beforeDisplay}. Descuento del ${cr.discount_pct}% aplicado por contratación de Consultoría/Asesoría IA recurrente._`,
+      );
+    }
   }
   if (displayMonthly) {
     lines.push(`- **Mensualidad recurrente:** ${displayMonthly}`);
+  }
+  if (cr?.enabled) {
+    const horas = cr.monthly_hours > 0 ? ` (${cr.monthly_hours}h/mes incluidas)` : "";
+    lines.push(
+      `- **Consultoría / Asesoría IA recurrente:** ${fmtMoney(cr.monthly_fee_eur, c)}/mes${horas}`,
+    );
+    if (cr.notes) {
+      lines.push(`  - _${cr.notes}_`);
+    }
   }
   // Total de referencia (orientativo a 12 meses) — solo si tenemos números
   // numéricos exactos (no rangos). Si hay rango (max definido), no calculamos.

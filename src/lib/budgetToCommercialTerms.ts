@@ -31,6 +31,23 @@ export interface BudgetImplementationOverride {
   notes?: string;
 }
 
+/**
+ * F7.2 — Consultoría / Asesoría IA recurrente mensual.
+ * Si `enabled`, aplica un descuento (default 50%) sobre el setup_fee
+ * del modelo recomendado. Solo formato mensual con horas incluidas.
+ */
+export interface BudgetConsultingRetainer {
+  enabled?: boolean;
+  /** Cuota mensual EUR que pagará el cliente por la consultoría. */
+  monthly_fee_eur?: number;
+  /** Horas mensuales de consultoría/mentoría incluidas en la cuota. */
+  monthly_hours?: number;
+  /** % de descuento aplicado al desarrollo cuando enabled = true. Default 50. */
+  discount_pct?: number;
+  /** Notas / alcance libre (qué incluye la asesoría). */
+  notes?: string;
+}
+
 export interface BudgetData {
   development?: {
     phases?: Array<{ name: string; description?: string; hours: number; cost_eur: number }>;
@@ -54,6 +71,8 @@ export interface BudgetData {
   recommended_model?: string;
   /** F7.1 — Override del cronograma de implementación que se propaga al PDF cliente. */
   implementation_override?: BudgetImplementationOverride;
+  /** F7.2 — Consultoría/asesoría IA recurrente. Aplica descuento al desarrollo. */
+  consulting_retainer?: BudgetConsultingRetainer;
 }
 
 export interface CommercialTermsModel {
@@ -98,6 +117,17 @@ export interface CommercialTermsV1 {
   validity_days: number;
   /** F7.1 — Override del cronograma propagado a la propuesta cliente. */
   implementation_override?: BudgetImplementationOverride;
+  /** F7.2 — Consultoría/asesoría IA recurrente que aplica descuento al desarrollo. */
+  consulting_retainer?: {
+    enabled: boolean;
+    monthly_fee_eur: number;
+    monthly_hours: number;
+    discount_pct: number;
+    notes?: string;
+    /** Importe de desarrollo ANTES del descuento (referencia). */
+    setup_fee_before_discount?: number;
+    setup_fee_max_before_discount?: number;
+  };
 
   // ── Internal audit / debugging only — never rendered to client ──
   selected_models: CommercialTermsModel[];
@@ -329,12 +359,31 @@ export function budgetToCommercialTermsV1(
   else if (primary.setup_fee != null) pricing_model = "fixed_project";
 
   // Aplanar el modelo principal a los campos que F7 lee directamente.
-  const setup_fee = primary.setup_fee ?? undefined;
-  const setup_fee_max = primary.setup_fee_max ?? undefined;
-  const setup_fee_display = primary.setup_fee_display ?? undefined;
+  const rawSetupFee = primary.setup_fee ?? undefined;
+  const rawSetupFeeMax = primary.setup_fee_max ?? undefined;
+  const rawSetupFeeDisplay = primary.setup_fee_display ?? undefined;
   const monthly_retainer = primary.monthly_fee ?? undefined;
   const monthly_retainer_max = primary.monthly_fee_max ?? undefined;
   const monthly_retainer_display = primary.monthly_fee_display ?? undefined;
+
+  // F7.2 — Aplicar descuento de consultoría recurrente sobre el setup_fee del modelo principal.
+  const consultingActive = !!budget.consulting_retainer?.enabled;
+  const discountPct = Math.max(
+    0,
+    Math.min(100, budget.consulting_retainer?.discount_pct ?? 50),
+  );
+  const discountFactor = consultingActive ? 1 - discountPct / 100 : 1;
+  const setup_fee =
+    rawSetupFee !== undefined ? Math.round(rawSetupFee * discountFactor) : undefined;
+  const setup_fee_max =
+    rawSetupFeeMax !== undefined ? Math.round(rawSetupFeeMax * discountFactor) : undefined;
+  const setup_fee_display = consultingActive
+    ? (setup_fee !== undefined && setup_fee_max !== undefined
+        ? `${formatEuroNumber(setup_fee)} - ${formatEuroNumber(setup_fee_max)} EUR`
+        : setup_fee !== undefined
+          ? `${formatEuroNumber(setup_fee)} EUR`
+          : rawSetupFeeDisplay)
+    : rawSetupFeeDisplay;
 
   // Otros modelos visibles → opcionales (no incluidos en el precio base).
   const optional_addons = visibleModels
@@ -381,6 +430,17 @@ export function budgetToCommercialTermsV1(
               : undefined,
           start_date: budget.implementation_override.start_date?.trim() || undefined,
           notes: budget.implementation_override.notes?.trim() || undefined,
+        }
+      : undefined,
+    consulting_retainer: consultingActive
+      ? {
+          enabled: true,
+          monthly_fee_eur: Math.max(0, Math.round(budget.consulting_retainer?.monthly_fee_eur ?? 0)),
+          monthly_hours: Math.max(0, Math.round(budget.consulting_retainer?.monthly_hours ?? 0)),
+          discount_pct: discountPct,
+          notes: budget.consulting_retainer?.notes?.trim() || undefined,
+          setup_fee_before_discount: rawSetupFee,
+          setup_fee_max_before_discount: rawSetupFeeMax,
         }
       : undefined,
 

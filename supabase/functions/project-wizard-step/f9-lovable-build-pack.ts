@@ -668,9 +668,13 @@ export function renderBuildPackMarkdown(pack: LovableBuildPackV1): string {
   lines.push("### Base fundacional");
   lines.push("");
   lines.push(renderComponentList(s.build_first.foundation));
-  lines.push("### MVP");
+  lines.push("### MVP — orden recomendado de construcción");
   lines.push("");
-  lines.push(renderComponentList(s.build_first.mvp));
+  lines.push(
+    "Construir en este orden: primero datos y CRUD, luego pipeline de llamadas, después RAG y catalogador, después asistente pre/post llamada, después compliance/HITL, y por último los módulos especializados. WhatsApp y cadencias se construyen como interfaz/estado/mock, sin envío real.",
+  );
+  lines.push("");
+  lines.push(renderComponentListNumbered(sortMvpForBuildOrder(s.build_first.mvp)));
 
   // 5
   lines.push("## 5. Flujos principales");

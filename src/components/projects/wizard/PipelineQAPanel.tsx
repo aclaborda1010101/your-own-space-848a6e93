@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, Play, Copy, Check, FileText, FileBadge, ShieldCheck } from "lucide-react";
+import { Loader2, Play, Copy, Check, FileText, FileBadge, ShieldCheck, Rocket } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +19,8 @@ type WizardAction =
   | "architect_scope"
   | "generate_technical_prd"
   | "generate_client_proposal"
-  | "audit_final_deliverables";
+  | "audit_final_deliverables"
+  | "generate_lovable_build_pack";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -32,6 +33,7 @@ const ACTION_META: Record<WizardAction, { label: string; step: string; hint: num
   generate_technical_prd: { label: "PRD técnico", step: "Step 29", hint: 30, variant: "outline" },
   generate_client_proposal: { label: "Propuesta cliente", step: "Step 30", hint: 30, variant: "outline" },
   audit_final_deliverables: { label: "Auditar entregables", step: "Step 31", hint: 30, variant: "outline" },
+  generate_lovable_build_pack: { label: "Lovable Build Pack", step: "Step 32", hint: 15, variant: "outline" },
 };
 
 const DEFAULT_COMMERCIAL_TERMS = `{
@@ -235,6 +237,18 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
 
     const audit = parsed.audit ?? {};
 
+    // Step 32 — Lovable Build Pack
+    if (lastAction === "generate_lovable_build_pack" || parsed.markdown) {
+      return {
+        ok: parsed.ok,
+        version: parsed.version,
+        word_count: parsed.word_count,
+        warnings: Array.isArray(parsed.warnings) ? parsed.warnings.length : 0,
+        source_prd_row_id: parsed.source_prd_row_id,
+        source_scope_row_id: parsed.source_scope_row_id,
+      };
+    }
+
     // Step 31 — final deliverables audit
     if (lastAction === "audit_final_deliverables" || parsed.deliverables_audit) {
       const a = parsed.deliverables_audit ?? parsed;
@@ -333,8 +347,21 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
       const md = parsed.client_proposal?.markdown ?? parsed.markdown;
       if (md) return { filename: "Propuesta-cliente.md", content: md, label: "Descargar Propuesta (MD)" };
     }
+    if (lastAction === "generate_lovable_build_pack") {
+      const md = parsed.markdown;
+      if (md) return { filename: "Lovable-Build-Pack.md", content: md, label: "Descargar Build Pack (MD)" };
+    }
     return null;
   })();
+
+  const copyBuildPack = async () => {
+    if (lastAction !== "generate_lovable_build_pack" || !parsed?.markdown) return;
+    try {
+      await navigator.clipboard.writeText(parsed.markdown);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* ignore */ }
+  };
 
   const renderActionButton = (action: WizardAction) => {
     const meta = ACTION_META[action];
@@ -367,10 +394,10 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0 flex-1">
-            <CardTitle className="text-base">QA · Pipeline v2 — Steps 25–31</CardTitle>
+            <CardTitle className="text-base">QA · Pipeline v2 — Steps 25–32</CardTitle>
             <CardDescription className="text-xs mt-1">
-              Pipeline interno (25–28) y entregables finales (29 PRD · 30 Propuesta · 31 Auditoría).
-              Tiempos típicos: Registry ~60–120s, F4a ~60–180s, F4b ~120–240s, F5 ~60–180s, PRD/Propuesta ~30–60s.
+              Pipeline interno (25–28), entregables finales (29 PRD · 30 Propuesta · 31 Auditoría) y operativo (32 Build Pack para Lovable).
+              Tiempos típicos: Registry ~60–120s, F4a ~60–180s, F4b ~120–240s, F5 ~60–180s, PRD/Propuesta ~30–60s, Build Pack ~5–15s.
             </CardDescription>
           </div>
           {loading && currentAction && (
@@ -436,6 +463,18 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
                 <><ShieldCheck className="w-4 h-4" />Auditar entregables (Step 31)</>
               )}
             </Button>
+            <Button
+              onClick={() => run("generate_lovable_build_pack")}
+              disabled={loading}
+              variant="outline"
+              size="sm"
+            >
+              {loading && currentAction === "generate_lovable_build_pack" ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Generando Build Pack…</>
+              ) : (
+                <><Rocket className="w-4 h-4" />Generar Lovable Build Pack (Step 32)</>
+              )}
+            </Button>
           </div>
 
           {showTermsForm && (
@@ -470,12 +509,23 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
                 · duración {elapsed}s
               </span>
             )}
+            {lastAction === "generate_lovable_build_pack" && parsed?.markdown && (
+              <Button
+                onClick={copyBuildPack}
+                variant="holo"
+                size="sm"
+                className="ml-auto h-7 text-xs"
+              >
+                {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                {copied ? "Copiado" : "Copiar prompt para Lovable"}
+              </Button>
+            )}
             {downloadableMarkdown && (
               <Button
                 onClick={() => downloadMarkdown(downloadableMarkdown.filename, downloadableMarkdown.content)}
                 variant="holo"
                 size="sm"
-                className="ml-auto h-7 text-xs"
+                className={cn("h-7 text-xs", lastAction !== "generate_lovable_build_pack" && "ml-auto")}
               >
                 <FileText className="w-3 h-3" />
                 {downloadableMarkdown.label}

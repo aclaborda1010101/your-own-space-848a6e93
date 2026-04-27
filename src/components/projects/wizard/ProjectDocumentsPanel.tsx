@@ -32,11 +32,13 @@ const STEP_NAMES: Record<number, string> = {
   7: "PRD Técnico",
   8: "Generación de RAGs",
   9: "Detección de Patrones",
+  32: "Lovable Build Pack",
 };
 
 const STEP_CONTENT_TYPE: Record<number, "markdown" | "json"> = {
   2: "json", 3: "markdown", 4: "json", 5: "markdown",
   6: "json", 7: "markdown", 8: "json", 9: "json",
+  32: "markdown",
 };
 
 const statusLabel = (status: string) => {
@@ -62,7 +64,9 @@ export const ProjectDocumentsPanel = ({ projectId, projectName, company, steps }
 
       for (const step of availableSteps) {
         try {
-          const content = STEP_CONTENT_TYPE[step.stepNumber] === "markdown"
+          const content = step.stepNumber === 32
+            ? (step.outputData?.build_pack_markdown ?? "")
+            : STEP_CONTENT_TYPE[step.stepNumber] === "markdown"
             ? (typeof step.outputData === "string" ? step.outputData : step.outputData?.document || JSON.stringify(step.outputData, null, 2))
             : step.outputData;
 
@@ -117,6 +121,9 @@ export const ProjectDocumentsPanel = ({ projectId, projectName, company, steps }
 
   const getStepContent = (step: StepInfo) => {
     const ct = STEP_CONTENT_TYPE[step.stepNumber];
+    if (step.stepNumber === 32) {
+      return step.outputData?.build_pack_markdown ?? "";
+    }
     if (ct === "markdown") {
       return typeof step.outputData === "string" ? step.outputData : step.outputData?.document || JSON.stringify(step.outputData, null, 2);
     }

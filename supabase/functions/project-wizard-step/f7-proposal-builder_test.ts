@@ -335,7 +335,9 @@ Deno.test("F7: derives proposal prices from Step 6 budgetData, not stale commerc
     commercialTerms: terms,
   });
   const md = renderProposalMarkdown(out.client_proposal_v1);
-  assert(md.includes("| Concepto | Opción estándar | Opción con asesoría IA |"), "missing comparison table");
+  assert(md.includes("| Concepto | Desarrollo único | Desarrollo + asesoría IA |"), "missing comparison table with new column labels");
+  assert(!/Opci[oó]n est[aá]ndar/.test(md), "stale column label 'Opción estándar' leaked");
+  assert(!/Opci[oó]n con asesor[ií]a IA/.test(md), "stale column label 'Opción con asesoría IA' leaked");
   assert(md.includes("12.400 EUR"), "missing real development cost");
   assert(md.includes("6.200 EUR"), "missing discounted setup cost");
   assert(!md.includes("14.500 EUR"), "stale setup leaked into proposal");
@@ -343,4 +345,28 @@ Deno.test("F7: derives proposal prices from Step 6 budgetData, not stale commerc
   assert(!/Mensualidad recurrente/i.test(md), "should not use 'Mensualidad recurrente' terminology");
   assert(/Coste de desarrollo inicial/.test(md), "missing new terminology 'Coste de desarrollo inicial'");
   assert(/Coste de mantenimiento mensual/.test(md), "missing new terminology 'Coste de mantenimiento mensual'");
+  assert(!/Total estimado primer a[ñn]o/i.test(md), "first-year total row must be removed");
+  assert(/Compromiso m[ií]nimo de 12 meses/.test(md), "missing 12-month commitment note");
+  assert(/50% a la firma del contrato y 50% a la entrega del MVP/.test(md), "missing fixed payment block");
+  assert(/a final de mes/.test(md), "missing 'a final de mes' billing note");
+});
+
+Deno.test("F7: maintenance discount applied when consulting retainer enabled", () => {
+  // setup 10000, monthly 250, consulting on
+  const terms = commercialTermsFromBudgetData({
+    development: { total_development_eur: 10000 },
+    recurring_monthly: { total_monthly_eur: 250 },
+    monetization_models: [],
+    consulting_retainer: { enabled: true, monthly_fee_eur: 4000, monthly_hours: 40, discount_pct: 50 },
+  })!;
+  const out = buildClientProposal({
+    scope: fakeScope(),
+    source_step: { step_number: 28, version: 3, row_id: "row-28" },
+    projectName: "TEST",
+    clientCompany: "TEST",
+    commercialTerms: terms,
+  });
+  const md = renderProposalMarkdown(out.client_proposal_v1);
+  // standard column: 250/mes ; consulting column: 170/mes
+  assert(/\|\s*250 EUR\/mes\s*\|\s*170 EUR\/mes\s*\|/.test(md), "maintenance discount (250→170) not applied in consulting column");
 });

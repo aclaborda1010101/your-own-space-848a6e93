@@ -1344,14 +1344,12 @@ export const useProjectWizard = (projectId?: string) => {
       const autoChain = options?.autoChain !== false;
       if (autoChain) {
         toast.info("Regenerando propuesta cliente con los cambios…");
-        setTimeout(() => {
-          generateClientProposal()
-            .then(() => toast.success("Propuesta cliente regenerada"))
-            .catch((err) => {
-              console.error("Auto client proposal failed:", err);
-              toast.error("No se pudo regenerar la propuesta automáticamente. Pulsa 'Generar propuesta cliente' manualmente.");
-            });
-        }, 300);
+        await generateClientProposal({ skipBudgetStatusCheck: true, budgetOverride: budgetData })
+          .then(() => toast.success("Propuesta cliente regenerada"))
+          .catch((err) => {
+            console.error("Auto client proposal failed:", err);
+            toast.error("No se pudo regenerar la propuesta automáticamente. Pulsa 'Generar propuesta cliente' manualmente.");
+          });
       }
     } catch (e: any) {
       console.error("Approve budget error:", e);
@@ -1392,25 +1390,26 @@ export const useProjectWizard = (projectId?: string) => {
     })();
   }, [projectId, budgetStatus]);
 
-  const generateClientProposal = async () => {
+  const generateClientProposal = async (options?: { skipBudgetStatusCheck?: boolean; budgetOverride?: any }) => {
     if (!projectId || !project) return;
-    if (!budgetData) {
+    const effectiveBudget = options?.budgetOverride ?? budgetData;
+    if (!effectiveBudget) {
       toast.error("Genera y aprueba el presupuesto antes de generar la propuesta");
       return;
     }
-    if (budgetStatus !== "approved") {
+    if (!options?.skipBudgetStatusCheck && budgetStatus !== "approved") {
       toast.error("Aprueba el presupuesto antes de generar la propuesta cliente");
       return;
     }
     setProposalGenerating(true);
     try {
       const { budgetToCommercialTermsV1, validateBudgetForClientProposal } = await import("@/lib/budgetToCommercialTerms");
-      const validationError = validateBudgetForClientProposal(budgetData);
+      const validationError = validateBudgetForClientProposal(effectiveBudget);
       if (validationError) {
         toast.error(validationError);
         return;
       }
-      const commercial_terms_v1 = budgetToCommercialTermsV1(budgetData);
+      const commercial_terms_v1 = budgetToCommercialTermsV1(effectiveBudget);
       if (!commercial_terms_v1) {
         toast.error("No se pudieron derivar las condiciones comerciales del presupuesto");
         return;
@@ -1426,7 +1425,7 @@ export const useProjectWizard = (projectId?: string) => {
         development_total_eur: commercial_terms_v1.development_total_eur,
       });
       // Aviso si el setup que ve el cliente difiere del coste real de desarrollo.
-      const devTotal = budgetData?.development?.total_development_eur;
+      const devTotal = effectiveBudget?.development?.total_development_eur;
       const setupBeforeDiscount =
         commercial_terms_v1.consulting_retainer?.setup_fee_before_discount ??
         commercial_terms_v1.setup_fee;

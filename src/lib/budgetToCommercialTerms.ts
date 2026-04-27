@@ -31,6 +31,23 @@ export interface BudgetImplementationOverride {
   notes?: string;
 }
 
+/**
+ * F7.2 — Consultoría / Asesoría IA recurrente mensual.
+ * Si `enabled`, aplica un descuento (default 50%) sobre el setup_fee
+ * del modelo recomendado. Solo formato mensual con horas incluidas.
+ */
+export interface BudgetConsultingRetainer {
+  enabled?: boolean;
+  /** Cuota mensual EUR que pagará el cliente por la consultoría. */
+  monthly_fee_eur?: number;
+  /** Horas mensuales de consultoría/mentoría incluidas en la cuota. */
+  monthly_hours?: number;
+  /** % de descuento aplicado al desarrollo cuando enabled = true. Default 50. */
+  discount_pct?: number;
+  /** Notas / alcance libre (qué incluye la asesoría). */
+  notes?: string;
+}
+
 export interface BudgetData {
   development?: {
     phases?: Array<{ name: string; description?: string; hours: number; cost_eur: number }>;
@@ -54,6 +71,8 @@ export interface BudgetData {
   recommended_model?: string;
   /** F7.1 — Override del cronograma de implementación que se propaga al PDF cliente. */
   implementation_override?: BudgetImplementationOverride;
+  /** F7.2 — Consultoría/asesoría IA recurrente. Aplica descuento al desarrollo. */
+  consulting_retainer?: BudgetConsultingRetainer;
 }
 
 export interface CommercialTermsModel {

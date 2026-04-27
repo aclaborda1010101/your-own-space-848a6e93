@@ -96,6 +96,8 @@ export interface CommercialTermsV1 {
   taxes?: string;
   currency: string;
   validity_days: number;
+  /** F7.1 — Override del cronograma propagado a la propuesta cliente. */
+  implementation_override?: BudgetImplementationOverride;
 
   // ── Internal audit / debugging only — never rendered to client ──
   selected_models: CommercialTermsModel[];

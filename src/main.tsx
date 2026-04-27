@@ -1,4 +1,4 @@
-// cache-bust: 2026-04-27T20:44-propuesta-update-fix
+// cache-bust: 2026-04-27T20:55-propuesta-stale-guard-removed
 import "./index.css";
 import { initSafeStorage } from "./lib/safeStorage";
 import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";

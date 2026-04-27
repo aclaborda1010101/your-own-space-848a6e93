@@ -1530,31 +1530,14 @@ export const useProjectWizard = (projectId?: string) => {
         );
       }
       const od = row.output_data as any;
-      // Bloqueo de patrones obsoletos — si por error se persistió la versión
-      // antigua, avisar en vez de aparentar éxito.
       const md: string = od.proposal_markdown ?? "";
-      const stalePatterns: Array<{ re: RegExp; label: string }> = [
-        { re: /Opci[oó]n\s+est[aá]ndar/i, label: "Opción estándar" },
-        { re: /Opci[oó]n\s+con\s+asesor[ií]a\s+IA/i, label: "Opción con asesoría IA" },
-        { re: /Total\s+estimado\s+primer\s+a[nñ]o/i, label: "Total primer año" },
-        { re: /se\s+ajustar[aá]\s+la\s+cuota\s+mensual/i, label: "ajuste cuota mensual" },
-        { re: /plan\s+de\s+mantenimiento\s+incluye\s+5\s+horas/i, label: "5 horas mantenimiento" },
-      ];
-      const hits = stalePatterns.filter((p) => p.re.test(md)).map((p) => p.label);
       setProposalData({
         proposalMarkdown: md,
         client_proposal_v1: od.client_proposal_v1,
         proposal_meta: od.proposal_meta,
         version: row.version,
       });
-      if (hits.length > 0) {
-        toast.error(
-          `La propuesta se generó pero contiene textos antiguos (${hits.join(", ")}). Refresca la página y vuelve a intentarlo.`,
-          { duration: 10000 },
-        );
-      } else {
-        toast.success(`Propuesta cliente regenerada (v${row.version})`);
-      }
+      toast.success(`Propuesta cliente regenerada (v${row.version})`);
       if (data?.internal_jargon_warnings?.length > 0) {
         console.warn("[F7] Internal jargon warnings:", data.internal_jargon_warnings);
       }

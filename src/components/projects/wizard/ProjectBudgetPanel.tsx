@@ -726,6 +726,106 @@ export const ProjectBudgetPanel = ({
               </div>
             )}
 
+            {/* Plazos de implementación (override del cronograma del PDF cliente) */}
+            {editing && editData && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <Calculator className="w-4 h-4 text-primary" />
+                  Plazos de implementación
+                  <span className="text-[10px] font-normal text-muted-foreground">
+                    (opcional · se muestra en la propuesta cliente)
+                  </span>
+                </h4>
+                <Card className="border-border/50">
+                  <CardContent className="p-3 space-y-2.5">
+                    <p className="text-[11px] text-muted-foreground">
+                      Si se dejan en blanco, el cronograma se calcula automáticamente
+                      a partir del nº de componentes MVP / Fast-follow del Step 28.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <label className="text-xs space-y-1">
+                        <span className="text-muted-foreground">Semanas MVP</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={52}
+                          placeholder="auto"
+                          value={editData.implementation_override?.mvp_weeks ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? undefined : Number(e.target.value);
+                            setEditData({
+                              ...editData,
+                              implementation_override: { ...editData.implementation_override, mvp_weeks: v },
+                            });
+                          }}
+                          className="h-8 text-sm"
+                        />
+                      </label>
+                      <label className="text-xs space-y-1">
+                        <span className="text-muted-foreground">Semanas Fast-follow</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={52}
+                          placeholder="auto"
+                          value={editData.implementation_override?.fast_follow_weeks ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value === "" ? undefined : Number(e.target.value);
+                            setEditData({
+                              ...editData,
+                              implementation_override: { ...editData.implementation_override, fast_follow_weeks: v },
+                            });
+                          }}
+                          className="h-8 text-sm"
+                        />
+                      </label>
+                      <label className="text-xs space-y-1">
+                        <span className="text-muted-foreground">Fecha de arranque (opcional)</span>
+                        <Input
+                          type="date"
+                          value={editData.implementation_override?.start_date ?? ""}
+                          onChange={(e) => {
+                            setEditData({
+                              ...editData,
+                              implementation_override: { ...editData.implementation_override, start_date: e.target.value || undefined },
+                            });
+                          }}
+                          className="h-8 text-sm"
+                        />
+                      </label>
+                      <label className="text-xs space-y-1 sm:col-span-2">
+                        <span className="text-muted-foreground">Notas de plazos (opcional)</span>
+                        <Input
+                          type="text"
+                          placeholder="Ej: incluye 1 semana de buffer por vacaciones de agosto"
+                          value={editData.implementation_override?.notes ?? ""}
+                          onChange={(e) => {
+                            setEditData({
+                              ...editData,
+                              implementation_override: { ...editData.implementation_override, notes: e.target.value || undefined },
+                            });
+                          }}
+                          className="h-8 text-sm"
+                        />
+                      </label>
+                    </div>
+                    {editData.implementation_override &&
+                      Object.values(editData.implementation_override).some((v) => v !== undefined && v !== "") && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-[11px] h-7 px-2"
+                          onClick={() => setEditData({ ...editData, implementation_override: undefined })}
+                        >
+                          Restaurar valores sugeridos
+                        </Button>
+                      )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
             {/* Risk factors */}
             {displayData.risk_factors && displayData.risk_factors.length > 0 && (
               <div className="space-y-2">

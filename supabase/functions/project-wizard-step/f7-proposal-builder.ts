@@ -879,6 +879,10 @@ function renderBudgetComparisonTable(
   return out;
 }
 
+function hasBudgetComparisonTable(markdown: string): boolean {
+  return /\|\s*Concepto\s*\|\s*Sin consultor[ií]a\s*\|\s*Con consultor[ií]a IA\s*\|/i.test(markdown);
+}
+
 export function renderProposalMarkdown(p: ClientProposalV1): string {
   const c = p.budget.currency;
   const lines: string[] = [];

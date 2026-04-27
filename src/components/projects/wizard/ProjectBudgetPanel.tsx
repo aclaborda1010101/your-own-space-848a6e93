@@ -283,6 +283,20 @@ export const ProjectBudgetPanel = ({
         toast.info(`Setup del cliente sincronizado a €${dev.toLocaleString()}`);
       }
     }
+    // Auto-activar consultoría: si el usuario rellenó cuota o horas pero no
+    // marcó el checkbox, asumimos que la quiere activada (UX defensivo).
+    const cr = toSave.consulting_retainer;
+    if (cr && !cr.enabled && ((cr.monthly_fee_eur ?? 0) > 0 || (cr.monthly_hours ?? 0) > 0)) {
+      toSave = {
+        ...toSave,
+        consulting_retainer: {
+          ...cr,
+          enabled: true,
+          discount_pct: cr.discount_pct ?? 50,
+        },
+      };
+      toast.info("Consultoría recurrente activada automáticamente (rellenaste cuota u horas).");
+    }
     onBudgetUpdate?.(toSave);
     // Derivar commercial_terms_v1 y persistir en localStorage para que el
     // pipeline técnico (F7) pueda leerlo sin tocar el schema actual.

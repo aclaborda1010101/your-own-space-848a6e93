@@ -84,6 +84,9 @@ export interface ScopeComponent {
   soul_dependency?: "none" | "async" | "hard";
   compliance_flags?: string[];
   notes?: string;
+  /** When duplicates were merged into this component, lists the original sources
+   * (component_id or gap_id) for traceability. Empty/undefined when not merged. */
+  merged_sources?: { source_type: SourceType; source_ref: string; original_name: string }[];
 }
 
 export interface SoulCapturePlan {
@@ -427,7 +430,13 @@ export function mergeDuplicateScopeComponents(
     if (flags.size > 0) primary.compliance_flags = Array.from(flags);
     const notes = [primary.notes, ...others.map((o) => o.notes)].filter(Boolean).join("\n");
     if (notes) primary.notes = notes;
+    const mergedSources = primary.merged_sources ? [...primary.merged_sources] : [];
     for (const o of others) {
+      mergedSources.push({
+        source_type: o.source_type,
+        source_ref: o.source_ref,
+        original_name: o.name,
+      });
       decisionLog.push({
         source: "deterministic_rule",
         decision_id: "merge_institutional_buyer_detector",
@@ -436,6 +445,7 @@ export function mergeDuplicateScopeComponents(
         reason: `Componente funcionalmente duplicado: "${o.name}" fusionado con "${primary.name}".`,
       });
     }
+    if (mergedSources.length > 0) primary.merged_sources = mergedSources;
     passThrough.push(primary);
   }
   return passThrough;

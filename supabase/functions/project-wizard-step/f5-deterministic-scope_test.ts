@@ -141,11 +141,29 @@ Deno.test("F5 pre-warm: only accepted gaps materialize as scope components", () 
   ];
   const fromGap002 = all.find((c) => c.source_type === "accepted_gap" && c.source_ref === "GAP-002");
   const fromGap003 = all.find((c) => c.source_type === "accepted_gap" && c.source_ref === "GAP-003");
-  const fromGap001 = all.find((c) => c.source_type === "accepted_gap" && c.source_ref === "GAP-001");
   assertEquals(fromGap002, undefined, "merge_into_existing must NOT create a scope component");
   assertEquals(fromGap003, undefined, "rejected gap must NOT create a scope component");
-  assert(fromGap001, "accept_but_defer gap must create a deferred scope component");
+  // GAP-001 is Benatar accept_but_defer → enters fast_follow_f2 and is then merged
+  // with COMP-C04 by mergeDuplicateScopeComponents (institutional buyer dedupe).
+  // Acceptance: GAP-001 must still be marked acceptable, and the merged component
+  // must reflect both sources (so traceability is preserved via merged_sources).
   assert(acceptable_gap_ids.has("GAP-001"));
+  const benatar = scope.fast_follow_f2.find(
+    (c) => c.source_ref === "COMP-C04" || c.source_ref === "GAP-001",
+  );
+  assert(benatar, "Benatar (Comp-C04 or GAP-001) must remain in fast_follow_f2 after dedupe");
+});
+
+Deno.test("F5 pre-warm: GAP-001 (Benatar) is merged into COMP-C04, not duplicated", () => {
+  const { scope } = runDeterministicPreWarm(REGISTRY, FEASIBILITY, GAPS);
+  // After mergeDuplicateScopeComponents there must be ONE Benatar in fast_follow_f2.
+  const benatars = scope.fast_follow_f2.filter(
+    (c) =>
+      /benatar|institucional/i.test(c.name) ||
+      c.source_ref === "COMP-C04" ||
+      c.source_ref === "GAP-001",
+  );
+  assertEquals(benatars.length, 1, "Exactly one Benatar component must remain");
 });
 
 Deno.test("F5 pre-warm: human_decisions_applied lists all 3 decisions", () => {
@@ -298,4 +316,91 @@ Deno.test("F5 v2: Benatar (COMP-C04) still in fast_follow_f2 and Soul plan intac
   assertEquals(scope.soul_capture_plan.required, true);
   assertEquals(scope.soul_capture_plan.sessions, 4);
   assert(scope.soul_capture_plan.hard_dependencies.includes("COMP-D01"));
+});
+
+// ─── F5 v3 — Dedupe contracts ────────────────────────────────────────────────
+
+Deno.test("F5 v3: dedupe blockers — duplicate compliance entries collapse to one", () => {
+  const reg = {
+    components: [
+      {
+        component_id: "COMP-DUP",
+        name: "Component duplicated compliance",
+        family: "pattern_module",
+        layer: "C_intelligence",
+        priority: "P0_critical",
+        status: "candidate_validated",
+        dpia_required: true,
+        compliance_flags: ["personal_data_processing", "external_data_enrichment"],
+        soul_dependency: "none",
+      },
+    ],
+  };
+  const fea = {
+    component_reviews: [
+      { component_id: "COMP-DUP", feasibility_verdict: "requires_compliance_review" },
+    ],
+    gap_reviews: [],
+  };
+  const { scope } = runDeterministicPreWarm(reg, fea, { gaps: [] });
+  const c = scope.mvp.find((x) => x.source_ref === "COMP-DUP");
+  assert(c, "Component must materialize in MVP");
+  const compl = c!.blockers.filter((b) => b.type === "compliance");
+  assertEquals(compl.length, 1, "Compliance blocker must not be duplicated");
+  const rootDup = scope.compliance_blockers.filter((b) => b.scope_id === c!.scope_id);
+  assertEquals(rootDup.length, 1, "Root compliance blocker must not be duplicated");
+});
+
+Deno.test("F5 v3: dedupe scope — Benatar gap merges into COMP-C04 with merged_sources", () => {
+  const { scope } = runDeterministicPreWarm(REGISTRY, FEASIBILITY, GAPS);
+  const benatars = scope.fast_follow_f2.filter(
+    (c) => /benatar|institucional/i.test(c.name),
+  );
+  assertEquals(benatars.length, 1, "Only one Benatar component must remain");
+  const benatar = benatars[0];
+  assert(/benatar/i.test(benatar.name), "Final name must keep 'Benatar'");
+  assertEquals(benatar.bucket, "fast_follow_f2");
+  const refs = new Set<string>();
+  refs.add(benatar.source_ref);
+  for (const ms of (benatar.merged_sources ?? [])) refs.add(ms.source_ref);
+  assert(refs.has("COMP-C04"), "Merged component must trace back to COMP-C04");
+  assert(refs.has("GAP-001"), "Merged component must trace back to GAP-001");
+});
+
+Deno.test("F5 v3: scope_decision_log records merge_institutional_buyer_detector", () => {
+  const { scope } = runDeterministicPreWarm(REGISTRY, FEASIBILITY, GAPS);
+  const merge = scope.scope_decision_log.find(
+    (e) => e.decision_id === "merge_institutional_buyer_detector",
+  );
+  assert(merge, "Merge must be logged in scope_decision_log");
+  assertEquals(merge!.source, "deterministic_rule");
+});
+
+Deno.test("F5 v3: required_actions are deduplicated within a component", () => {
+  const reg = {
+    components: [
+      {
+        component_id: "COMP-RA",
+        name: "Component with redundant required actions",
+        family: "pattern_module",
+        layer: "C_intelligence",
+        priority: "P0_critical",
+        status: "candidate_validated",
+        dpia_required: true,
+        compliance_flags: ["personal_data_processing", "external_data_enrichment"],
+        soul_dependency: "none",
+      },
+    ],
+  };
+  const fea = {
+    component_reviews: [
+      { component_id: "COMP-RA", feasibility_verdict: "requires_compliance_review" },
+    ],
+    gap_reviews: [],
+  };
+  const { scope } = runDeterministicPreWarm(reg, fea, { gaps: [] });
+  const c = scope.mvp.find((x) => x.source_ref === "COMP-RA");
+  assert(c);
+  const dupes = c!.required_actions.filter((a, i, arr) => arr.indexOf(a) !== i);
+  assertEquals(dupes.length, 0, "required_actions must be deduplicated");
 });

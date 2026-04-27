@@ -844,6 +844,8 @@ function sanitizeLegalNotes(text: string | undefined): string | undefined {
   return text;
 }
 
+const MAINTENANCE_DISCOUNT_WITH_CONSULTING_EUR = 80;
+
 function renderTwoOptionBudgetTable(
   budget: ClientProposalV1["budget"],
   currency: string,
@@ -865,29 +867,32 @@ function renderTwoOptionBudgetTable(
 
   const out: string[] = [];
   const fmt = (n: number) => fmtMoney(n, currency);
-  const totalStandard = standardSetup + monthly * 12;
+
+  // Mantenimiento con descuento en la opción con asesoría IA (defensivo: no negativo).
+  const consultingMonthly = cr?.enabled
+    ? (monthly - MAINTENANCE_DISCOUNT_WITH_CONSULTING_EUR > 0
+        ? monthly - MAINTENANCE_DISCOUNT_WITH_CONSULTING_EUR
+        : monthly)
+    : monthly;
 
   out.push("");
   out.push("**Comparativa de opciones:**");
   out.push("");
-  out.push("| Concepto | Opción estándar | Opción con asesoría IA |");
+  out.push("| Concepto | Desarrollo único | Desarrollo + asesoría IA |");
   out.push("|---|---|---|");
   out.push(`| Coste de desarrollo inicial | ${fmt(standardSetup)} | ${
     consultingSetup !== undefined && cr ? `**${fmt(consultingSetup)}** _(−${cr.discount_pct}% dto.)_` : "—"
   } |`);
-  out.push(`| Coste de mantenimiento mensual | ${fmt(monthly)}/mes | ${fmt(monthly)}/mes |`);
+  out.push(`| Coste de mantenimiento mensual | ${fmt(monthly)}/mes | ${fmt(consultingMonthly)}/mes |`);
   if (cr?.enabled) {
     const consMonthly = `${fmt(cr.monthly_fee_eur)}/mes${cr.monthly_hours > 0 ? ` (${cr.monthly_hours} h)` : ""}`;
-    const totalConsulting = (consultingSetup ?? standardSetup) + monthly * 12 + cr.monthly_fee_eur * 12;
     out.push(`| Asesoría e inteligencia artificial | — | ${consMonthly} |`);
-    out.push(`| **Total estimado primer año** | ${fmt(totalStandard)} | ${fmt(totalConsulting)} |`);
-  } else {
-    out.push(`| **Total estimado primer año** | ${fmt(totalStandard)} | — |`);
   }
   out.push("");
   out.push("_Notas:_");
   out.push("- _Costes de IA / API de terceros no incluidos: se facturan según consumo real._");
   out.push("- _IVA no incluido. Se aplicará el tipo vigente._");
+  out.push("- _Compromiso mínimo de 12 meses sobre el plan de mantenimiento y, en su caso, sobre la asesoría IA._");
   if (cr?.enabled) {
     out.push(`- _La opción con asesoría IA aplica un ${cr.discount_pct}% de descuento sobre el coste de desarrollo a cambio del compromiso de consultoría recurrente._`);
   }
@@ -895,8 +900,18 @@ function renderTwoOptionBudgetTable(
   return out;
 }
 
+function buildClientPaymentTermsBlock(): string {
+  return [
+    "**Desarrollo inicial:** 50% a la firma del contrato y 50% a la entrega del MVP.",
+    "**Mantenimiento mensual:** facturación mensual, a final de mes.",
+    "**Asesoría e inteligencia artificial (si aplica):** facturación mensual, a final de mes.",
+    "",
+    "**Costes de IA / API de terceros:** estimación basada en el uso esperado. El coste real puede variar y se facturará de forma transparente según consumo real.",
+  ].join("\n");
+}
+
 function hasBudgetComparisonTable(markdown: string): boolean {
-  return /\|\s*Concepto\s*\|\s*Opci[oó]n est[aá]ndar\s*\|\s*Opci[oó]n con asesor[ií]a IA\s*\|/i.test(markdown);
+  return /\|\s*Concepto\s*\|\s*Desarrollo único\s*\|\s*Desarrollo \+ asesor[ií]a IA\s*\|/i.test(markdown);
 }
 
 export function renderProposalMarkdown(p: ClientProposalV1): string {
@@ -1113,7 +1128,9 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
   }
 
   section("Modalidad de pago");
-  lines.push(p.payment_terms);
+  const useFixedPayment =
+    p.budget.monthly_retainer !== undefined || !!p.budget.consulting_retainer?.enabled;
+  lines.push(useFixedPayment ? buildClientPaymentTermsBlock() : p.payment_terms);
   lines.push("");
 
   if (p.support_terms) {

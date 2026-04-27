@@ -1,77 +1,51 @@
-He localizado el fallo real. No es solo el texto del presupuesto.
+Cambios concretos en el bloque "11. Presupuesto" y secciones siguientes de la propuesta cliente (Step 30, deterministic).
 
-Ahora mismo pasa esto:
+### 1. Renombrar las dos columnas de la tabla comparativa
+Archivo: `supabase/functions/project-wizard-step/f7-proposal-builder.ts` → función `renderTwoOptionBudgetTable`.
+- "Opción estándar" → **"Desarrollo único"**
+- "Opción con asesoría IA" → **"Desarrollo + asesoría IA"**
 
-1. El PDF que has subido contiene exactamente la versión antigua:
-   - “Cuota inicial: 14.500 EUR”
-   - “Mensualidad recurrente: 250 EUR”
-   - “El presupuesto de desarrollo es ajustado...”
-   - “uso intensivo de herramientas de IA...”
+### 2. Mantenimiento mensual con descuento en la opción de asesoría
+Hoy las dos columnas muestran el mismo coste de mantenimiento. Aplicar descuento de **80 €/mes** (250 → 170) en la opción con asesoría IA.
+- Lógica: si `consulting_retainer.enabled`, columna derecha de "Coste de mantenimiento mensual" = `monthly - 80`. Si el resultado fuese ≤ 0, dejar el valor original sin descuento (defensivo).
+- Esto se aplica solo en el render, no en la BD.
 
-2. En la base de datos, para el proyecto AFFLUX, ya NO existe Step 30 generado con propuesta cliente. La tabla `project_wizard_steps` solo tiene steps 1, 2, 3, 6 y 11. Es decir: el documento correcto no se está guardando o se está borrando después.
+### 3. Eliminar la fila "Total estimado primer año"
+Quitar por completo esa fila de la tabla en ambas columnas (asusta visualmente y engorda el presupuesto). 
 
-3. He encontrado el borrado: al pulsar el módulo opcional “Descripción MVP” se llama a `runGenericStep(4, "generate_mvp")`, y esa función ejecuta `clearSubsequentSteps(4)`. Esa limpieza borra cualquier step con número superior a 4, incluido:
-   - Step 30: propuesta cliente nueva
-   - Step 28/29: scope/PRD pipeline v2
-   - otros steps internos
-   Preserva solo Step 6. Por eso puedes “regenerar todo” y acabar descargando otra vez un PDF antiguo de Storage (`/30/vv1.pdf`) que sigue ahí con la versión vieja.
+### 4. Añadir nota de compromiso de un año
+Añadir como nueva línea en el bloque `_Notas:_` justo después de las dos existentes:
+- "_Compromiso mínimo de 12 meses sobre el plan de mantenimiento y, en su caso, sobre la asesoría IA._"
 
-4. Además hay otro problema: el generador de documentos guarda Step 30 como `30/vv1.pdf` porque recibe `version: "v1"` y luego añade otra `v`. Ese path se sobrescribe/reutiliza y facilita que parezca que todo sigue igual.
+### 5. Recortar la sección "Asesoría e inteligencia artificial recurrente"
+Mantener la cabecera y el primer párrafo (servicio mensual con N horas) y mantener la frase de "Incluye mentoría, asesoría y consultoría…". Sin tocar.
 
-## Plan de corrección definitiva
+### 6. Reescribir la sección "Modalidad de pago"
+Hoy mete texto largo sobre cuotas, ajustes y plan de mantenimiento. Sustituir por un texto corto y profesional, fijo:
 
-### 1. Blindar Step 30 contra borrados accidentales
-Modificar `clearSubsequentSteps` en `src/hooks/useProjectWizard.ts` para que NO borre steps internos/canónicos cuando se regenera la descripción MVP opcional.
+```
+**Desarrollo inicial:** 50% a la firma del contrato y 50% a la entrega del MVP.
+**Mantenimiento mensual:** facturación mensual, a final de mes.
+**Asesoría e inteligencia artificial (si aplica):** facturación mensual, a final de mes.
 
-Concretamente:
-- Si se regenera Step 4 visual/MVP opcional, no se borrarán Step 6, 25, 26, 27, 28, 29, 30, 31, 32 ni 300.
-- La descripción MVP quedará como opcional y no destructiva.
+**Costes de IA / API de terceros:** estimación basada en el uso esperado. El coste real puede variar y se facturará de forma transparente según consumo real.
+```
 
-### 2. Corregir el mapeo de steps para evitar que Step 11 suplante al Step 4
-Ahora Step 11 aparece como “Descripción del MVP” y dispara el flujo de limpieza equivocado. Ajustaré el loading/mapping para que:
-- El Step 4 visual use Step 4 real si existe.
-- Step 11 se trate como interno/legacy y no como trigger para borrar entregables posteriores.
+Esto reemplaza tanto el `payment_terms` como cualquier frase residual sobre "plan de mantenimiento incluye N horas" o "se ajustará la cuota mensual si el uso excede". Implementación: nueva función `buildClientPaymentTermsBlock()` que devuelve este texto fijo y se usa siempre que haya `consulting_retainer` o `monthly_retainer`. Mantener el saneador para casos antiguos.
 
-### 3. Forzar que “Generar propuesta cliente” cree y cargue un Step 30 real
-En `generateClientProposal`:
-- Después de invocar `project-wizard-step`, validar que existe una fila Step 30 nueva.
-- Si no existe, mostrar error explícito en vez de permitir descargar un PDF anterior.
-- Cargar la propuesta directamente desde la fila Step 30 recién creada, no desde estado viejo.
+### 7. Cache-bust y test
+- Bump `// cache-bust:` en `src/main.tsx`.
+- Actualizar `f7-proposal-builder_test.ts`:
+  - Comprobar nuevas etiquetas "Desarrollo único" / "Desarrollo + asesoría IA".
+  - Comprobar que **NO** aparece "Total estimado primer año".
+  - Comprobar mantenimiento descontado (170 €/mes cuando estándar = 250 € y consulting activo).
+  - Comprobar el bloque nuevo de Modalidad de pago con "50% a la firma" y "a final de mes".
+  - Comprobar nota de compromiso de 12 meses.
 
-### 4. Bloquear descarga si la propuesta contiene texto antiguo
-En `ProjectProposalExport.tsx` antes de descargar:
-- Si `proposalMarkdown` contiene “Cuota inicial”, “Mensualidad recurrente”, “14.500”, “14,500” o “presupuesto de desarrollo es ajustado”, bloquear la descarga con un error claro.
-- Esto evita que vuelva a salir un PDF viejo aunque quede cacheado.
+### Archivos modificados
+- `supabase/functions/project-wizard-step/f7-proposal-builder.ts`
+- `supabase/functions/project-wizard-step/f7-proposal-builder_test.ts`
+- `src/main.tsx`
 
-### 5. Añadir autocorrección en `generate-document` para Step 30
-En `supabase/functions/generate-document/index.ts`:
-- Si `stepNumber === 30` y `exportMode === "client"`, ignorar contenido stale del frontend si existe un Step 30 más reciente en BD.
-- Renderizar siempre `output_data.proposal_markdown` de la última fila Step 30.
-- Si no hay Step 30, devolver error: “No existe propuesta cliente actual; pulsa Generar propuesta cliente”.
-- Cambiar el nombre/path para no generar `vv1.pdf`.
-
-### 6. Corregir el presupuesto de dos opciones en la fuente de verdad
-Mantener y reforzar `f7-proposal-builder.ts` para que Section 10 sea siempre:
-
-| Concepto | Opción estándar | Opción con asesoría IA |
-|---|---|---|
-| Coste de desarrollo inicial | coste completo | 50% del desarrollo |
-| Coste de mantenimiento mensual | mismo mantenimiento | mismo mantenimiento |
-| Asesoría e inteligencia artificial | — | importe mensual según horas |
-| Total estimado primer año | desarrollo + 12 mantenimiento | 50% desarrollo + 12 mantenimiento + 12 asesoría |
-
-Y eliminar definitivamente del render:
-- “Cuota inicial”
-- “Mensualidad recurrente”
-- “presupuesto ajustado”
-- “uso intensivo de IA para la codificación”
-
-### 7. Regenerar y validar AFFLUX
-Después de aplicar cambios:
-- Ejecutar tests de F7.
-- Generar Step 30 para el proyecto AFFLUX desde la Edge Function.
-- Verificar en BD que existe Step 30 y que su markdown contiene la tabla correcta.
-- Generar el PDF nuevo y confirmar que ya no contiene los textos antiguos.
-
-## Resultado esperado
-El próximo PDF de AFFLUX no saldrá de Storage antiguo ni del Step 11/MVP opcional. Saldrá exclusivamente de Step 30 actualizado, con la tabla comparativa correcta y con bloqueo si aparece cualquier frase antigua.
+### Validación
+Tras aprobar: refrescar, en Paso 5 pulsar "Regenerar propuesta cliente" y descargar PDF. La sección 11 debe mostrar la tabla con las dos columnas renombradas, mantenimiento 170 €/mes en la columna derecha, sin total anual, y la nota de compromiso 12 meses. La modalidad de pago debe ser exactamente el bloque corto definido arriba.

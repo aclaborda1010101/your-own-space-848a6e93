@@ -822,6 +822,167 @@ export const ProjectBudgetPanel = ({
               </div>
             )}
 
+            {/* F7.2 — Consultoría/Asesoría IA recurrente mensual */}
+            {(editing || displayData.consulting_retainer?.enabled) && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                  <TrendingUp className="w-4 h-4 text-primary" />
+                  Consultoría / Asesoría IA recurrente
+                  <span className="text-[10px] font-normal text-muted-foreground">
+                    (mensual · reduce el coste de desarrollo)
+                  </span>
+                </h4>
+                <Card className={`border-border/50 ${displayData.consulting_retainer?.enabled ? "ring-1 ring-primary/30 bg-primary/5" : ""}`}>
+                  <CardContent className="p-3 space-y-2.5">
+                    {editing ? (
+                      <>
+                        <label className="flex items-start gap-2 text-xs cursor-pointer">
+                          <Checkbox
+                            checked={editData?.consulting_retainer?.enabled ?? false}
+                            onCheckedChange={(checked) => {
+                              if (!editData) return;
+                              setEditData({
+                                ...editData,
+                                consulting_retainer: {
+                                  ...editData.consulting_retainer,
+                                  enabled: checked === true,
+                                  discount_pct: editData.consulting_retainer?.discount_pct ?? 50,
+                                },
+                              });
+                            }}
+                            className="mt-0.5 shrink-0"
+                          />
+                          <span className="text-foreground">
+                            <span className="font-medium">Activar consultoría/asesoría recurrente.</span>{" "}
+                            <span className="text-muted-foreground">
+                              Si está activa, el desarrollo se reduce al{" "}
+                              {100 - (editData?.consulting_retainer?.discount_pct ?? 50)}%
+                              del importe original.
+                            </span>
+                          </span>
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <label className="text-xs space-y-1">
+                            <span className="text-muted-foreground">Cuota mensual (€)</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              placeholder="ej. 1500"
+                              value={editData?.consulting_retainer?.monthly_fee_eur ?? ""}
+                              onChange={(e) => {
+                                if (!editData) return;
+                                const v = e.target.value === "" ? undefined : Number(e.target.value);
+                                setEditData({
+                                  ...editData,
+                                  consulting_retainer: { ...editData.consulting_retainer, monthly_fee_eur: v },
+                                });
+                              }}
+                              className="h-8 text-sm"
+                            />
+                          </label>
+                          <label className="text-xs space-y-1">
+                            <span className="text-muted-foreground">Horas/mes incluidas</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              placeholder="ej. 8"
+                              value={editData?.consulting_retainer?.monthly_hours ?? ""}
+                              onChange={(e) => {
+                                if (!editData) return;
+                                const v = e.target.value === "" ? undefined : Number(e.target.value);
+                                setEditData({
+                                  ...editData,
+                                  consulting_retainer: { ...editData.consulting_retainer, monthly_hours: v },
+                                });
+                              }}
+                              className="h-8 text-sm"
+                            />
+                          </label>
+                          <label className="text-xs space-y-1">
+                            <span className="text-muted-foreground">% descuento desarrollo</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              placeholder="50"
+                              value={editData?.consulting_retainer?.discount_pct ?? ""}
+                              onChange={(e) => {
+                                if (!editData) return;
+                                const v = e.target.value === "" ? undefined : Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                                setEditData({
+                                  ...editData,
+                                  consulting_retainer: { ...editData.consulting_retainer, discount_pct: v },
+                                });
+                              }}
+                              className="h-8 text-sm"
+                            />
+                          </label>
+                        </div>
+                        <label className="text-xs space-y-1 block">
+                          <span className="text-muted-foreground">Notas / alcance (opcional)</span>
+                          <Input
+                            type="text"
+                            placeholder="Ej: revisión mensual, mentoría a equipo, ajustes de prompts…"
+                            value={editData?.consulting_retainer?.notes ?? ""}
+                            onChange={(e) => {
+                              if (!editData) return;
+                              setEditData({
+                                ...editData,
+                                consulting_retainer: { ...editData.consulting_retainer, notes: e.target.value || undefined },
+                              });
+                            }}
+                            className="h-8 text-sm"
+                          />
+                        </label>
+                        {editData?.consulting_retainer?.enabled &&
+                          displayData.development?.total_development_eur != null && (
+                            <div className="border-t border-border/50 pt-2 text-xs flex justify-between">
+                              <span className="text-muted-foreground">
+                                Desarrollo con descuento ({editData.consulting_retainer.discount_pct ?? 50}%):
+                              </span>
+                              <span className="font-medium text-primary">
+                                €{Math.round(
+                                  displayData.development.total_development_eur *
+                                    (1 - (editData.consulting_retainer.discount_pct ?? 50) / 100),
+                                ).toLocaleString()}
+                                {" "}
+                                <span className="text-muted-foreground line-through">
+                                  €{displayData.development.total_development_eur.toLocaleString()}
+                                </span>
+                              </span>
+                            </div>
+                          )}
+                      </>
+                    ) : (
+                      <div className="text-xs space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Cuota mensual</span>
+                          <span className="font-medium text-foreground">
+                            €{(displayData.consulting_retainer?.monthly_fee_eur ?? 0).toLocaleString()}/mes
+                          </span>
+                        </div>
+                        {displayData.consulting_retainer?.monthly_hours ? (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Horas incluidas</span>
+                            <span className="text-foreground">{displayData.consulting_retainer.monthly_hours}h/mes</span>
+                          </div>
+                        ) : null}
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Descuento sobre desarrollo</span>
+                          <span className="text-foreground">{displayData.consulting_retainer?.discount_pct ?? 50}%</span>
+                        </div>
+                        {displayData.consulting_retainer?.notes && (
+                          <p className="text-muted-foreground italic mt-1">
+                            {displayData.consulting_retainer.notes}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
             {/* Plazos de implementación (override del cronograma del PDF cliente) */}
             {editing && editData && (
               <div className="space-y-2">

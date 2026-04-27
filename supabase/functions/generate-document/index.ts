@@ -1648,6 +1648,55 @@ serve(async (req: Request) => {
 
     let processedContent: any = content;
 
+    // ── Step 30 (Propuesta cliente): SIEMPRE refrescar desde BBDD y
+    //    bloquear si la propuesta vigente contiene texto antiguo.
+    let step30VersionOverride: number | null = null;
+    if (stepNumber === 30) {
+      try {
+        const supabaseAdmin = getSupabaseAdmin();
+        const { data: step30Row } = await supabaseAdmin
+          .from("project_wizard_steps")
+          .select("output_data, version")
+          .eq("project_id", projectId)
+          .eq("step_number", 30)
+          .order("version", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const freshMd = (step30Row?.output_data as any)?.proposal_markdown;
+        if (!freshMd || typeof freshMd !== "string") {
+          return new Response(JSON.stringify({
+            error: "STEP30_MISSING",
+            message: "No existe propuesta cliente vigente. Pulsa 'Generar propuesta cliente' antes de descargar el PDF.",
+          }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        const STALE = [
+          { re: /Cuota\s+inicial/i, label: "Cuota inicial" },
+          { re: /Mensualidad\s+recurrente/i, label: "Mensualidad recurrente" },
+          { re: /presupuesto\s+(?:de\s+desarrollo\s+)?(?:es\s+)?ajustado/i, label: "presupuesto ajustado" },
+          { re: /uso\s+intensivo\s+de\s+herramientas\s+de\s+IA/i, label: "uso intensivo de IA" },
+          { re: /14[.,]?500/, label: "14.500" },
+        ];
+        const matched = STALE.filter((p) => p.re.test(freshMd)).map((p) => p.label);
+        if (matched.length > 0) {
+          return new Response(JSON.stringify({
+            error: "STEP30_STALE",
+            message: `Propuesta obsoleta detectada (${matched.join(", ")}). Regenera la propuesta cliente.`,
+            stale_terms: matched,
+          }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+        processedContent = freshMd;
+        if (typeof step30Row?.version === "number") {
+          step30VersionOverride = step30Row.version;
+        }
+      } catch (e) {
+        console.error("[generate-document] Step 30 fresh-load failed:", e);
+        return new Response(JSON.stringify({
+          error: "STEP30_FETCH_FAILED",
+          message: "No se pudo leer la propuesta cliente actual. Reintenta.",
+        }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
     // Step 0: Strip internal metadata keys from JSON objects in client mode
     if (isClientMode && typeof processedContent === "object" && processedContent !== null) {
       const internalKeys = [

@@ -20,6 +20,17 @@ export interface BudgetMonetizationModel {
   visible_to_client?: boolean;
 }
 
+export interface BudgetImplementationOverride {
+  /** Semanas para la fase MVP (sobrescribe heurística). */
+  mvp_weeks?: number;
+  /** Semanas para fast-follow (sobrescribe heurística). */
+  fast_follow_weeks?: number;
+  /** Fecha ISO YYYY-MM-DD de arranque (opcional). */
+  start_date?: string;
+  /** Notas libres que se anexan al cronograma del cliente. */
+  notes?: string;
+}
+
 export interface BudgetData {
   development?: {
     phases?: Array<{ name: string; description?: string; hours: number; cost_eur: number }>;
@@ -41,6 +52,8 @@ export interface BudgetData {
   pricing_notes?: string;
   risk_factors?: string[];
   recommended_model?: string;
+  /** F7.1 — Override del cronograma de implementación que se propaga al PDF cliente. */
+  implementation_override?: BudgetImplementationOverride;
 }
 
 export interface CommercialTermsModel {

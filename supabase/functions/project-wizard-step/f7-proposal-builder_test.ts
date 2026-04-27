@@ -352,11 +352,12 @@ Deno.test("F7: derives proposal prices from Step 6 budgetData, not stale commerc
 });
 
 Deno.test("F7: maintenance discount applied when consulting retainer enabled", () => {
-  // setup 10000, monthly 250, consulting on
+  // standardSetup 10000, monthly 250, consulting on → setup queda 5000 (-50%), monthly 170 en columna IA
   const terms = commercialTermsFromBudgetData({
     development: { total_development_eur: 10000 },
     recurring_monthly: { total_monthly_eur: 250 },
-    monetization_models: [],
+    monetization_models: [{ name: "x", setup_price_eur: "10000", monthly_price_eur: "250" }],
+    recommended_model: "x",
     consulting_retainer: { enabled: true, monthly_fee_eur: 4000, monthly_hours: 40, discount_pct: 50 },
   })!;
   const out = buildClientProposal({

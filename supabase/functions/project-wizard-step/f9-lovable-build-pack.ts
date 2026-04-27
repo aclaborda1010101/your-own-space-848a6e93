@@ -254,13 +254,26 @@ function buildAgents(scope: ScopeArchitectureV1): AgentSpec[] {
     if (/valor|brains/.test(lower)) tools.push("search_asset_profile");
     if (/compliance|dpia/.test(lower)) tools.push("check_dpia_status", "require_human_review");
     if (/soul/.test(lower)) tools.push("save_next_action");
+    if (/whatsapp|cadencia|mensaj/.test(lower)) tools.push("save_next_action", "require_human_review");
 
     agents.push({
       name: c.name,
       scope_ref: c.scope_id,
       responsibility: c.business_job || "Operación principal asignada por el alcance.",
       tools: Array.from(new Set(tools.length ? tools : ["search_owner_profile"])),
-      hitl: /compliance|dpia|falleci|matching|valor/.test(lower),
+      hitl: /compliance|dpia|falleci|matching|valor|whatsapp|cadencia/.test(lower),
+    });
+  }
+
+  // Agente Compliance / HITL explícito — SIEMPRE presente, aunque ningún componente
+  // del scope dispare el hint de compliance directamente. Es estructural para AFFLUX.
+  if (!agents.some((a) => /compliance|hitl/i.test(a.name))) {
+    agents.push({
+      name: "Agente Compliance / HITL",
+      responsibility:
+        "Revisar si una acción está bloqueada por DPIA, datos personales, falta de consentimiento o baja confianza, y enrutar a revisión humana cuando proceda.",
+      tools: ["check_dpia_status", "require_human_review", "abstain_if_low_evidence"],
+      hitl: true,
     });
   }
 

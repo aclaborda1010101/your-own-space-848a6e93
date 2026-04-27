@@ -2130,28 +2130,38 @@ REGLAS PARA deep_patterns:
         .maybeSingle();
       const newVersion30 = existing30 ? existing30.version + 1 : 1;
 
-      // La constraint UNIQUE es (project_id, step_number) — no incluye version.
-      // Por tanto debemos UPSERT sobre la fila existente, no insertar una nueva.
-      const { error: insertErr30 } = await supabase
-        .from("project_wizard_steps")
-        .upsert({
-          project_id: projectId,
-          step_number: 30,
-          step_name: "Pipeline v2 — F7 Client Proposal",
-          status: "review",
-          input_data: { source_step: 28, commercial_terms_v1: commercialTerms },
-          output_data: output,
-          model_used: "deterministic",
-          version: newVersion30,
-          user_id: user.id,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "project_id,step_number" });
-      if (insertErr30) {
-        console.error("[generate_client_proposal] INSERT Step 30 failed:", insertErr30);
+      // La constraint UNIQUE es (project_id, step_number). Actualizamos la fila
+      // existente explícitamente para no depender de ON CONFLICT/cache de esquema.
+      const step30Payload = {
+        step_name: "Pipeline v2 — F7 Client Proposal",
+        status: "review",
+        input_data: { source_step: 28, commercial_terms_v1: commercialTerms },
+        output_data: output,
+        model_used: "deterministic",
+        version: newVersion30,
+        user_id: user.id,
+        updated_at: new Date().toISOString(),
+      };
+
+      const save30 = existing30?.id
+        ? await supabase
+            .from("project_wizard_steps")
+            .update(step30Payload)
+            .eq("id", existing30.id)
+        : await supabase
+            .from("project_wizard_steps")
+            .insert({
+              project_id: projectId,
+              step_number: 30,
+              ...step30Payload,
+            });
+
+      if (save30.error) {
+        console.error("[generate_client_proposal] SAVE Step 30 failed:", save30.error);
         return new Response(JSON.stringify({
-          error: `INSERT_FAILED: ${insertErr30.message}${insertErr30.code ? ` (code=${insertErr30.code})` : ""}`,
-          details: (insertErr30 as any).details ?? null,
-          hint: (insertErr30 as any).hint ?? null,
+          error: `SAVE_FAILED: ${save30.error.message}${save30.error.code ? ` (code=${save30.error.code})` : ""}`,
+          details: (save30.error as any).details ?? null,
+          hint: (save30.error as any).hint ?? null,
           attempted_version: newVersion30,
           markdown_chars: proposalMarkdown.length,
         }), {

@@ -1767,36 +1767,73 @@ REGLAS PARA deep_patterns:
         scopeOutput._contract_validation = validation28.flags;
       }
 
-      // 5. Persist as Step 28 (does NOT touch 25/26/27).
-      const { data: existing28 } = await supabase
+      // 5. Persist as Step 28 — APPEND-ONLY with approval guard.
+      // Load full version history to detect approved versions.
+      const { data: allStep28 } = await supabase
         .from("project_wizard_steps")
-        .select("id, version")
+        .select("id, version, status, approved_at")
         .eq("project_id", projectId)
         .eq("step_number", 28)
-        .order("version", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const newVersion28 = existing28 ? existing28.version + 1 : 1;
+        .order("version", { ascending: false });
+
+      const latest28 = allStep28?.[0] ?? null;
+      const approved28 = (allStep28 ?? []).find(
+        (r) => r.status === "approved" || r.approved_at !== null,
+      ) ?? null;
+      const newVersion28 = latest28 ? latest28.version + 1 : 1;
+
+      // Guard: if there is an approved version, do NOT silently overwrite it.
+      // The new run is allowed (append-only), but it MUST be flagged so the
+      // PRD step won't pick it over the approved one unless explicitly asked.
+      const allowOverride = stepData?.allow_override_approved === true;
+      const previousApprovedRowId = approved28?.id ?? null;
+      const previousApprovedVersion = approved28?.version ?? null;
+      if (approved28 && !allowOverride) {
+        // We still insert (history is sacred), but mark it as superseded-pending-review.
+        // The PRD source guard will continue to prefer the approved version.
+        console.warn(
+          `[F5] Step 28 v${approved28.version} is already approved (row ${approved28.id}). ` +
+            `Inserting v${newVersion28} as 'review' — PRD will keep using approved version unless allow_override_approved=true.`,
+        );
+      }
+
+      // Enrich audit_meta with approval-history trace.
+      (scopeOutput as any).scope_meta = {
+        ...(scopeOutput as any).scope_meta,
+        previous_step28_version: latest28?.version ?? null,
+        previous_step28_row_id: latest28?.id ?? null,
+        previous_approved_version: previousApprovedVersion,
+        previous_approved_row_id: previousApprovedRowId,
+        generated_from_source_hash: `s25:${step25Row.id}|s26:${step26Row.id}|s27:${step27Row.id}`,
+      };
 
       // FIX: insert a NEW versioned row each time (do NOT overwrite previous version
       // by reusing existing28.id — that destroyed approved Step 28 v2 history).
-      await supabase.from("project_wizard_steps").insert({
-        project_id: projectId,
-        step_number: 28,
-        step_name: "Pipeline v2 — F5 Scope Architect",
-        status: "review",
-        input_data: { source_steps: [25, 26, 27] },
-        output_data: scopeOutput,
-        model_used: "gemini-2.5-pro",
-        version: newVersion28,
-        user_id: user.id,
-      });
+      const { data: insertedRow } = await supabase
+        .from("project_wizard_steps")
+        .insert({
+          project_id: projectId,
+          step_number: 28,
+          step_name: "Pipeline v2 — F5 Scope Architect",
+          status: "review",
+          input_data: { source_steps: [25, 26, 27], allow_override_approved: allowOverride },
+          output_data: scopeOutput,
+          model_used: "gemini-2.5-pro",
+          version: newVersion28,
+          user_id: user.id,
+        })
+        .select("id")
+        .single();
 
       // 6. Counts derived from persisted JSON (Precision 7).
       const counts = f5Result.scope_meta.counts;
       return new Response(JSON.stringify({
         ok: true,
         version: newVersion28,
+        row_id: insertedRow?.id ?? null,
+        previous_approved_version: previousApprovedVersion,
+        previous_approved_row_id: previousApprovedRowId,
+        approved_protected: approved28 != null && !allowOverride,
         source_steps: f5Result.scope_meta.source_steps,
         counts,
         soul_capture_required: f5Result.scope_architecture_v1.soul_capture_plan.required,

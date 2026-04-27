@@ -335,8 +335,12 @@ Deno.test("F7: derives proposal prices from Step 6 budgetData, not stale commerc
     commercialTerms: terms,
   });
   const md = renderProposalMarkdown(out.client_proposal_v1);
-  assert(md.includes("| Concepto | Sin consultoría | Con consultoría IA |"), "missing comparison table");
+  assert(md.includes("| Concepto | Opción estándar | Opción con asesoría IA |"), "missing comparison table");
   assert(md.includes("12.400 EUR"), "missing real development cost");
   assert(md.includes("6.200 EUR"), "missing discounted setup cost");
   assert(!md.includes("14.500 EUR"), "stale setup leaked into proposal");
+  assert(!/Cuota inicial/i.test(md), "should not use 'Cuota inicial' terminology");
+  assert(!/Mensualidad recurrente/i.test(md), "should not use 'Mensualidad recurrente' terminology");
+  assert(/Coste de desarrollo inicial/.test(md), "missing new terminology 'Coste de desarrollo inicial'");
+  assert(/Coste de mantenimiento mensual/.test(md), "missing new terminology 'Coste de mantenimiento mensual'");
 });

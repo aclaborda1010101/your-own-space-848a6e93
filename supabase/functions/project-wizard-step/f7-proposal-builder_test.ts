@@ -2,7 +2,7 @@
  * f7-proposal-builder_test.ts
  */
 import { assertEquals, assert } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { buildClientProposal, renderProposalMarkdown, detectInternalJargon } from "./f7-proposal-builder.ts";
+import { buildClientProposal, renderProposalMarkdown, detectInternalJargon, commercialTermsFromBudgetData } from "./f7-proposal-builder.ts";
 import type { ScopeArchitectureV1 } from "./f5-deterministic-scope.ts";
 
 function fakeScope(): ScopeArchitectureV1 {
@@ -304,4 +304,40 @@ Deno.test("F7: BANNED_PHRASES catches 'margen del 40%' and 'tarifa por hora'", (
 
   const found3 = detectInternalJargon("Coste interno estimado: 8.000 EUR.");
   assert(found3.length >= 1, `expected to flag 'coste interno'`);
+});
+
+Deno.test("F7: derives proposal prices from Step 6 budgetData, not stale commercial_terms", () => {
+  const terms = commercialTermsFromBudgetData({
+    development: { total_development_eur: 12400 },
+    recurring_monthly: { total_monthly_eur: 215 },
+    recommended_model: "Desarrollo a Medida + Mantenimiento Mensual",
+    monetization_models: [{
+      name: "Desarrollo a Medida + Mantenimiento Mensual",
+      setup_price_eur: "14.500",
+      monthly_price_eur: "250",
+    }],
+    consulting_retainer: {
+      enabled: true,
+      monthly_fee_eur: 3500,
+      monthly_hours: 35,
+      discount_pct: 50,
+    },
+  })!;
+  assertEquals(terms.setup_fee_before_discount, undefined);
+  assertEquals(terms.consulting_retainer?.setup_fee_before_discount, 12400);
+  assertEquals(terms.setup_fee, 6200);
+  assertEquals(terms.monthly_retainer, 250);
+
+  const out = buildClientProposal({
+    scope: fakeScope(),
+    source_step: { step_number: 28, version: 3, row_id: "row-28" },
+    projectName: "AFFLUX",
+    clientCompany: "AFFLUX",
+    commercialTerms: terms,
+  });
+  const md = renderProposalMarkdown(out.client_proposal_v1);
+  assert(md.includes("| Concepto | Sin consultoría | Con consultoría IA |"), "missing comparison table");
+  assert(md.includes("12.400 EUR"), "missing real development cost");
+  assert(md.includes("6.200 EUR"), "missing discounted setup cost");
+  assert(!md.includes("14.500 EUR"), "stale setup leaked into proposal");
 });

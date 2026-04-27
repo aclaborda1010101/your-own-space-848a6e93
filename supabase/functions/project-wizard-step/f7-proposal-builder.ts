@@ -654,7 +654,7 @@ export function buildClientProposal(input: F7Input): F7Output {
 
 function fmtMoney(n: number | undefined, currency: string): string {
   if (typeof n !== "number" || !isFinite(n)) return "—";
-  return `${n.toLocaleString("es-ES", { maximumFractionDigits: 2 })} ${currency}`;
+  return `${n.toLocaleString("es-ES", { maximumFractionDigits: 2, useGrouping: true })} ${currency}`;
 }
 
 function fmtEuroNumber(n: number): string {

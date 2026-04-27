@@ -972,6 +972,9 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
     lines.push("");
     lines.push(`**Impuestos:** ${p.budget.taxes}`);
   }
+
+  // ── Tabla comparativa con/sin consultoría IA (solo si aplica) ──
+  for (const l of renderBudgetComparisonTable(p.budget, c)) lines.push(l);
   lines.push("");
 
   // ── Bloque destacado: Consultoría / Asesoría IA recurrente ──

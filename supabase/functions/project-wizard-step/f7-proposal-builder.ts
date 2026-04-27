@@ -757,39 +757,7 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
   lines.push(`**${p.implementation_plan.timeline}**`);
   lines.push("");
 
-  const sch = p.implementation_plan.schedule;
-  if (sch && sch.phases.length > 0) {
-    lines.push("| Fase | Duración | Componentes | Hito principal |");
-    lines.push("|---|---|---|---|");
-    for (const ph of sch.phases) {
-      const dur = ph.start_date && ph.end_date
-        ? `${ph.duration_weeks} (${ph.start_date} – ${ph.end_date})`
-        : ph.duration_weeks;
-      const range = ph.start_week > 0
-        ? `Sem. ${ph.start_week}-${ph.end_week}`
-        : "—";
-      const comps = ph.component_count > 0 ? `${ph.component_count} módulos` : "—";
-      const milestone = ph.deliverable;
-      lines.push(`| ${ph.name} | ${range} · ${dur} | ${comps} | ${milestone} |`);
-    }
-    lines.push("");
-
-    if (p.implementation_plan.soul_sessions_required) {
-      lines.push(
-        `**Sesiones Soul:** ${p.implementation_plan.soul_sessions_count} sesiones de captura de criterio al inicio del proyecto.`,
-      );
-      lines.push("");
-    }
-
-    lines.push("**Supuestos:**");
-    for (const a of sch.assumptions) lines.push(`- ${a}`);
-    lines.push("");
-
-    if (sch.notes) {
-      lines.push(`**Notas:** ${sch.notes}`);
-      lines.push("");
-    }
-  } else if (p.implementation_plan.soul_sessions_required) {
+  if (p.implementation_plan.soul_sessions_required) {
     lines.push(
       `Incluye ${p.implementation_plan.soul_sessions_count} sesiones de captura de criterio estratégico al inicio del proyecto.`,
     );

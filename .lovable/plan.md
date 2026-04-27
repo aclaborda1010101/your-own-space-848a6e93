@@ -1,64 +1,97 @@
-# Por qué sigues viendo 14.500€ — diagnóstico exacto
 
-He consultado la BBDD y tengo la respuesta concreta:
+# Microcorrecciones finales propuesta cliente (Step 30)
 
-## Lo que hay realmente guardado
+Solo se edita el renderizador de la propuesta (`f7-proposal-builder.ts`) y un saneador editorial. **No se toca pipeline, Step 28, Step 29, Build Pack ni PRD.**
 
-**Step 6 (presupuesto), versión 8, status `approved`, guardado a las 18:05:**
+---
+
+## 1. Cabecera: "CONFIDENCIAL — AFFLUX" (no el nombre del decisor)
+
+La cabecera ya usa `project_name`, pero el proyecto está guardado con un nombre incorrecto en BBDD (probablemente "Alejandro Gordo"). Solución doble:
+
+- **Forzar fallback editorial** en `renderProposalMarkdown`: si `project_name` coincide con `decision_maker_name` o tiene pinta de nombre de persona, usar `client_company` (o "AFFLUX" si está disponible) para el `CONFIDENCIAL` y para el título.
+- Mostrar bloque de identificación así:
+  - `Cliente / empresa: AFLU / AFFLUX`
+  - `Decisor: Alejandro Gordo`
+  - `Proyecto / Producto: AFFLUX`
+- Si `client_company` ya contiene "AFFLUX" o "AFLU", priorizarlo en cabecera y título sobre `project_name`.
+
+## 2. Sanitizado editorial de módulos MVP / fast-follow
+
+Añadir una función `sanitizeScopeItem(title, description)` que se aplique a `mvp_scope`, `fast_follow` y `roadmap` antes de renderizar. Reemplazos:
+
+- **WhatsApp originación → mock controlado**
+  - Título: "Gestor de WhatsApp para originación" → "Gestor de cadencias y WhatsApp mock/controlado"
+  - Descripción cuando contenga "WhatsApp" + ("originación"|"envío"|"comunicaciones"): sustituir por
+    > "Interfaz para planificar contactos, registrar estados y simular comunicaciones por WhatsApp, sin envío real en MVP hasta disponer de API, consentimiento y revisión legal."
+  - "Monitor de cadencia de llamadas y WhatsApp" → "Monitor de cadencias de llamadas y WhatsApp" + nota "sin automatización de envío real en MVP".
+
+- **Detector de fallecimientos**
+  - Cualquier descripción que contenga "fallecimiento" + "leads" → reescribir a:
+    > "Identificar eventos sucesorios relevantes para generar alertas internas revisadas por una persona antes de cualquier acción comercial."
+
+Lista de reglas centralizada (regex + reemplazo) para que sea ampliable.
+
+## 3. Reescritura de "Modalidad de pago" (Sección 11)
+
+Aplicar saneado al campo `payment_terms` antes de renderizar. Reemplazos:
+
+- Eliminar / reescribir frases que contengan: "presupuesto ajustado", "uso intensivo de herramientas de IA para la codificación", "depende 100%".
+- Anteponer (o sustituir párrafo correspondiente) por:
+  > "El presupuesto se plantea para una primera versión funcional por fases, apoyada en herramientas de desarrollo asistido por IA y revisión técnica del equipo. El componente Soul de Alejandro requiere una implicación activa del decisor durante las sesiones de captura de criterio; su calidad dependerá de la concreción del material aportado y de la validación de los criterios estratégicos durante las primeras semanas."
+- Costes legales: si se detecta línea de DPIA/legal en `legal_notes` o `payment_terms`, reescribir a:
+  > "Los costes de asesoría legal, DPIA o validación jurídica externa no están incluidos y deberán ser gestionados por el cliente en paralelo si fueran necesarios."
+
+## 4. "Próximos pasos" como sección numerada
+
+Cambiar la línea suelta `## Próximos pasos` por `section("Próximos pasos")` para que entre en la numeración dinámica (será `13.` o lo que toque).
+
+## 5. Presupuesto: tabla comparativa con/sin consultoría
+
+En la sección **Presupuesto**, cuando exista `consulting_retainer.enabled = true` y `setup_fee_before_discount`, añadir una tabla Markdown de comparación:
+
+```text
+| Concepto                       | Sin consultoría | Con consultoría IA |
+|--------------------------------|-----------------|--------------------|
+| Cuota inicial (desarrollo)     | 14.500 €        | 7.250 €            |
+| Mensualidad recurrente         | 250 €/mes       | 250 €/mes          |
+| Consultoría IA mensual         | —               | X €/mes (Y h)      |
+| Total primer año (estimado)    | 17.500 €        | 10.250 € + cons.   |
 ```
-total_development_eur: 12.400         ✅ correcto
-m0_setup_price_eur:    "12.400"       ✅ sincronizado
-recommended_model:     "Desarrollo a Medida + Mantenimiento Mensual"
-consulting_retainer:
-  enabled:           NULL  ← ❌ AQUÍ ESTÁ EL BUG #1
-  monthly_fee_eur:   3500
-  monthly_hours:     35
-implementation_override:
-  mvp_weeks:   8
-  start_date:  "2026-05-04"           ✅ correcto
-```
 
-**Step 30 (propuesta cliente), solo versión 1, generada a las 06:34:**
-```
-setup_fee:           14500   ← ❌ BUG #2: PDF VIEJO
-setup_fee_display:   "14.500 EUR"
-consulting_enabled:  null
-schedule.start_date: null
-```
+- Importes calculados desde `setup_fee_before_discount`, `setup_fee` (con descuento), `monthly_retainer` y `consulting_retainer.monthly_fee_eur` × 12.
+- Si no hay consultoría activada, mostrar solo desglose actual (sin tabla comparativa).
+- Mantener bloque dedicado "Consultoría / Asesoría IA recurrente" tal cual ya existe.
 
-## Las dos causas reales
+## 6. Cache-bust + redeploy
 
-1. **El checkbox "Activar consultoría" nunca se marcó.** En tu screenshot el círculo está vacío. Rellenaste cuota (3.500€), horas (35) y % descuento (50), pero sin marcar el checkbox `enabled` quedó `null` → el mapper no aplica descuento ni renderiza el bloque.
+- Actualizar `// cache-bust` en `src/main.tsx`.
+- Redeploy de `project-wizard-step`.
 
-2. **No has pulsado "Generar propuesta cliente" después de editar.** El Step 30 sigue en v1 del 06:34 (antes de que existieran los nuevos campos). El PDF que descargas es el de esa versión: 14.500€, sin consultoría, sin cronograma. El sistema NO regenera la propuesta automáticamente al guardar el presupuesto.
+---
 
-## Plan de fix (2 cambios pequeños + acción manual)
+## Detalles técnicos
 
-### Fix 1 — Auto-activar consultoría al guardar
-En `ProjectBudgetPanel.handleSave`: si el usuario rellenó `monthly_fee_eur > 0` o `monthly_hours > 0` pero dejó el checkbox sin marcar, activar automáticamente `consulting_retainer.enabled = true` y mostrar un toast: *"Consultoría recurrente activada automáticamente (rellenaste cuota u horas)."*
+**Archivos a editar:**
+- `supabase/functions/project-wizard-step/f7-proposal-builder.ts`
+  - Nueva función `editorialSanitize(proposal)` invocada al inicio de `renderProposalMarkdown`.
+  - Lógica de cabecera: priorizar `client_company` si contiene AFFLUX/AFLU o si `project_name` ≈ `decision_maker_name`.
+  - Cambiar `lines.push("## Próximos pasos")` → `section("Próximos pasos")`.
+  - Añadir helper `renderBudgetComparisonTable(budget)` y llamarlo dentro de la sección Presupuesto cuando `consultingActive`.
+- `src/main.tsx` — bump `cache-bust`.
 
-Razón: si pones datos, claramente la quieres. Es un patrón UX defensivo.
+**No se modifican:**
+- Step 28 (PRD), Step 29 (Build Pack), pipeline de extracción/scope.
+- Schema de `ClientProposalV1`.
+- Datos guardados en BBDD del proyecto.
 
-### Fix 2 — Regenerar propuesta automáticamente al re-aprobar tras cambios
-En `useProjectWizard.approveBudget`: si la última versión del Step 30 es **anterior** a la última actualización del Step 6, llamar `generateClientProposal()` automáticamente después de marcar `approved`. Toast: *"Regenerando propuesta cliente con los cambios…"*.
+## Acción del usuario tras aprobar
 
-### Fix 3 — Banner de aviso en el panel
-Cuando detectemos que `budgetData.updated_at > step30.created_at` (presupuesto editado desde la última propuesta), mostrar banner amarillo destacado:
-> ⚠️ Has modificado el presupuesto. La propuesta cliente actual está desactualizada — pulsa **"Generar propuesta cliente"** para crear una nueva versión.
-
-### Acción manual que tienes que hacer ahora (independiente del fix)
-Tras desplegar los fixes:
-1. Abrir el panel de presupuesto.
-2. Pulsar Editar → marcar el checkbox de Activar consultoría → Guardar.
-3. Pulsar **"Generar propuesta cliente"** → esto creará Step 30 v2.
-4. Descargar el nuevo PDF.
-
-Si no haces el paso 3, seguirás descargando el v1 viejo aunque el código esté corregido.
-
-## Archivos que voy a tocar
-
-- `src/components/projects/wizard/ProjectBudgetPanel.tsx` — auto-activar consultoría en handleSave + banner "regenera propuesta".
-- `src/hooks/useProjectWizard.ts` — auto-regenerar propuesta en `approveBudget` si está stale.
-- `src/main.tsx` — bump cache-bust.
-
-No hace falta tocar la edge function (los renders ya están bien).
+1. Ir a Step 5 → "Generar propuesta cliente" para producir la versión final.
+2. Descargar PDF y validar:
+   - Cabecera "CONFIDENCIAL — AFFLUX".
+   - WhatsApp como mock/controlado.
+   - Detector de fallecimientos con redacción suavizada.
+   - Sección 11 sin frases internas.
+   - "13. Próximos pasos" numerado.
+   - Tabla comparativa con/sin consultoría visible en sección Presupuesto.

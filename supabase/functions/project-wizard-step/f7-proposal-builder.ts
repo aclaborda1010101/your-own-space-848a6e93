@@ -844,46 +844,57 @@ function sanitizeLegalNotes(text: string | undefined): string | undefined {
   return text;
 }
 
-function renderBudgetComparisonTable(
+function renderTwoOptionBudgetTable(
   budget: ClientProposalV1["budget"],
   currency: string,
 ): string[] {
+  const setup = budget.setup_fee;
+  const monthly = budget.monthly_retainer;
   const cr = budget.consulting_retainer;
-  if (!cr?.enabled || cr.setup_fee_before_discount === undefined || budget.setup_fee === undefined) {
-    return [];
-  }
+
+  // Coste de desarrollo "estándar" (sin descuento por consultoría):
+  // si hay retainer activo, usamos el setup_fee_before_discount; si no, el setup_fee.
+  const standardSetup = cr?.enabled && cr.setup_fee_before_discount !== undefined
+    ? cr.setup_fee_before_discount
+    : setup;
+  const consultingSetup = cr?.enabled ? setup : undefined;
+
+  if (standardSetup === undefined || monthly === undefined) return [];
+
   const out: string[] = [];
-  const setupSin = fmtMoney(cr.setup_fee_before_discount, currency);
-  const setupCon = fmtMoney(budget.setup_fee, currency);
-  const monthly = budget.monthly_retainer !== undefined
-    ? `${fmtMoney(budget.monthly_retainer, currency)}/mes`
-    : "—";
-  const consMonthly = `${fmtMoney(cr.monthly_fee_eur, currency)}/mes${cr.monthly_hours > 0 ? ` (${cr.monthly_hours} h)` : ""}`;
-
-  let totalSin = "—";
-  let totalCon = "—";
-  if (budget.monthly_retainer !== undefined) {
-    totalSin = fmtMoney(cr.setup_fee_before_discount + budget.monthly_retainer * 12, currency);
-    totalCon = fmtMoney(budget.setup_fee + budget.monthly_retainer * 12 + cr.monthly_fee_eur * 12, currency);
-  }
+  const fmt = (n: number) => fmtMoney(n, currency);
+  const totalStandard = standardSetup + monthly * 12;
 
   out.push("");
-  out.push("**Comparativa con / sin consultoría IA recurrente:**");
+  out.push("**Comparativa de opciones:**");
   out.push("");
-  out.push("| Concepto | Sin consultoría | Con consultoría IA |");
+  out.push("| Concepto | Opción estándar | Opción con asesoría IA |");
   out.push("|---|---|---|");
-  out.push(`| Cuota inicial (desarrollo) | ${setupSin} | **${setupCon}** _(−${cr.discount_pct}%)_ |`);
-  out.push(`| Mensualidad recurrente | ${monthly} | ${monthly} |`);
-  out.push(`| Consultoría IA mensual | — | ${consMonthly} |`);
-  out.push(`| **Total estimado primer año** | ${totalSin} | ${totalCon} |`);
+  out.push(`| Coste de desarrollo inicial | ${fmt(standardSetup)} | ${
+    consultingSetup !== undefined && cr ? `**${fmt(consultingSetup)}** _(−${cr.discount_pct}% dto.)_` : "—"
+  } |`);
+  out.push(`| Coste de mantenimiento mensual | ${fmt(monthly)}/mes | ${fmt(monthly)}/mes |`);
+  if (cr?.enabled) {
+    const consMonthly = `${fmt(cr.monthly_fee_eur)}/mes${cr.monthly_hours > 0 ? ` (${cr.monthly_hours} h)` : ""}`;
+    const totalConsulting = (consultingSetup ?? standardSetup) + monthly * 12 + cr.monthly_fee_eur * 12;
+    out.push(`| Asesoría e inteligencia artificial | — | ${consMonthly} |`);
+    out.push(`| **Total estimado primer año** | ${fmt(totalStandard)} | ${fmt(totalConsulting)} |`);
+  } else {
+    out.push(`| **Total estimado primer año** | ${fmt(totalStandard)} | — |`);
+  }
   out.push("");
-  out.push("_La opción «Con consultoría IA» incluye acompañamiento estratégico y técnico mensual; la cuota de desarrollo se reduce por la implicación continua del equipo._");
+  out.push("_Notas:_");
+  out.push("- _Costes de IA / API de terceros no incluidos: se facturan según consumo real._");
+  out.push("- _IVA no incluido. Se aplicará el tipo vigente._");
+  if (cr?.enabled) {
+    out.push(`- _La opción con asesoría IA aplica un ${cr.discount_pct}% de descuento sobre el coste de desarrollo a cambio del compromiso de consultoría recurrente._`);
+  }
   out.push("");
   return out;
 }
 
 function hasBudgetComparisonTable(markdown: string): boolean {
-  return /\|\s*Concepto\s*\|\s*Sin consultor[ií]a\s*\|\s*Con consultor[ií]a IA\s*\|/i.test(markdown);
+  return /\|\s*Concepto\s*\|\s*Opci[oó]n est[aá]ndar\s*\|\s*Opci[oó]n con asesor[ií]a IA\s*\|/i.test(markdown);
 }
 
 export function renderProposalMarkdown(p: ClientProposalV1): string {

@@ -2130,17 +2130,22 @@ REGLAS PARA deep_patterns:
         .maybeSingle();
       const newVersion30 = existing30 ? existing30.version + 1 : 1;
 
-      const { error: insertErr30 } = await supabase.from("project_wizard_steps").insert({
-        project_id: projectId,
-        step_number: 30,
-        step_name: "Pipeline v2 — F7 Client Proposal",
-        status: "review",
-        input_data: { source_step: 28, commercial_terms_v1: commercialTerms },
-        output_data: output,
-        model_used: "deterministic",
-        version: newVersion30,
-        user_id: user.id,
-      });
+      // La constraint UNIQUE es (project_id, step_number) — no incluye version.
+      // Por tanto debemos UPSERT sobre la fila existente, no insertar una nueva.
+      const { error: insertErr30 } = await supabase
+        .from("project_wizard_steps")
+        .upsert({
+          project_id: projectId,
+          step_number: 30,
+          step_name: "Pipeline v2 — F7 Client Proposal",
+          status: "review",
+          input_data: { source_step: 28, commercial_terms_v1: commercialTerms },
+          output_data: output,
+          model_used: "deterministic",
+          version: newVersion30,
+          user_id: user.id,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "project_id,step_number" });
       if (insertErr30) {
         console.error("[generate_client_proposal] INSERT Step 30 failed:", insertErr30);
         return new Response(JSON.stringify({

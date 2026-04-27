@@ -1850,18 +1850,75 @@ REGLAS PARA deep_patterns:
     if (action === "generate_technical_prd") {
       const { buildTechnicalPrd, renderPrdMarkdown } = await import("./f6-prd-builder.ts");
 
-      const { data: step28Row } = await supabase
-        .from("project_wizard_steps")
-        .select("id, version, output_data")
-        .eq("project_id", projectId)
-        .eq("step_number", 28)
-        .order("version", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      // Source guard: explicit row_id wins; otherwise prefer approved version,
+      // fallback to latest version. Never silently use a fresh review version
+      // when an approved one exists.
+      const explicitRowId = typeof stepData?.scope_step_row_id === "string"
+        ? stepData.scope_step_row_id
+        : null;
+
+      let step28Row: any = null;
+      let sourceSelection: "explicit" | "approved" | "latest" = "latest";
+
+      if (explicitRowId) {
+        const { data } = await supabase
+          .from("project_wizard_steps")
+          .select("id, version, status, output_data")
+          .eq("project_id", projectId)
+          .eq("step_number", 28)
+          .eq("id", explicitRowId)
+          .maybeSingle();
+        step28Row = data ?? null;
+        sourceSelection = "explicit";
+        if (!step28Row) {
+          return new Response(JSON.stringify({
+            error: "INVALID_SCOPE_REF: scope_step_row_id no encontrado para Step 28 de este proyecto.",
+            scope_step_row_id: explicitRowId,
+          }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      } else {
+        const { data: allRows } = await supabase
+          .from("project_wizard_steps")
+          .select("id, version, status, approved_at, output_data")
+          .eq("project_id", projectId)
+          .eq("step_number", 28)
+          .order("version", { ascending: false });
+        const approved = (allRows ?? []).find(
+          (r: any) => r.status === "approved" || r.approved_at !== null,
+        );
+        if (approved) {
+          step28Row = approved;
+          sourceSelection = "approved";
+        } else {
+          step28Row = allRows?.[0] ?? null;
+          sourceSelection = "latest";
+        }
+      }
+
       if (!step28Row?.output_data?.scope_architecture_v1) {
         return new Response(JSON.stringify({ error: "No Step 28 scope found. Run architect_scope first." }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
+      }
+
+      // Sanity guard — block clearly stale/invalid scopes.
+      const arch = step28Row.output_data.scope_architecture_v1;
+      const dfLen = Array.isArray(arch?.data_foundation) ? arch.data_foundation.length : 0;
+      const mvpLen = Array.isArray(arch?.mvp) ? arch.mvp.length : 0;
+      const f2Len = Array.isArray(arch?.fast_follow_f2) ? arch.fast_follow_f2.length : 0;
+      const f3Len = Array.isArray(arch?.roadmap_f3) ? arch.roadmap_f3.length : 0;
+      const totalLen = dfLen + mvpLen + f2Len + f3Len;
+      const allowStale = stepData?.allow_stale_scope === true;
+      if (!allowStale && (totalLen === 0 || mvpLen === 0)) {
+        return new Response(JSON.stringify({
+          error: "STALE_OR_INVALID_SCOPE",
+          detail: "El Step 28 seleccionado no tiene componentes en MVP o está vacío.",
+          source_selection: sourceSelection,
+          scope_step_row_id: step28Row.id,
+          scope_step_version: step28Row.version,
+          counts: { data_foundation: dfLen, mvp: mvpLen, fast_follow_f2: f2Len, roadmap_f3: f3Len },
+          hint: "Re-ejecuta architect_scope o pasa scope_step_row_id de la versión correcta.",
+        }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
 
       const { data: projectRow } = await supabase
@@ -1871,7 +1928,7 @@ REGLAS PARA deep_patterns:
         .single();
 
       const f6 = buildTechnicalPrd({
-        scope: step28Row.output_data.scope_architecture_v1,
+        scope: arch,
         source_step: { step_number: 28, version: step28Row.version, row_id: step28Row.id },
         projectName: stepData?.projectName ?? projectRow?.name ?? "Proyecto",
         clientName:
@@ -1889,7 +1946,13 @@ REGLAS PARA deep_patterns:
       const prdMarkdown = renderPrdMarkdown(f6.technical_prd_v1);
       const output = {
         technical_prd_v1: f6.technical_prd_v1,
-        prd_meta: f6.prd_meta,
+        prd_meta: {
+          ...f6.prd_meta,
+          source_selection: sourceSelection,
+          scope_step_row_id: step28Row.id,
+          scope_step_version: step28Row.version,
+          scope_step_status: step28Row.status,
+        },
         prd_markdown: prdMarkdown,
       };
 
@@ -1908,7 +1971,12 @@ REGLAS PARA deep_patterns:
         step_number: 29,
         step_name: "Pipeline v2 — F6 Technical PRD",
         status: "review",
-        input_data: { source_step: 28 },
+        input_data: {
+          source_step: 28,
+          source_selection: sourceSelection,
+          scope_step_row_id: step28Row.id,
+          scope_step_version: step28Row.version,
+        },
         output_data: output,
         model_used: "deterministic",
         version: newVersion29,
@@ -1918,6 +1986,10 @@ REGLAS PARA deep_patterns:
       return new Response(JSON.stringify({
         ok: true,
         version: newVersion29,
+        source_selection: sourceSelection,
+        scope_step_row_id: step28Row.id,
+        scope_step_version: step28Row.version,
+        scope_step_status: step28Row.status,
         components_total: f6.prd_meta.components_total,
         components_by_bucket: f6.prd_meta.components_by_bucket,
         markdown_chars: prdMarkdown.length,

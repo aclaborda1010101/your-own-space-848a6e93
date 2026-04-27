@@ -463,6 +463,18 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
                 <><ShieldCheck className="w-4 h-4" />Auditar entregables (Step 31)</>
               )}
             </Button>
+            <Button
+              onClick={() => run("generate_lovable_build_pack")}
+              disabled={loading}
+              variant="outline"
+              size="sm"
+            >
+              {loading && currentAction === "generate_lovable_build_pack" ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Generando Build Pack…</>
+              ) : (
+                <><Rocket className="w-4 h-4" />Generar Lovable Build Pack (Step 32)</>
+              )}
+            </Button>
           </div>
 
           {showTermsForm && (

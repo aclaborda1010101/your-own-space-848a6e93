@@ -666,20 +666,156 @@ const PRICING_MODEL_LABEL_ES: Record<string, string> = {
   mixed: "Modelo mixto",
 };
 
+// ───────────────────────────────────────────────────────────────────────────────
+// Editorial sanitizer — microcorrecciones finales en el documento cliente.
+// No toca pipeline ni datos guardados; solo reescribe textos en el render.
+// ───────────────────────────────────────────────────────────────────────────────
+
+function looksLikePersonName(s: string | undefined): boolean {
+  if (!s) return false;
+  const t = s.trim();
+  // 2-4 palabras, primera letra mayúscula, sin números/símbolos comunes de marca.
+  if (!/^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){1,3}$/.test(t)) return false;
+  if (/AFFLUX|AFLU|S\.?L\.?|S\.?A\.?|LLC|INC|GMBH/i.test(t)) return false;
+  return true;
+}
+
+function pickHeaderName(p: ClientProposalV1): string {
+  const company = (p.client_company || "").trim();
+  const project = (p.project_name || "").trim();
+  const decisor = (p.decision_maker_name || "").trim();
+
+  // 1) Si client_company contiene marca (AFFLUX/AFLU), priorizar.
+  if (/AFFLUX|AFLU/i.test(company)) return company;
+  if (/AFFLUX|AFLU/i.test(project)) return project;
+
+  // 2) Si project_name parece nombre de persona (o coincide con decisor), usar company.
+  if (decisor && project.toLowerCase() === decisor.toLowerCase() && company) return company;
+  if (looksLikePersonName(project) && company) return company;
+
+  return project || company || "Proyecto";
+}
+
+interface ScopeLike { title: string; description: string }
+
+function sanitizeScopeItem(item: ScopeLike): ScopeLike {
+  let { title, description } = item;
+
+  // WhatsApp originación → mock controlado
+  if (/whatsapp/i.test(title) && /(originaci[oó]n|env[ií]o|comunicaci[oó]n)/i.test(title + " " + description)) {
+    if (/originaci[oó]n/i.test(title)) {
+      title = "Gestor de cadencias y WhatsApp mock/controlado";
+    }
+    description = "Interfaz para planificar contactos, registrar estados y simular comunicaciones por WhatsApp, sin envío real en MVP hasta disponer de API, consentimiento y revisión legal.";
+  }
+
+  // "Monitor de cadencia de llamadas y WhatsApp" → plural + nota
+  if (/monitor de cadencia/i.test(title) && /whatsapp/i.test(title)) {
+    title = title.replace(/cadencia\b/i, "cadencias");
+    if (!/sin automatizaci[oó]n de env[ií]o real/i.test(description)) {
+      description = (description ? description.replace(/[.\s]+$/, "") + ". " : "") +
+        "Seguimiento de cadencias y estados de contacto, sin automatización de envío real en MVP.";
+    }
+  }
+
+  // Detector de fallecimientos: lenguaje sensible
+  if (/fallecimiento|sucesori|defunci[oó]n/i.test(title + " " + description) && /lead/i.test(description)) {
+    description = "Identificar eventos sucesorios relevantes para generar alertas internas revisadas por una persona antes de cualquier acción comercial.";
+  }
+
+  return { title, description };
+}
+
+function sanitizePaymentTerms(text: string | undefined): string {
+  const safeBlock = "El presupuesto se plantea para una primera versión funcional por fases, apoyada en herramientas de desarrollo asistido por IA y revisión técnica del equipo. El componente Soul de Alejandro requiere una implicación activa del decisor durante las sesiones de captura de criterio; su calidad dependerá de la concreción del material aportado y de la validación de los criterios estratégicos durante las primeras semanas.";
+  if (!text || !text.trim()) return safeBlock;
+
+  const hasInternalLeak =
+    /presupuesto\s+(?:de\s+desarrollo\s+)?(?:es\s+)?ajustado/i.test(text) ||
+    /uso\s+intensivo\s+de\s+herramientas\s+de\s+IA\s+para\s+la\s+codificaci[oó]n/i.test(text) ||
+    /depende\s+100\s*%/i.test(text) ||
+    /es\s+el\s+de\s+mayor\s+riesgo/i.test(text);
+
+  if (hasInternalLeak) {
+    return safeBlock;
+  }
+  return text;
+}
+
+function sanitizeLegalNotes(text: string | undefined): string | undefined {
+  if (!text) return text;
+  const formal = "Los costes de asesoría legal, DPIA o validación jurídica externa no están incluidos y deberán ser gestionados por el cliente en paralelo si fueran necesarios.";
+  if (/DPIA|asesor[ií]a\s+legal|validaci[oó]n\s+jur[ií]dica/i.test(text)) {
+    // Reemplaza la frase floja por la formal, manteniendo el resto si lo hubiere.
+    return formal;
+  }
+  return text;
+}
+
+function renderBudgetComparisonTable(
+  budget: ClientProposalV1["budget"],
+  currency: string,
+): string[] {
+  const cr = budget.consulting_retainer;
+  if (!cr?.enabled || cr.setup_fee_before_discount === undefined || budget.setup_fee === undefined) {
+    return [];
+  }
+  const out: string[] = [];
+  const setupSin = fmtMoney(cr.setup_fee_before_discount, currency);
+  const setupCon = fmtMoney(budget.setup_fee, currency);
+  const monthly = budget.monthly_retainer !== undefined
+    ? `${fmtMoney(budget.monthly_retainer, currency)}/mes`
+    : "—";
+  const consMonthly = `${fmtMoney(cr.monthly_fee_eur, currency)}/mes${cr.monthly_hours > 0 ? ` (${cr.monthly_hours} h)` : ""}`;
+
+  let totalSin = "—";
+  let totalCon = "—";
+  if (budget.monthly_retainer !== undefined) {
+    totalSin = fmtMoney(cr.setup_fee_before_discount + budget.monthly_retainer * 12, currency);
+    totalCon = fmtMoney(budget.setup_fee + budget.monthly_retainer * 12 + cr.monthly_fee_eur * 12, currency);
+  }
+
+  out.push("");
+  out.push("**Comparativa con / sin consultoría IA recurrente:**");
+  out.push("");
+  out.push("| Concepto | Sin consultoría | Con consultoría IA |");
+  out.push("|---|---|---|");
+  out.push(`| Cuota inicial (desarrollo) | ${setupSin} | **${setupCon}** _(−${cr.discount_pct}%)_ |`);
+  out.push(`| Mensualidad recurrente | ${monthly} | ${monthly} |`);
+  out.push(`| Consultoría IA mensual | — | ${consMonthly} |`);
+  out.push(`| **Total estimado primer año** | ${totalSin} | ${totalCon} |`);
+  out.push("");
+  out.push("_La opción «Con consultoría IA» incluye acompañamiento estratégico y técnico mensual; la cuota de desarrollo se reduce por la implicación continua del equipo._");
+  out.push("");
+  return out;
+}
+
 export function renderProposalMarkdown(p: ClientProposalV1): string {
   const c = p.budget.currency;
   const lines: string[] = [];
 
+  // ── Saneado editorial in-memory (no muta la persistencia) ──
+  p = {
+    ...p,
+    mvp_scope: p.mvp_scope.map(sanitizeScopeItem),
+    later_phases: {
+      fast_follow: p.later_phases.fast_follow.map(sanitizeScopeItem),
+      roadmap: p.later_phases.roadmap.map(sanitizeScopeItem),
+    },
+    payment_terms: sanitizePaymentTerms(p.payment_terms),
+    legal_notes: sanitizeLegalNotes(p.legal_notes),
+  } as ClientProposalV1;
+
   // ── Cabecera ──
-  // REGLA DE ORO: el title y el CONFIDENCIAL salen del project_name (lo
-  // que escribió el usuario). client_company puede ser "AFLU / AFFLUX" o
-  // similar y se muestra solo en la portada como dato adicional.
-  const headerCompany = p.client_company && p.client_company !== p.project_name
+  // Prioriza marca (AFFLUX/AFLU) y evita usar el nombre del decisor como
+  // título o cabecera CONFIDENCIAL.
+  const headerName = pickHeaderName(p);
+  const headerCompany = p.client_company && p.client_company !== headerName
     ? p.client_company
-    : p.project_name;
-  lines.push(`# Propuesta — ${p.project_name}`);
+    : headerName;
+  lines.push(`# Propuesta — ${headerName}`);
   lines.push("");
-  lines.push(`> **CONFIDENCIAL — ${p.project_name}**`);
+  lines.push(`> **CONFIDENCIAL — ${headerName}**`);
   lines.push("");
   lines.push(`**Proyecto / Producto:** ${p.project_name}`);
   lines.push(`**Cliente / empresa:** ${headerCompany}`);

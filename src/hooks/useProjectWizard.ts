@@ -1411,6 +1411,31 @@ export const useProjectWizard = (projectId?: string) => {
         toast.error("No se pudieron derivar las condiciones comerciales del presupuesto");
         return;
       }
+      // Diagnóstico: dejar trazas en consola para verificar que los nuevos
+      // campos (consultoría, plazos, sync setup) llegan al backend.
+      console.info("[generateClientProposal] commercial_terms_v1 enviado:", {
+        setup_fee: commercial_terms_v1.setup_fee,
+        setup_fee_display: commercial_terms_v1.setup_fee_display,
+        monthly_retainer: commercial_terms_v1.monthly_retainer,
+        consulting_retainer: commercial_terms_v1.consulting_retainer,
+        implementation_override: commercial_terms_v1.implementation_override,
+        development_total_eur: commercial_terms_v1.development_total_eur,
+      });
+      // Aviso si el setup que ve el cliente difiere del coste real de desarrollo.
+      const devTotal = budgetData?.development?.total_development_eur;
+      const setupBeforeDiscount =
+        commercial_terms_v1.consulting_retainer?.setup_fee_before_discount ??
+        commercial_terms_v1.setup_fee;
+      if (
+        devTotal != null &&
+        setupBeforeDiscount != null &&
+        Math.abs(setupBeforeDiscount - devTotal) > Math.max(50, devTotal * 0.01)
+      ) {
+        toast.warning(
+          `Aviso: el cliente verá €${setupBeforeDiscount.toLocaleString()} pero tu coste real de desarrollo es €${devTotal.toLocaleString()}. Edita el presupuesto y pulsa "Sincronizar" si quieres alinearlos.`,
+          { duration: 8000 },
+        );
+      }
 
       // Auto-cadena: si Step 28 no existe, ejecutar pipeline v2 completo primero.
       const { data: step28Check } = await supabase

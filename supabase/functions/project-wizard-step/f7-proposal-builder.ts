@@ -50,6 +50,41 @@ export interface ProposalScopeItem {
   description: string;
 }
 
+/**
+ * Override manual del cronograma. Si está presente y tiene valores válidos,
+ * sobrescribe la heurística determinista. Cualquier campo es opcional —
+ * se aplican solo los que vengan rellenos.
+ */
+export interface ImplementationOverride {
+  mvp_weeks?: number;
+  fast_follow_weeks?: number;
+  /** ISO YYYY-MM-DD. Si está, se calculan fechas absolutas. */
+  start_date?: string;
+  notes?: string;
+}
+
+export interface ImplementationPhase {
+  name: string;
+  duration_weeks: string;
+  start_week: number;
+  end_week: number;
+  start_date?: string; // ISO si start_date global está disponible
+  end_date?: string;
+  component_count: number;
+  key_milestones: string[];
+  deliverable: string;
+}
+
+export interface ImplementationSchedule {
+  phases: ImplementationPhase[];
+  total_duration_weeks: string;
+  mvp_ready_week: number;
+  start_date?: string;
+  assumptions: string[];
+  notes?: string;
+  source: "heuristic" | "override" | "mixed";
+}
+
 export interface ClientProposalV1 {
   schema_version: "1.0.0";
   project_name: string;

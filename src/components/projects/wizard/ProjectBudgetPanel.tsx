@@ -155,6 +155,65 @@ export const ProjectBudgetPanel = ({
     };
   }, []);
 
+  // ── Sync setup_price del modelo recomendado con total_development_eur ──
+  // Devuelve el primer importe numérico del string ("13.500" o "13.000-15.000" → 13500).
+  const parseFirstAmount = (raw: string | undefined): number | null => {
+    if (!raw) return null;
+    const m = raw.match(/[\d.,]+/);
+    if (!m) return null;
+    const cleaned = m[0].replace(/\./g, "").replace(",", ".");
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  };
+  const formatAmount = (n: number): string =>
+    Math.round(n).toLocaleString("es-ES", { useGrouping: true });
+
+  const recommendedIdx = (data: BudgetData): number => {
+    if (!data.monetization_models?.length) return -1;
+    if (data.recommended_model) {
+      const i = data.monetization_models.findIndex((m) => m.name === data.recommended_model);
+      if (i >= 0) return i;
+    }
+    return 0;
+  };
+
+  /** ¿Está sincronizado el setup_price del modelo recomendado con total_development_eur? */
+  const isSetupSynced = (data: BudgetData | null): boolean => {
+    if (!data) return true;
+    const dev = data.development?.total_development_eur;
+    const idx = recommendedIdx(data);
+    if (dev == null || idx < 0) return true;
+    const setup = parseFirstAmount(data.monetization_models?.[idx]?.setup_price_eur);
+    if (setup == null) return true; // sin importe → no aplicable
+    // Tolerancia 1% para evitar parpadeo por redondeos.
+    return Math.abs(setup - dev) <= Math.max(50, dev * 0.01);
+  };
+
+  /** Propaga total_development_eur al setup_price del modelo recomendado (mantiene rango si lo había). */
+  const syncSetupWithDev = (data: BudgetData): BudgetData => {
+    const dev = data.development?.total_development_eur;
+    const idx = recommendedIdx(data);
+    if (dev == null || idx < 0 || !data.monetization_models) return data;
+    const models = [...data.monetization_models];
+    const current = models[idx]?.setup_price_eur;
+    const isRange = current && /[-–—]/.test(current);
+    let next: string;
+    if (isRange) {
+      // Mantener proporción del rango original sobre el nuevo total.
+      const parts = current.split(/[-–—]/).map((s) => parseFirstAmount(s)).filter((n): n is number => n != null);
+      if (parts.length === 2 && parts[0] > 0) {
+        const ratio = parts[1] / parts[0];
+        next = `${formatAmount(dev)}-${formatAmount(dev * ratio)}`;
+      } else {
+        next = formatAmount(dev);
+      }
+    } else {
+      next = formatAmount(dev);
+    }
+    models[idx] = { ...models[idx], setup_price_eur: next };
+    return { ...data, monetization_models: models };
+  };
+
   const updatePhaseHours = (idx: number, hours: number) => {
     if (!editData) return;
     const phases = [...editData.development.phases];

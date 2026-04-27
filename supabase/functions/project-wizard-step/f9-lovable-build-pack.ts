@@ -457,9 +457,11 @@ function buildIntegrations(scope: ScopeArchitectureV1): { real: IntegrationItem[
 
 function buildAcceptance(scope: ScopeArchitectureV1): string[] {
   const acc: string[] = [
-    "El operador puede crear, ver y editar propietarios, activos y notas sin errores.",
+    "El operador puede crear, ver y editar propietarios, edificios, activos y notas sin errores.",
     "Cada propietario tiene un briefing pre-llamada generado bajo demanda.",
     "Cada nota produce una próxima acción propuesta y persistida tras confirmación.",
+    "WhatsApp y cadencias funcionan solo como interfaz/estado/mock; ningún mensaje real sale del sistema en MVP.",
+    "El agente Compliance/HITL bloquea acciones sensibles y las envía a revisión humana.",
   ];
   if (scope.mvp.some((c) => /matching/i.test(c.name))) {
     acc.push("El módulo de matching devuelve candidatos con score y justificación, y exige aprobación humana antes de contactar.");

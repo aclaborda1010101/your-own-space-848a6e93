@@ -1482,6 +1482,18 @@ export const useProjectWizard = (projectId?: string) => {
         }
       }
 
+      // Capturar versión Step 30 ANTES de invocar para detectar si realmente
+      // se creó una nueva versión (señal inequívoca de éxito).
+      const { data: prevRow } = await supabase
+        .from("project_wizard_steps")
+        .select("version")
+        .eq("project_id", projectId)
+        .eq("step_number", 30)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const prevVersion = prevRow?.version ?? 0;
+
       const { data, error } = await supabase.functions.invoke("project-wizard-step", {
         body: {
           action: "generate_client_proposal",
@@ -1495,6 +1507,9 @@ export const useProjectWizard = (projectId?: string) => {
         },
       });
       if (error) throw error;
+      if ((data as any)?.error) {
+        throw new Error((data as any).error);
+      }
       // Reload proposal from Step 30
       const { data: row } = await supabase
         .from("project_wizard_steps")
@@ -1504,16 +1519,37 @@ export const useProjectWizard = (projectId?: string) => {
         .order("version", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (row?.output_data) {
-        const od = row.output_data as any;
-        setProposalData({
-          proposalMarkdown: od.proposal_markdown,
-          client_proposal_v1: od.client_proposal_v1,
-          proposal_meta: od.proposal_meta,
-          version: row.version,
-        });
+      if (!row || (row.version ?? 0) <= prevVersion) {
+        throw new Error(
+          `La propuesta NO se regeneró (sigue en versión ${prevVersion}). Revisa la consola para ver el error del backend.`,
+        );
       }
-      toast.success("Propuesta cliente generada");
+      const od = row.output_data as any;
+      // Bloqueo de patrones obsoletos — si por error se persistió la versión
+      // antigua, avisar en vez de aparentar éxito.
+      const md: string = od.proposal_markdown ?? "";
+      const stalePatterns: Array<{ re: RegExp; label: string }> = [
+        { re: /Opci[oó]n\s+est[aá]ndar/i, label: "Opción estándar" },
+        { re: /Opci[oó]n\s+con\s+asesor[ií]a\s+IA/i, label: "Opción con asesoría IA" },
+        { re: /Total\s+estimado\s+primer\s+a[nñ]o/i, label: "Total primer año" },
+        { re: /se\s+ajustar[aá]\s+la\s+cuota\s+mensual/i, label: "ajuste cuota mensual" },
+        { re: /plan\s+de\s+mantenimiento\s+incluye\s+5\s+horas/i, label: "5 horas mantenimiento" },
+      ];
+      const hits = stalePatterns.filter((p) => p.re.test(md)).map((p) => p.label);
+      setProposalData({
+        proposalMarkdown: md,
+        client_proposal_v1: od.client_proposal_v1,
+        proposal_meta: od.proposal_meta,
+        version: row.version,
+      });
+      if (hits.length > 0) {
+        toast.error(
+          `La propuesta se generó pero contiene textos antiguos (${hits.join(", ")}). Refresca la página y vuelve a intentarlo.`,
+          { duration: 10000 },
+        );
+      } else {
+        toast.success(`Propuesta cliente regenerada (v${row.version})`);
+      }
       if (data?.internal_jargon_warnings?.length > 0) {
         console.warn("[F7] Internal jargon warnings:", data.internal_jargon_warnings);
       }

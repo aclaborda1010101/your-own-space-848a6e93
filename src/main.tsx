@@ -1,4 +1,4 @@
-// cache-bust: 2026-04-27T22:15
+// cache-bust: 2026-04-27T20:05-regen-propuesta
 import "./index.css";
 import { initSafeStorage } from "./lib/safeStorage";
 import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";

@@ -43,6 +43,8 @@ export interface CommercialTermsV1 {
   support_terms?: string;
   legal_notes?: string;
   notes?: string;
+  /** F7.1 — Override manual del cronograma de implementación. */
+  implementation_override?: ImplementationOverride;
 }
 
 export interface ProposalScopeItem {

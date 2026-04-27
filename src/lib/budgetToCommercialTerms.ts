@@ -359,12 +359,31 @@ export function budgetToCommercialTermsV1(
   else if (primary.setup_fee != null) pricing_model = "fixed_project";
 
   // Aplanar el modelo principal a los campos que F7 lee directamente.
-  const setup_fee = primary.setup_fee ?? undefined;
-  const setup_fee_max = primary.setup_fee_max ?? undefined;
-  const setup_fee_display = primary.setup_fee_display ?? undefined;
+  const rawSetupFee = primary.setup_fee ?? undefined;
+  const rawSetupFeeMax = primary.setup_fee_max ?? undefined;
+  const rawSetupFeeDisplay = primary.setup_fee_display ?? undefined;
   const monthly_retainer = primary.monthly_fee ?? undefined;
   const monthly_retainer_max = primary.monthly_fee_max ?? undefined;
   const monthly_retainer_display = primary.monthly_fee_display ?? undefined;
+
+  // F7.2 — Aplicar descuento de consultoría recurrente sobre el setup_fee del modelo principal.
+  const consultingActive = !!budget.consulting_retainer?.enabled;
+  const discountPct = Math.max(
+    0,
+    Math.min(100, budget.consulting_retainer?.discount_pct ?? 50),
+  );
+  const discountFactor = consultingActive ? 1 - discountPct / 100 : 1;
+  const setup_fee =
+    rawSetupFee !== undefined ? Math.round(rawSetupFee * discountFactor) : undefined;
+  const setup_fee_max =
+    rawSetupFeeMax !== undefined ? Math.round(rawSetupFeeMax * discountFactor) : undefined;
+  const setup_fee_display = consultingActive
+    ? (setup_fee !== undefined && setup_fee_max !== undefined
+        ? `${formatEuroNumber(setup_fee)} - ${formatEuroNumber(setup_fee_max)} EUR`
+        : setup_fee !== undefined
+          ? `${formatEuroNumber(setup_fee)} EUR`
+          : rawSetupFeeDisplay)
+    : rawSetupFeeDisplay;
 
   // Otros modelos visibles → opcionales (no incluidos en el precio base).
   const optional_addons = visibleModels

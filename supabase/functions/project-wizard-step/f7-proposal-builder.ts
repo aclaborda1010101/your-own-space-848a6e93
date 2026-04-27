@@ -1053,8 +1053,7 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
     lines.push("");
   }
 
-  lines.push("## Próximos pasos");
-  lines.push("");
+  section("Próximos pasos");
   for (const x of p.next_steps) lines.push(`- ${x}`);
   return lines.join("\n");
 }

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, Play, Copy, Check, FileText, FileBadge, ShieldCheck } from "lucide-react";
+import { Loader2, Play, Copy, Check, FileText, FileBadge, ShieldCheck, Rocket } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +19,8 @@ type WizardAction =
   | "architect_scope"
   | "generate_technical_prd"
   | "generate_client_proposal"
-  | "audit_final_deliverables";
+  | "audit_final_deliverables"
+  | "generate_lovable_build_pack";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
@@ -32,6 +33,7 @@ const ACTION_META: Record<WizardAction, { label: string; step: string; hint: num
   generate_technical_prd: { label: "PRD técnico", step: "Step 29", hint: 30, variant: "outline" },
   generate_client_proposal: { label: "Propuesta cliente", step: "Step 30", hint: 30, variant: "outline" },
   audit_final_deliverables: { label: "Auditar entregables", step: "Step 31", hint: 30, variant: "outline" },
+  generate_lovable_build_pack: { label: "Lovable Build Pack", step: "Step 32", hint: 15, variant: "outline" },
 };
 
 const DEFAULT_COMMERCIAL_TERMS = `{

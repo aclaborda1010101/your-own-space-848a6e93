@@ -748,6 +748,13 @@ export function renderBuildPackMarkdown(pack: LovableBuildPackV1): string {
   lines.push("### Exclusiones explícitas");
   lines.push("");
   lines.push(renderComponentList(s.do_not_build_yet.exclusions));
+  lines.push("### Reglas operativas de exclusión");
+  lines.push("");
+  lines.push("- No implementar envío real por WhatsApp hasta tener API, consentimiento y revisión legal.");
+  lines.push("- No hacer scraping real de fuentes externas en MVP. Carga manual o mock controlado.");
+  lines.push("- No implementar scoring predictivo final con ML. El matching del MVP usa reglas y justificación.");
+  lines.push("- Toda acción sensible debe pasar por revisión humana antes de ejecutarse.");
+  lines.push("");
 
   // 9
   lines.push("## 9. Criterios de aceptación del MVP");

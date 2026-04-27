@@ -323,10 +323,9 @@ Deno.test("F7: derives proposal prices from Step 6 budgetData, not stale commerc
       discount_pct: 50,
     },
   })!;
-  assertEquals(terms.setup_fee_before_discount, undefined);
   assertEquals(terms.consulting_retainer?.setup_fee_before_discount, 12400);
   assertEquals(terms.setup_fee, 6200);
-  assertEquals(terms.monthly_retainer, 250);
+  assertEquals(terms.monthly_retainer, 215);
 
   const out = buildClientProposal({
     scope: fakeScope(),

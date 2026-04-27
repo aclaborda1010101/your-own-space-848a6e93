@@ -778,15 +778,28 @@ export function renderBuildPackMarkdown(pack: LovableBuildPackV1): string {
   // 8
   lines.push("## 8. Qué NO construir todavía");
   lines.push("");
-  lines.push("### Fase posterior (fast-follow)");
-  lines.push("");
-  lines.push(renderComponentList(s.do_not_build_yet.fast_follow_f2));
-  lines.push("### Roadmap");
-  lines.push("");
-  lines.push(renderComponentList(s.do_not_build_yet.roadmap_f3));
-  lines.push("### Exclusiones explícitas");
-  lines.push("");
-  lines.push(renderComponentList(s.do_not_build_yet.exclusions));
+  const ff = renameFastFollowForClarity(s.do_not_build_yet.fast_follow_f2);
+  const rm = s.do_not_build_yet.roadmap_f3;
+  const ex = s.do_not_build_yet.exclusions;
+  if (ff.length) {
+    lines.push("### Fase posterior (fast-follow)");
+    lines.push("");
+    lines.push(renderComponentList(ff));
+  }
+  if (rm.length) {
+    lines.push("### Roadmap");
+    lines.push("");
+    lines.push(renderComponentList(rm));
+  }
+  if (ex.length) {
+    lines.push("### Exclusiones explícitas");
+    lines.push("");
+    lines.push(renderComponentList(ex));
+  }
+  if (!rm.length && !ex.length) {
+    lines.push("_No hay componentes adicionales en roadmap ni exclusiones explícitas en este alcance._");
+    lines.push("");
+  }
   lines.push("### Reglas operativas de exclusión");
   lines.push("");
   lines.push("- No implementar envío real por WhatsApp hasta tener API, consentimiento y revisión legal.");

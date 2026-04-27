@@ -2929,7 +2929,7 @@ Devuelve SOLO el JSON.`;
       .upsert({
         project_id: projectId,
         step_number: stepNumber,
-        version: parseInt(ver.replace("v", "")) || 1,
+        version: verNum,
         file_url: signedUrlData.signedUrl,
         file_format: fileExt,
         is_client_facing: isClientFacing,
@@ -2941,8 +2941,8 @@ Devuelve SOLO el JSON.`;
     // Filename: include __CLIENTE_BORRADOR__ for draft mode
     const baseFileName = title.replace(/\s+/g, "-").toLowerCase();
     const fileName = isDraft
-      ? `${baseFileName}__CLIENTE_BORRADOR__-${ver}.${fileExt}`
-      : `${baseFileName}-${ver}.${fileExt}`;
+      ? `${baseFileName}__CLIENTE_BORRADOR__-${verTag}.${fileExt}`
+      : `${baseFileName}-${verTag}.${fileExt}`;
 
     return new Response(JSON.stringify({
       url: signedUrlData.signedUrl,

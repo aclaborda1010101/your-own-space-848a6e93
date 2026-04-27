@@ -2130,7 +2130,7 @@ REGLAS PARA deep_patterns:
         .maybeSingle();
       const newVersion30 = existing30 ? existing30.version + 1 : 1;
 
-      await supabase.from("project_wizard_steps").insert({
+      const { error: insertErr30 } = await supabase.from("project_wizard_steps").insert({
         project_id: projectId,
         step_number: 30,
         step_name: "Pipeline v2 — F7 Client Proposal",
@@ -2141,6 +2141,38 @@ REGLAS PARA deep_patterns:
         version: newVersion30,
         user_id: user.id,
       });
+      if (insertErr30) {
+        console.error("[generate_client_proposal] INSERT Step 30 failed:", insertErr30);
+        return new Response(JSON.stringify({
+          error: `INSERT_FAILED: ${insertErr30.message}${insertErr30.code ? ` (code=${insertErr30.code})` : ""}`,
+          details: (insertErr30 as any).details ?? null,
+          hint: (insertErr30 as any).hint ?? null,
+          attempted_version: newVersion30,
+          markdown_chars: proposalMarkdown.length,
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Verificar persistencia (defensa contra inserts silenciosamente vacíos).
+      const { data: confirmRow } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 30)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!confirmRow || confirmRow.version !== newVersion30) {
+        console.error("[generate_client_proposal] PERSIST_VERIFY_FAILED", { expected: newVersion30, got: confirmRow?.version });
+        return new Response(JSON.stringify({
+          error: `PERSIST_VERIFY_FAILED: esperaba v${newVersion30} en BBDD pero se leyó v${confirmRow?.version ?? "ninguna"}.`,
+        }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
 
       return new Response(JSON.stringify({
         ok: true,

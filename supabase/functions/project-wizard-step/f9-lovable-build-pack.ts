@@ -607,6 +607,43 @@ function renderComponentListNumbered(list: ComponentRef[]): string {
 }
 
 /**
+ * Renderiza el MVP con un punto inicial fijo de "Modelo de datos y CRUD base"
+ * y una nota de fusión para los módulos WhatsApp/cadencias (presentación únicamente).
+ */
+function renderMvpForLovable(list: ComponentRef[]): string {
+  const ordered = sortMvpForBuildOrder(list);
+  const lines: string[] = [];
+  lines.push(
+    "1. **Modelo de datos y CRUD base** — crear propietarios, edificios, activos, llamadas, notas, inversores, casos de compliance y usuarios. App navegable antes de cualquier integración externa.",
+  );
+  ordered.forEach((c, i) => {
+    lines.push(`${i + 2}. **${c.name}**${c.business_job ? ` — ${c.business_job}` : ""}`);
+  });
+  const hasWaCadence =
+    ordered.some((c) => /cadencia/i.test(c.name)) &&
+    ordered.some((c) => /whatsapp/i.test(c.name));
+  if (hasWaCadence) {
+    lines.push("");
+    lines.push(
+      "> Nota: los módulos de cadencias y WhatsApp se implementan como **una única interfaz MVP de cadencias/WhatsApp mock**: planificación de contactos, estados y simulación de mensajes, sin envío real.",
+    );
+  }
+  return lines.join("\n") + "\n";
+}
+
+/**
+ * Renombra fast-follow para no perder señal diferencial (p.ej. Benatar).
+ */
+function renameFastFollowForClarity(list: ComponentRef[]): ComponentRef[] {
+  return list.map((c) => {
+    if (/compradores institucionales/i.test(c.name) && !/benatar/i.test(c.name)) {
+      return { ...c, name: `${c.name} tipo Benatar` };
+    }
+    return c;
+  });
+}
+
+/**
  * Orden recomendado de construcción del MVP para Lovable.
  * Reordena solo la presentación (no mueve componentes entre buckets).
  */

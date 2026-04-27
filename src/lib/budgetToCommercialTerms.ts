@@ -432,6 +432,17 @@ export function budgetToCommercialTermsV1(
           notes: budget.implementation_override.notes?.trim() || undefined,
         }
       : undefined,
+    consulting_retainer: consultingActive
+      ? {
+          enabled: true,
+          monthly_fee_eur: Math.max(0, Math.round(budget.consulting_retainer?.monthly_fee_eur ?? 0)),
+          monthly_hours: Math.max(0, Math.round(budget.consulting_retainer?.monthly_hours ?? 0)),
+          discount_pct: discountPct,
+          notes: budget.consulting_retainer?.notes?.trim() || undefined,
+          setup_fee_before_discount: rawSetupFee,
+          setup_fee_max_before_discount: rawSetupFeeMax,
+        }
+      : undefined,
 
     // Internal audit
     selected_models: models,

@@ -61,24 +61,56 @@ export const ProjectProposalExport = ({
     proposalData?.proposal_meta?.internal_jargon_warnings || [];
 
   const handleDownloadPdf = async () => {
-    if (!proposalData?.proposalMarkdown) {
-      toast.error("Genera la propuesta antes de descargar el PDF");
-      return;
-    }
     setDownloading(true);
     try {
-      // Renderizamos el markdown YA LIMPIO por F7. generate-document solo
-      // actúa como renderizador PDF — sin sanitizadores legacy de propuesta.
+      // 1) Releer SIEMPRE Step 30 fresco desde BBDD para evitar markdown stale
+      //    cacheado en estado React o regenerado por otra pestaña.
+      const { data: freshRow, error: freshErr } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 30)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (freshErr) throw freshErr;
+      const freshMarkdown: string | undefined =
+        (freshRow?.output_data as any)?.proposal_markdown;
+      const freshVersion: number = freshRow?.version ?? 1;
+
+      if (!freshMarkdown) {
+        toast.error(
+          "No hay propuesta cliente vigente. Pulsa 'Generar propuesta cliente' antes de descargar el PDF.",
+        );
+        return;
+      }
+
+      // 2) Bloqueo duro de cualquier rastro de la versión antigua.
+      const STALE_PATTERNS: Array<{ re: RegExp; label: string }> = [
+        { re: /Cuota\s+inicial/i, label: "Cuota inicial" },
+        { re: /Mensualidad\s+recurrente/i, label: "Mensualidad recurrente" },
+        { re: /presupuesto\s+(?:de\s+desarrollo\s+)?(?:es\s+)?ajustado/i, label: "presupuesto ajustado" },
+        { re: /uso\s+intensivo\s+de\s+herramientas\s+de\s+IA/i, label: "uso intensivo de IA" },
+        { re: /14[.,]?500/, label: "14.500" },
+      ];
+      const matched = STALE_PATTERNS.filter((p) => p.re.test(freshMarkdown)).map((p) => p.label);
+      if (matched.length > 0) {
+        toast.error(
+          `Propuesta obsoleta detectada (${matched.join(", ")}). Pulsa 'Regenerar propuesta cliente' antes de descargar.`,
+        );
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke("generate-document", {
         body: {
           projectId,
           stepNumber: 30,
-          content: proposalData.proposalMarkdown,
+          content: freshMarkdown,
           contentType: "markdown",
           projectName: projectName || "Proyecto",
           company,
           date: new Date().toISOString().split("T")[0],
-          version: `v${proposalData.version || 1}`,
+          version: `v${freshVersion}`,
           exportMode: "client",
         },
       });

@@ -117,6 +117,17 @@ export interface CommercialTermsV1 {
   validity_days: number;
   /** F7.1 — Override del cronograma propagado a la propuesta cliente. */
   implementation_override?: BudgetImplementationOverride;
+  /** F7.2 — Consultoría/asesoría IA recurrente que aplica descuento al desarrollo. */
+  consulting_retainer?: {
+    enabled: boolean;
+    monthly_fee_eur: number;
+    monthly_hours: number;
+    discount_pct: number;
+    notes?: string;
+    /** Importe de desarrollo ANTES del descuento (referencia). */
+    setup_fee_before_discount?: number;
+    setup_fee_max_before_discount?: number;
+  };
 
   // ── Internal audit / debugging only — never rendered to client ──
   selected_models: CommercialTermsModel[];

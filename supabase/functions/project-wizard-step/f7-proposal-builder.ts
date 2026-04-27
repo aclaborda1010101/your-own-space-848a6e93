@@ -75,6 +75,8 @@ export interface ClientProposalV1 {
     soul_sessions_required: boolean;
     soul_sessions_count: number;
     timeline: string;
+    /** F7.1 — Cronograma por fases derivado del scope, con override opcional. */
+    schedule?: ImplementationSchedule;
   };
   client_responsibilities: string[];
   risks_and_mitigations: Array<{ risk: string; mitigation: string }>;

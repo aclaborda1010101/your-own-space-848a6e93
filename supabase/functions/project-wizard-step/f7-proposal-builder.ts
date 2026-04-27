@@ -788,29 +788,22 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
     (p.budget.monthly_retainer !== undefined ? fmtMoney(p.budget.monthly_retainer, c) : undefined);
 
   const cr = p.budget.consulting_retainer;
+  const consultingActive = !!cr?.enabled;
+
   if (displaySetup) {
-    lines.push(`- **Cuota inicial (desarrollo):** ${displaySetup}`);
-    if (cr?.enabled && cr.setup_fee_before_discount !== undefined) {
+    if (consultingActive && cr?.setup_fee_before_discount !== undefined) {
       const beforeDisplay =
         cr.setup_fee_max_before_discount !== undefined
           ? `${fmtMoney(cr.setup_fee_before_discount, c)} - ${fmtMoney(cr.setup_fee_max_before_discount, c)}`
           : fmtMoney(cr.setup_fee_before_discount, c);
-      lines.push(
-        `  - _Importe original: ${beforeDisplay}. Descuento del ${cr.discount_pct}% aplicado por contratación de Consultoría/Asesoría IA recurrente._`,
-      );
+      lines.push(`- **Cuota inicial (desarrollo):** ~~${beforeDisplay}~~ → **${displaySetup}**`);
+      lines.push(`  - _Descuento del ${cr.discount_pct}% aplicado por contratación de Consultoría/Asesoría IA recurrente._`);
+    } else {
+      lines.push(`- **Cuota inicial (desarrollo):** ${displaySetup}`);
     }
   }
   if (displayMonthly) {
     lines.push(`- **Mensualidad recurrente:** ${displayMonthly}`);
-  }
-  if (cr?.enabled) {
-    const horas = cr.monthly_hours > 0 ? ` (${cr.monthly_hours}h/mes incluidas)` : "";
-    lines.push(
-      `- **Consultoría / Asesoría IA recurrente:** ${fmtMoney(cr.monthly_fee_eur, c)}/mes${horas}`,
-    );
-    if (cr.notes) {
-      lines.push(`  - _${cr.notes}_`);
-    }
   }
   // Total de referencia (orientativo a 12 meses) — solo si tenemos números
   // numéricos exactos (no rangos). Si hay rango (max definido), no calculamos.
@@ -844,6 +837,62 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
     lines.push(`**Impuestos:** ${p.budget.taxes}`);
   }
   lines.push("");
+
+  // ── Bloque destacado: Consultoría / Asesoría IA recurrente ──
+  if (consultingActive && cr) {
+    section("Consultoría / Asesoría IA recurrente");
+    lines.push(
+      `Servicio mensual de acompañamiento estratégico y técnico que reduce la cuota inicial de desarrollo en un **${cr.discount_pct}%**.`,
+    );
+    lines.push("");
+    lines.push(`- **Cuota mensual:** ${fmtMoney(cr.monthly_fee_eur, c)}/mes`);
+    if (cr.monthly_hours > 0) {
+      lines.push(`- **Horas incluidas:** ${cr.monthly_hours} h/mes de mentoría, asesoría y consultoría.`);
+    }
+    if (cr.setup_fee_before_discount !== undefined) {
+      const beforeDisplay =
+        cr.setup_fee_max_before_discount !== undefined
+          ? `${fmtMoney(cr.setup_fee_before_discount, c)} - ${fmtMoney(cr.setup_fee_max_before_discount, c)}`
+          : fmtMoney(cr.setup_fee_before_discount, c);
+      lines.push(`- **Importe original del desarrollo:** ${beforeDisplay}`);
+      if (displaySetup) {
+        lines.push(`- **Importe con descuento aplicado:** **${displaySetup}**`);
+      }
+    }
+    if (cr.notes) {
+      lines.push("");
+      lines.push(`_${cr.notes}_`);
+    }
+    lines.push("");
+  }
+
+  // ── Sección dedicada: Plazos de implementación ──
+  const sch = p.implementation_plan.schedule;
+  if (sch && sch.phases.length > 0) {
+    section("Plazos de implementación");
+    lines.push(`**Duración total estimada:** ${sch.total_duration_weeks}.`);
+    if (sch.start_date) {
+      lines.push(`**Fecha de arranque prevista:** ${sch.start_date}.`);
+    }
+    lines.push("");
+    lines.push("| Fase | Calendario | Duración | Hito principal |");
+    lines.push("|---|---|---|---|");
+    for (const ph of sch.phases) {
+      const cal = ph.start_date && ph.end_date
+        ? `${ph.start_date} – ${ph.end_date}`
+        : (ph.start_week > 0 ? `Sem. ${ph.start_week}-${ph.end_week}` : "A confirmar");
+      const milestone = ph.deliverable;
+      lines.push(`| ${ph.name} | ${cal} | ${ph.duration_weeks} | ${milestone} |`);
+    }
+    lines.push("");
+    lines.push("**Supuestos:**");
+    for (const a of sch.assumptions) lines.push(`- ${a}`);
+    if (sch.notes) {
+      lines.push("");
+      lines.push(`**Notas:** ${sch.notes}`);
+    }
+    lines.push("");
+  }
 
   section("Modalidad de pago");
   lines.push(p.payment_terms);

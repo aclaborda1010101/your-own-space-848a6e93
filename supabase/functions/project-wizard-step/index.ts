@@ -1999,13 +1999,25 @@ REGLAS PARA deep_patterns:
 
     // ── Action: generate_client_proposal (Step 30) ────────────────────────
     if (action === "generate_client_proposal") {
-      const { buildClientProposal, renderProposalMarkdown, detectInternalJargon } =
+      const { buildClientProposal, renderProposalMarkdown, detectInternalJargon, commercialTermsFromBudgetData } =
         await import("./f7-proposal-builder.ts");
 
-      const commercialTerms = stepData?.commercial_terms_v1;
+      const { data: latestBudgetRow } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 6)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      // Step 6 (presupuesto aprobado/editado) es la fuente de verdad. El payload
+      // del frontend puede estar stale por estado React/localStorage; aquí se
+      // deriva de nuevo para que el PDF nunca use 14.500/250 si BBDD ya tiene 12.400/215.
+      let commercialTerms = commercialTermsFromBudgetData(latestBudgetRow?.output_data) ?? stepData?.commercial_terms_v1;
       if (!commercialTerms || typeof commercialTerms !== "object" || !commercialTerms.pricing_model) {
         return new Response(JSON.stringify({
-          error: "Missing commercial_terms_v1 in stepData (requires at least pricing_model).",
+          error: "Missing commercial_terms_v1 in stepData and no valid approved budget found.",
         }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

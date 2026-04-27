@@ -657,6 +657,98 @@ function fmtMoney(n: number | undefined, currency: string): string {
   return `${n.toLocaleString("es-ES", { maximumFractionDigits: 2 })} ${currency}`;
 }
 
+function fmtEuroNumber(n: number): string {
+  return n.toLocaleString("es-ES", {
+    maximumFractionDigits: Number.isInteger(n) ? 0 : 2,
+    useGrouping: true,
+  });
+}
+
+function parseEuroLike(value: unknown): { min?: number; max?: number; display?: string } | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return { min: value, display: `${fmtEuroNumber(value)} EUR` };
+  }
+  const raw = String(value).replace(/€|EUR|euros?/gi, " ").replace(/\s+/g, " ").trim();
+  if (!raw) return null;
+  const tokens = raw.match(/\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?/g) ?? [];
+  const nums = tokens.map((tok) => {
+    const hasDot = tok.includes(".");
+    const hasComma = tok.includes(",");
+    if (hasDot && hasComma) {
+      const lastDot = tok.lastIndexOf(".");
+      const lastComma = tok.lastIndexOf(",");
+      const decimal = lastDot > lastComma ? "." : ",";
+      const thousands = decimal === "." ? "," : ".";
+      return Number(tok.split(thousands).join("").replace(decimal, "."));
+    }
+    const sep = hasDot ? "." : hasComma ? "," : "";
+    if (!sep) return Number(tok);
+    const parts = tok.split(sep);
+    if (parts.length > 2 || parts[1]?.length === 3) return Number(parts.join(""));
+    return Number(`${parts[0]}.${parts[1]}`);
+  }).filter((n) => Number.isFinite(n));
+  if (nums.length === 0) return null;
+  if (nums.length >= 2) {
+    const min = Math.min(nums[0]!, nums[1]!);
+    const max = Math.max(nums[0]!, nums[1]!);
+    return { min, max, display: `${fmtEuroNumber(min)} - ${fmtEuroNumber(max)} EUR` };
+  }
+  return { min: nums[0], display: `${fmtEuroNumber(nums[0]!)} EUR` };
+}
+
+export function commercialTermsFromBudgetData(budget: any): CommercialTermsV1 | null {
+  const models = Array.isArray(budget?.monetization_models) ? budget.monetization_models : [];
+  if (models.length === 0) return null;
+  const primary = models.find((m: any) => m?.name === budget?.recommended_model) ?? models[0];
+  const setupParsed = parseEuroLike(primary?.setup_price_eur);
+  const monthlyParsed = parseEuroLike(primary?.monthly_price_eur);
+  const developmentTotal = typeof budget?.development?.total_development_eur === "number"
+    ? budget.development.total_development_eur
+    : undefined;
+  const rawSetup = developmentTotal && developmentTotal > 0 ? developmentTotal : setupParsed?.min;
+  const rawSetupMax = developmentTotal && setupParsed?.min !== developmentTotal ? undefined : setupParsed?.max;
+  const recurringTotal = typeof budget?.recurring_monthly?.total_monthly_eur === "number" && budget.recurring_monthly.total_monthly_eur > 0
+    ? budget.recurring_monthly.total_monthly_eur
+    : undefined;
+  const monthly = recurringTotal ?? monthlyParsed?.min;
+  const crRaw = budget?.consulting_retainer ?? {};
+  const consultingEnabled = !!crRaw.enabled || (crRaw.monthly_fee_eur ?? 0) > 0 || (crRaw.monthly_hours ?? 0) > 0;
+  const discountPct = Math.max(0, Math.min(100, Number(crRaw.discount_pct ?? 50)));
+  const factor = consultingEnabled ? 1 - discountPct / 100 : 1;
+  const setupFee = rawSetup !== undefined ? Math.round(rawSetup * factor) : undefined;
+  const setupFeeMax = rawSetupMax !== undefined ? Math.round(rawSetupMax * factor) : undefined;
+
+  return {
+    pricing_model: setupFee !== undefined && monthly !== undefined ? "setup_plus_monthly" : monthly !== undefined ? "retainer" : "fixed_project",
+    setup_fee: setupFee,
+    setup_fee_max: setupFeeMax,
+    setup_fee_display: setupFee !== undefined
+      ? setupFeeMax !== undefined ? `${fmtEuroNumber(setupFee)} - ${fmtEuroNumber(setupFeeMax)} EUR` : `${fmtEuroNumber(setupFee)} EUR`
+      : setupParsed?.display,
+    monthly_retainer: monthly,
+    monthly_retainer_max: recurringTotal !== undefined ? undefined : monthlyParsed?.max,
+    monthly_retainer_display: monthly !== undefined
+      ? recurringTotal === undefined && monthlyParsed?.max !== undefined ? `${fmtEuroNumber(monthly)} - ${fmtEuroNumber(monthlyParsed.max)} EUR` : `${fmtEuroNumber(monthly)} EUR`
+      : monthlyParsed?.display,
+    ai_usage_cost_policy: "Costes de IA/API no incluidos por defecto, facturados según consumo real.",
+    payment_terms: scrubInternalLeak(budget?.pricing_notes) || "50% al inicio del proyecto y 50% contra entrega del MVP. Mensualidades, en su caso, facturadas a mes vencido.",
+    taxes: "IVA no incluido. Se aplicará el tipo vigente.",
+    currency: "EUR",
+    validity_days: 30,
+    implementation_override: budget?.implementation_override,
+    consulting_retainer: consultingEnabled ? {
+      enabled: true,
+      monthly_fee_eur: Math.max(0, Math.round(Number(crRaw.monthly_fee_eur ?? 0))),
+      monthly_hours: Math.max(0, Math.round(Number(crRaw.monthly_hours ?? 0))),
+      discount_pct: discountPct,
+      notes: typeof crRaw.notes === "string" ? crRaw.notes.trim() || undefined : undefined,
+      setup_fee_before_discount: rawSetup,
+      setup_fee_max_before_discount: rawSetupMax,
+    } : undefined,
+  };
+}
+
 const PRICING_MODEL_LABEL_ES: Record<string, string> = {
   fixed_project: "Proyecto cerrado",
   setup_plus_monthly: "Cuota inicial + mensualidad recurrente",
@@ -685,9 +777,9 @@ function pickHeaderName(p: ClientProposalV1): string {
   const project = (p.project_name || "").trim();
   const decisor = (p.decision_maker_name || "").trim();
 
-  // 1) Si client_company contiene marca (AFFLUX/AFLU), priorizar.
-  if (/AFFLUX|AFLU/i.test(company)) return company;
+  // 1) Si project_name contiene la marca concreta, usarlo como título limpio.
   if (/AFFLUX|AFLU/i.test(project)) return project;
+  if (/AFFLUX|AFLU/i.test(company)) return company;
 
   // 2) Si project_name parece nombre de persona (o coincide con decisor), usar company.
   if (decisor && project.toLowerCase() === decisor.toLowerCase() && company) return company;
@@ -788,6 +880,10 @@ function renderBudgetComparisonTable(
   out.push("_La opción «Con consultoría IA» incluye acompañamiento estratégico y técnico mensual; la cuota de desarrollo se reduce por la implicación continua del equipo._");
   out.push("");
   return out;
+}
+
+function hasBudgetComparisonTable(markdown: string): boolean {
+  return /\|\s*Concepto\s*\|\s*Sin consultor[ií]a\s*\|\s*Con consultor[ií]a IA\s*\|/i.test(markdown);
 }
 
 export function renderProposalMarkdown(p: ClientProposalV1): string {

@@ -622,6 +622,7 @@ export function buildClientProposal(input: F7Input): F7Output {
       optional_addons: commercialTerms.optional_addons,
       ai_usage_cost_policy: commercialTerms.ai_usage_cost_policy,
       taxes: commercialTerms.taxes,
+      consulting_retainer: commercialTerms.consulting_retainer,
     },
     payment_terms: scrubInternalLeak(commercialTerms.payment_terms) ||
       "50% al inicio del proyecto y 50% contra entrega del MVP. Mensualidades, en su caso, facturadas a mes vencido.",

@@ -141,11 +141,29 @@ Deno.test("F5 pre-warm: only accepted gaps materialize as scope components", () 
   ];
   const fromGap002 = all.find((c) => c.source_type === "accepted_gap" && c.source_ref === "GAP-002");
   const fromGap003 = all.find((c) => c.source_type === "accepted_gap" && c.source_ref === "GAP-003");
-  const fromGap001 = all.find((c) => c.source_type === "accepted_gap" && c.source_ref === "GAP-001");
   assertEquals(fromGap002, undefined, "merge_into_existing must NOT create a scope component");
   assertEquals(fromGap003, undefined, "rejected gap must NOT create a scope component");
-  assert(fromGap001, "accept_but_defer gap must create a deferred scope component");
+  // GAP-001 is Benatar accept_but_defer → enters fast_follow_f2 and is then merged
+  // with COMP-C04 by mergeDuplicateScopeComponents (institutional buyer dedupe).
+  // Acceptance: GAP-001 must still be marked acceptable, and the merged component
+  // must reflect both sources (so traceability is preserved via merged_sources).
   assert(acceptable_gap_ids.has("GAP-001"));
+  const benatar = scope.fast_follow_f2.find(
+    (c) => c.source_ref === "COMP-C04" || c.source_ref === "GAP-001",
+  );
+  assert(benatar, "Benatar (Comp-C04 or GAP-001) must remain in fast_follow_f2 after dedupe");
+});
+
+Deno.test("F5 pre-warm: GAP-001 (Benatar) is merged into COMP-C04, not duplicated", () => {
+  const { scope } = runDeterministicPreWarm(REGISTRY, FEASIBILITY, GAPS);
+  // After mergeDuplicateScopeComponents there must be ONE Benatar in fast_follow_f2.
+  const benatars = scope.fast_follow_f2.filter(
+    (c) =>
+      /benatar|institucional/i.test(c.name) ||
+      c.source_ref === "COMP-C04" ||
+      c.source_ref === "GAP-001",
+  );
+  assertEquals(benatars.length, 1, "Exactly one Benatar component must remain");
 });
 
 Deno.test("F5 pre-warm: human_decisions_applied lists all 3 decisions", () => {

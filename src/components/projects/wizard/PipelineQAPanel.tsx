@@ -509,12 +509,23 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
                 · duración {elapsed}s
               </span>
             )}
+            {lastAction === "generate_lovable_build_pack" && parsed?.markdown && (
+              <Button
+                onClick={copyBuildPack}
+                variant="holo"
+                size="sm"
+                className="ml-auto h-7 text-xs"
+              >
+                {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                {copied ? "Copiado" : "Copiar prompt para Lovable"}
+              </Button>
+            )}
             {downloadableMarkdown && (
               <Button
                 onClick={() => downloadMarkdown(downloadableMarkdown.filename, downloadableMarkdown.content)}
                 variant="holo"
                 size="sm"
-                className="ml-auto h-7 text-xs"
+                className={cn("h-7 text-xs", lastAction !== "generate_lovable_build_pack" && "ml-auto")}
               >
                 <FileText className="w-3 h-3" />
                 {downloadableMarkdown.label}

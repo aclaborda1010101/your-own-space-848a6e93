@@ -254,13 +254,26 @@ function buildAgents(scope: ScopeArchitectureV1): AgentSpec[] {
     if (/valor|brains/.test(lower)) tools.push("search_asset_profile");
     if (/compliance|dpia/.test(lower)) tools.push("check_dpia_status", "require_human_review");
     if (/soul/.test(lower)) tools.push("save_next_action");
+    if (/whatsapp|cadencia|mensaj/.test(lower)) tools.push("save_next_action", "require_human_review");
 
     agents.push({
       name: c.name,
       scope_ref: c.scope_id,
       responsibility: c.business_job || "Operación principal asignada por el alcance.",
       tools: Array.from(new Set(tools.length ? tools : ["search_owner_profile"])),
-      hitl: /compliance|dpia|falleci|matching|valor/.test(lower),
+      hitl: /compliance|dpia|falleci|matching|valor|whatsapp|cadencia/.test(lower),
+    });
+  }
+
+  // Agente Compliance / HITL explícito — SIEMPRE presente, aunque ningún componente
+  // del scope dispare el hint de compliance directamente. Es estructural para AFFLUX.
+  if (!agents.some((a) => /compliance|hitl/i.test(a.name))) {
+    agents.push({
+      name: "Agente Compliance / HITL",
+      responsibility:
+        "Revisar si una acción está bloqueada por DPIA, datos personales, falta de consentimiento o baja confianza, y enrutar a revisión humana cuando proceda.",
+      tools: ["check_dpia_status", "require_human_review", "abstain_if_low_evidence"],
+      hitl: true,
     });
   }
 
@@ -357,17 +370,17 @@ function buildRoutes(scope: ScopeArchitectureV1): RouteSpec[] {
 function buildDataModel(scope: ScopeArchitectureV1): EntitySpec[] {
   const entities: EntitySpec[] = [
     { name: "owners (propietarios)", fields: ["id", "nombre", "rol", "contacto", "consentimiento", "creado_en"] },
+    { name: "buildings (edificios)", fields: ["id", "direccion", "ciudad", "division_horizontal", "numero_propietarios", "estado", "catastro_ref"] },
     { name: "calls (llamadas)", fields: ["id", "owner_id", "fecha", "resumen", "transcripcion_url", "siguiente_accion"] },
     { name: "notes (notas)", fields: ["id", "owner_id", "texto", "etiquetas", "creado_en"] },
-    { name: "assets (activos)", fields: ["id", "tipo", "ubicacion", "valoracion_estimada", "estado", "owner_id"] },
+    { name: "assets (activos / oportunidades)", fields: ["id", "building_id", "tipo", "ubicacion", "valoracion_estimada", "estado", "owner_id"] },
   ];
   if (scope.mvp.some((c) => /matching|invers/i.test(c.name))) {
     entities.push({ name: "investors (inversores)", fields: ["id", "nombre", "criterios", "ticket_min", "ticket_max"] });
     entities.push({ name: "match_candidates", fields: ["id", "asset_id", "investor_id", "score", "evidencia", "estado"] });
   }
-  if (scope.compliance_blockers?.length) {
-    entities.push({ name: "compliance_cases", fields: ["id", "scope_id", "estado", "dpia_ok", "owner_revisor"] });
-  }
+  // compliance_cases siempre presente: el agente Compliance/HITL es estructural
+  entities.push({ name: "compliance_cases", fields: ["id", "scope_id", "estado", "dpia_ok", "motivo", "owner_revisor", "creado_en"] });
   return entities;
 }
 
@@ -425,23 +438,30 @@ function buildIntegrations(scope: ScopeArchitectureV1): { real: IntegrationItem[
 
   const mock: IntegrationItem[] = [];
   if (scope.mvp.some((c) => /falleci|herenc/i.test(c.name))) {
-    mock.push({ name: "Fuentes externas de fallecimientos / esquelas / boletines oficiales", status: "mock", notes: "Sin acceso real hasta DPIA." });
+    mock.push({ name: "Fuentes externas de fallecimientos / esquelas / boletines oficiales", status: "mock", notes: "Sin acceso real hasta DPIA. Carga controlada o simulada." });
   }
   if (scope.mvp.some((c) => /brains|valor/i.test(c.name))) {
     mock.push({ name: "BrainsRE (valoraciones)", status: "mock", notes: "Mock controlado hasta firmar acceso." });
   }
   if (scope.mvp.some((c) => /matching|predict/i.test(c.name))) {
-    mock.push({ name: "Scoring predictivo final", status: "mock", notes: "Sin dataset suficiente para modelo aprendido." });
+    mock.push({ name: "Scoring predictivo final", status: "mock", notes: "Sin dataset suficiente para modelo aprendido. MVP usa reglas + justificación." });
   }
-  mock.push({ name: "WhatsApp / canales de mensajería automatizados", status: "mock", notes: "Sin envío automático sin consentimiento explícito." });
+  mock.push({
+    name: "WhatsApp / canales de mensajería automatizados",
+    status: "mock",
+    notes:
+      "Construir solo como interfaz, estado y mock. NO enviar mensajes reales en MVP. Sin envío automático hasta tener API, consentimiento y revisión legal.",
+  });
   return { real, mock };
 }
 
 function buildAcceptance(scope: ScopeArchitectureV1): string[] {
   const acc: string[] = [
-    "El operador puede crear, ver y editar propietarios, activos y notas sin errores.",
+    "El operador puede crear, ver y editar propietarios, edificios, activos y notas sin errores.",
     "Cada propietario tiene un briefing pre-llamada generado bajo demanda.",
     "Cada nota produce una próxima acción propuesta y persistida tras confirmación.",
+    "WhatsApp y cadencias funcionan solo como interfaz/estado/mock; ningún mensaje real sale del sistema en MVP.",
+    "El agente Compliance/HITL bloquea acciones sensibles y las envía a revisión humana.",
   ];
   if (scope.mvp.some((c) => /matching/i.test(c.name))) {
     acc.push("El módulo de matching devuelve candidatos con score y justificación, y exige aprobación humana antes de contactar.");
@@ -577,6 +597,42 @@ function renderComponentList(list: ComponentRef[]): string {
   );
 }
 
+function renderComponentListNumbered(list: ComponentRef[]): string {
+  if (!list.length) return "_(ninguno)_\n";
+  return (
+    list
+      .map((c, i) => `${i + 1}. **${c.name}**${c.business_job ? ` — ${c.business_job}` : ""}`)
+      .join("\n") + "\n"
+  );
+}
+
+/**
+ * Orden recomendado de construcción del MVP para Lovable.
+ * Reordena solo la presentación (no mueve componentes entre buckets).
+ */
+function sortMvpForBuildOrder(list: ComponentRef[]): ComponentRef[] {
+  const rank = (name: string): number => {
+    const n = name.toLowerCase();
+    if (/pipeline|transcrip|llamada/.test(n)) return 10;
+    if (/rag|conocimiento|knowledge/.test(n)) return 20;
+    if (/catalog|rol|propietario/.test(n)) return 30;
+    if (/asistente|pre.?llamada|post.?llamada|nota|analiz/.test(n)) return 40;
+    if (/compliance|gobernanza|dpia|rgpd|hitl/.test(n)) return 50;
+    if (/falleci|herenc/.test(n)) return 60;
+    if (/matching|activo.*invers|invers.*activo/.test(n)) return 70;
+    if (/valor|brains/.test(n)) return 80;
+    if (/orquest|moe|router/.test(n)) return 90;
+    if (/cadencia|whatsapp|mensaj/.test(n)) return 100;
+    return 35;
+  };
+  return [...list].sort((a, b) => {
+    const ra = rank(a.name);
+    const rb = rank(b.name);
+    if (ra !== rb) return ra - rb;
+    return a.scope_id.localeCompare(b.scope_id);
+  });
+}
+
 export function renderBuildPackMarkdown(pack: LovableBuildPackV1): string {
   const s = pack.sections;
   const lines: string[] = [];
@@ -614,9 +670,13 @@ export function renderBuildPackMarkdown(pack: LovableBuildPackV1): string {
   lines.push("### Base fundacional");
   lines.push("");
   lines.push(renderComponentList(s.build_first.foundation));
-  lines.push("### MVP");
+  lines.push("### MVP — orden recomendado de construcción");
   lines.push("");
-  lines.push(renderComponentList(s.build_first.mvp));
+  lines.push(
+    "Construir en este orden: primero datos y CRUD, luego pipeline de llamadas, después RAG y catalogador, después asistente pre/post llamada, después compliance/HITL, y por último los módulos especializados. WhatsApp y cadencias se construyen como interfaz/estado/mock, sin envío real.",
+  );
+  lines.push("");
+  lines.push(renderComponentListNumbered(sortMvpForBuildOrder(s.build_first.mvp)));
 
   // 5
   lines.push("## 5. Flujos principales");
@@ -690,6 +750,13 @@ export function renderBuildPackMarkdown(pack: LovableBuildPackV1): string {
   lines.push("### Exclusiones explícitas");
   lines.push("");
   lines.push(renderComponentList(s.do_not_build_yet.exclusions));
+  lines.push("### Reglas operativas de exclusión");
+  lines.push("");
+  lines.push("- No implementar envío real por WhatsApp hasta tener API, consentimiento y revisión legal.");
+  lines.push("- No hacer scraping real de fuentes externas en MVP. Carga manual o mock controlado.");
+  lines.push("- No implementar scoring predictivo final con ML. El matching del MVP usa reglas y justificación.");
+  lines.push("- Toda acción sensible debe pasar por revisión humana antes de ejecutarse.");
+  lines.push("");
 
   // 9
   lines.push("## 9. Criterios de aceptación del MVP");

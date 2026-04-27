@@ -45,6 +45,16 @@ export interface CommercialTermsV1 {
   notes?: string;
   /** F7.1 — Override manual del cronograma de implementación. */
   implementation_override?: ImplementationOverride;
+  /** F7.2 — Consultoría/asesoría IA recurrente que reduce el coste de desarrollo. */
+  consulting_retainer?: {
+    enabled: boolean;
+    monthly_fee_eur: number;
+    monthly_hours: number;
+    discount_pct: number;
+    notes?: string;
+    setup_fee_before_discount?: number;
+    setup_fee_max_before_discount?: number;
+  };
 }
 
 export interface ProposalScopeItem {

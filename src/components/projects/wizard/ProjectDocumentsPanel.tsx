@@ -119,6 +119,9 @@ export const ProjectDocumentsPanel = ({ projectId, projectName, company, steps }
 
   const getStepContent = (step: StepInfo) => {
     const ct = STEP_CONTENT_TYPE[step.stepNumber];
+    if (step.stepNumber === 32) {
+      return step.outputData?.build_pack_markdown ?? "";
+    }
     if (ct === "markdown") {
       return typeof step.outputData === "string" ? step.outputData : step.outputData?.document || JSON.stringify(step.outputData, null, 2);
     }

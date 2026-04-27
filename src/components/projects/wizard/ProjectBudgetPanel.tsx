@@ -72,6 +72,13 @@ interface BudgetData {
     start_date?: string;
     notes?: string;
   };
+  consulting_retainer?: {
+    enabled?: boolean;
+    monthly_fee_eur?: number;
+    monthly_hours?: number;
+    discount_pct?: number;
+    notes?: string;
+  };
 }
 
 interface ProjectBudgetPanelProps {

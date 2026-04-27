@@ -347,8 +347,21 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
       const md = parsed.client_proposal?.markdown ?? parsed.markdown;
       if (md) return { filename: "Propuesta-cliente.md", content: md, label: "Descargar Propuesta (MD)" };
     }
+    if (lastAction === "generate_lovable_build_pack") {
+      const md = parsed.markdown;
+      if (md) return { filename: "Lovable-Build-Pack.md", content: md, label: "Descargar Build Pack (MD)" };
+    }
     return null;
   })();
+
+  const copyBuildPack = async () => {
+    if (lastAction !== "generate_lovable_build_pack" || !parsed?.markdown) return;
+    try {
+      await navigator.clipboard.writeText(parsed.markdown);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { /* ignore */ }
+  };
 
   const renderActionButton = (action: WizardAction) => {
     const meta = ACTION_META[action];

@@ -394,10 +394,10 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="min-w-0 flex-1">
-            <CardTitle className="text-base">QA · Pipeline v2 — Steps 25–31</CardTitle>
+            <CardTitle className="text-base">QA · Pipeline v2 — Steps 25–32</CardTitle>
             <CardDescription className="text-xs mt-1">
-              Pipeline interno (25–28) y entregables finales (29 PRD · 30 Propuesta · 31 Auditoría).
-              Tiempos típicos: Registry ~60–120s, F4a ~60–180s, F4b ~120–240s, F5 ~60–180s, PRD/Propuesta ~30–60s.
+              Pipeline interno (25–28), entregables finales (29 PRD · 30 Propuesta · 31 Auditoría) y operativo (32 Build Pack para Lovable).
+              Tiempos típicos: Registry ~60–120s, F4a ~60–180s, F4b ~120–240s, F5 ~60–180s, PRD/Propuesta ~30–60s, Build Pack ~5–15s.
             </CardDescription>
           </div>
           {loading && currentAction && (

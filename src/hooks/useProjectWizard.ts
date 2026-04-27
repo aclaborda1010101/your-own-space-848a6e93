@@ -263,22 +263,23 @@ export const useProjectWizard = (projectId?: string) => {
 
   const clearSubsequentSteps = async (fromStep: number) => {
     if (!projectId) return;
-    // Delete steps greater than fromStep in both new AND old numbering
-    // New pipeline: 1,2,3,4,5,11  Old pipeline: 1,2,3,4,5,6,7,8,9,10,11
-    // We need to delete any step_number > fromStep to cover old numbering,
-    // BUT preserve step_number 6 (internal budget) when fromStep < 6
+    // Steps canónicos protegidos: presupuesto (6), pipeline v2 (25-29),
+    // propuesta cliente (30), auditoría final (31), build pack (32) y
+    // expert forge (300). Estos NO deben borrarse al regenerar pasos
+    // visuales del wizard (1-5 / 11) salvo que el caller lo pida explícito.
+    const PROTECTED_STEPS = new Set([6, 25, 26, 27, 28, 29, 30, 31, 32, 300]);
+
     const { data: toDelete } = await supabase
       .from("project_wizard_steps")
       .select("id, step_number")
       .eq("project_id", projectId)
       .gt("step_number", fromStep);
-    
+
     if (toDelete && toDelete.length > 0) {
-      // Keep budget steps (step_number 6) unless explicitly clearing from step 6+
       const idsToDelete = toDelete
-        .filter((s: any) => !(s.step_number === 6 && fromStep < 6))
+        .filter((s: any) => !PROTECTED_STEPS.has(s.step_number))
         .map((s: any) => s.id);
-      
+
       if (idsToDelete.length > 0) {
         await supabase
           .from("project_wizard_steps")

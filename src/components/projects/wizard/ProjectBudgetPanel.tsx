@@ -214,21 +214,26 @@ export const ProjectBudgetPanel = ({
     return { ...data, monetization_models: models };
   };
 
+  /** Aplica recalc desarrollo y, si estaba sincronizado, propaga al setup_price del modelo recomendado. */
+  const applyDevChange = (data: BudgetData): BudgetData => {
+    const wasSynced = isSetupSynced(editData);
+    const next = recalcDevelopment(data);
+    return wasSynced ? syncSetupWithDev(next) : next;
+  };
+
   const updatePhaseHours = (idx: number, hours: number) => {
     if (!editData) return;
     const phases = [...editData.development.phases];
     const rate = editData.development.hourly_rate_eur || 0;
     phases[idx] = { ...phases[idx], hours, cost_eur: Math.round(hours * rate) };
-    const next = recalcDevelopment({ ...editData, development: { ...editData.development, phases } });
-    setEditData(next);
+    setEditData(applyDevChange({ ...editData, development: { ...editData.development, phases } }));
   };
 
   const updatePhaseCost = (idx: number, cost_eur: number) => {
     if (!editData) return;
     const phases = [...editData.development.phases];
     phases[idx] = { ...phases[idx], cost_eur };
-    const next = recalcDevelopment({ ...editData, development: { ...editData.development, phases } });
-    setEditData(next);
+    setEditData(applyDevChange({ ...editData, development: { ...editData.development, phases } }));
   };
 
   const updateHourlyRate = (rate: number) => {
@@ -237,11 +242,10 @@ export const ProjectBudgetPanel = ({
       ...p,
       cost_eur: Math.round(p.hours * rate),
     }));
-    const next = recalcDevelopment({
+    setEditData(applyDevChange({
       ...editData,
       development: { ...editData.development, hourly_rate_eur: rate, phases },
-    });
-    setEditData(next);
+    }));
   };
 
   const updateRecurringItem = (idx: number, cost_eur: number) => {

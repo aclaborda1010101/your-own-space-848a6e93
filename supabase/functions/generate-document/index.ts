@@ -1435,6 +1435,7 @@ const STEP_TITLES: Record<number, string> = {
   12: "Radiografía del Negocio",
   13: "Plan por Capas",
   14: "Roadmap Vendible",
+  32: "Lovable Build Pack",
   100: "Propuesta de Solución",
   101: "Resumen Ejecutivo",
   102: "Documento de Alcance",

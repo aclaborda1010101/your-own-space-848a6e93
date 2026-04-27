@@ -690,6 +690,32 @@ export const ProjectBudgetPanel = ({
                                 ) : (
                                   <span className="text-foreground font-medium ml-1">€{model.setup_price_eur}</span>
                                 )}
+                                {/* Sync indicator: solo en modelo recomendado y si hay total de desarrollo. */}
+                                {isRecommended &&
+                                  displayData.development?.total_development_eur != null &&
+                                  parseFirstAmount(model.setup_price_eur) != null &&
+                                  !isSetupSynced(displayData) && (
+                                    <>
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[9px] px-1.5 py-0 border-amber-500/40 text-amber-600 bg-amber-500/5"
+                                        title={`Total desarrollo (${displayData.development.total_development_eur.toLocaleString()} €) ≠ setup del cliente`}
+                                      >
+                                        Override
+                                      </Badge>
+                                      {editing && (
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 px-1.5 text-[10px]"
+                                          onClick={() => editData && setEditData(syncSetupWithDev(editData))}
+                                        >
+                                          Sincronizar
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
                               </div>
                             )}
                             {(model.monthly_price_eur || editing) && (

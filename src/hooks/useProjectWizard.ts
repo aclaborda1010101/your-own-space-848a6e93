@@ -1343,10 +1343,14 @@ export const useProjectWizard = (projectId?: string) => {
 
       const autoChain = options?.autoChain !== false;
       if (autoChain) {
+        toast.info("Regenerando propuesta cliente con los cambios…");
         setTimeout(() => {
-          generateClientProposal().catch((err) => {
-            console.error("Auto client proposal failed:", err);
-          });
+          generateClientProposal()
+            .then(() => toast.success("Propuesta cliente regenerada"))
+            .catch((err) => {
+              console.error("Auto client proposal failed:", err);
+              toast.error("No se pudo regenerar la propuesta automáticamente. Pulsa 'Generar propuesta cliente' manualmente.");
+            });
         }, 300);
       }
     } catch (e: any) {

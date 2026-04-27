@@ -438,15 +438,20 @@ function buildIntegrations(scope: ScopeArchitectureV1): { real: IntegrationItem[
 
   const mock: IntegrationItem[] = [];
   if (scope.mvp.some((c) => /falleci|herenc/i.test(c.name))) {
-    mock.push({ name: "Fuentes externas de fallecimientos / esquelas / boletines oficiales", status: "mock", notes: "Sin acceso real hasta DPIA." });
+    mock.push({ name: "Fuentes externas de fallecimientos / esquelas / boletines oficiales", status: "mock", notes: "Sin acceso real hasta DPIA. Carga controlada o simulada." });
   }
   if (scope.mvp.some((c) => /brains|valor/i.test(c.name))) {
     mock.push({ name: "BrainsRE (valoraciones)", status: "mock", notes: "Mock controlado hasta firmar acceso." });
   }
   if (scope.mvp.some((c) => /matching|predict/i.test(c.name))) {
-    mock.push({ name: "Scoring predictivo final", status: "mock", notes: "Sin dataset suficiente para modelo aprendido." });
+    mock.push({ name: "Scoring predictivo final", status: "mock", notes: "Sin dataset suficiente para modelo aprendido. MVP usa reglas + justificación." });
   }
-  mock.push({ name: "WhatsApp / canales de mensajería automatizados", status: "mock", notes: "Sin envío automático sin consentimiento explícito." });
+  mock.push({
+    name: "WhatsApp / canales de mensajería automatizados",
+    status: "mock",
+    notes:
+      "Construir solo como interfaz, estado y mock. NO enviar mensajes reales en MVP. Sin envío automático hasta tener API, consentimiento y revisión legal.",
+  });
   return { real, mock };
 }
 

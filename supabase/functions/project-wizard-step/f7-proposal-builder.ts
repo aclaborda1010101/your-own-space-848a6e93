@@ -911,7 +911,7 @@ function buildClientPaymentTermsBlock(): string {
 }
 
 function hasBudgetComparisonTable(markdown: string): boolean {
-  return /\|\s*Concepto\s*\|\s*Opci[oó]n est[aá]ndar\s*\|\s*Opci[oó]n con asesor[ií]a IA\s*\|/i.test(markdown);
+  return /\|\s*Concepto\s*\|\s*Desarrollo único\s*\|\s*Desarrollo \+ asesor[ií]a IA\s*\|/i.test(markdown);
 }
 
 export function renderProposalMarkdown(p: ClientProposalV1): string {

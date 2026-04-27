@@ -20,6 +20,17 @@ export interface BudgetMonetizationModel {
   visible_to_client?: boolean;
 }
 
+export interface BudgetImplementationOverride {
+  /** Semanas para la fase MVP (sobrescribe heurística). */
+  mvp_weeks?: number;
+  /** Semanas para fast-follow (sobrescribe heurística). */
+  fast_follow_weeks?: number;
+  /** Fecha ISO YYYY-MM-DD de arranque (opcional). */
+  start_date?: string;
+  /** Notas libres que se anexan al cronograma del cliente. */
+  notes?: string;
+}
+
 export interface BudgetData {
   development?: {
     phases?: Array<{ name: string; description?: string; hours: number; cost_eur: number }>;
@@ -41,6 +52,8 @@ export interface BudgetData {
   pricing_notes?: string;
   risk_factors?: string[];
   recommended_model?: string;
+  /** F7.1 — Override del cronograma de implementación que se propaga al PDF cliente. */
+  implementation_override?: BudgetImplementationOverride;
 }
 
 export interface CommercialTermsModel {
@@ -83,6 +96,8 @@ export interface CommercialTermsV1 {
   taxes?: string;
   currency: string;
   validity_days: number;
+  /** F7.1 — Override del cronograma propagado a la propuesta cliente. */
+  implementation_override?: BudgetImplementationOverride;
 
   // ── Internal audit / debugging only — never rendered to client ──
   selected_models: CommercialTermsModel[];
@@ -352,6 +367,22 @@ export function budgetToCommercialTermsV1(
     taxes: "IVA no incluido. Se aplicará el tipo vigente.",
     currency: "EUR",
     validity_days: 30,
+    implementation_override: budget.implementation_override
+      ? {
+          mvp_weeks:
+            typeof budget.implementation_override.mvp_weeks === "number" &&
+            budget.implementation_override.mvp_weeks > 0
+              ? budget.implementation_override.mvp_weeks
+              : undefined,
+          fast_follow_weeks:
+            typeof budget.implementation_override.fast_follow_weeks === "number" &&
+            budget.implementation_override.fast_follow_weeks >= 0
+              ? budget.implementation_override.fast_follow_weeks
+              : undefined,
+          start_date: budget.implementation_override.start_date?.trim() || undefined,
+          notes: budget.implementation_override.notes?.trim() || undefined,
+        }
+      : undefined,
 
     // Internal audit
     selected_models: models,

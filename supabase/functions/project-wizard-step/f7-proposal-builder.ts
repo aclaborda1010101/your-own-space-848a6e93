@@ -43,11 +43,48 @@ export interface CommercialTermsV1 {
   support_terms?: string;
   legal_notes?: string;
   notes?: string;
+  /** F7.1 — Override manual del cronograma de implementación. */
+  implementation_override?: ImplementationOverride;
 }
 
 export interface ProposalScopeItem {
   title: string;
   description: string;
+}
+
+/**
+ * Override manual del cronograma. Si está presente y tiene valores válidos,
+ * sobrescribe la heurística determinista. Cualquier campo es opcional —
+ * se aplican solo los que vengan rellenos.
+ */
+export interface ImplementationOverride {
+  mvp_weeks?: number;
+  fast_follow_weeks?: number;
+  /** ISO YYYY-MM-DD. Si está, se calculan fechas absolutas. */
+  start_date?: string;
+  notes?: string;
+}
+
+export interface ImplementationPhase {
+  name: string;
+  duration_weeks: string;
+  start_week: number;
+  end_week: number;
+  start_date?: string; // ISO si start_date global está disponible
+  end_date?: string;
+  component_count: number;
+  key_milestones: string[];
+  deliverable: string;
+}
+
+export interface ImplementationSchedule {
+  phases: ImplementationPhase[];
+  total_duration_weeks: string;
+  mvp_ready_week: number;
+  start_date?: string;
+  assumptions: string[];
+  notes?: string;
+  source: "heuristic" | "override" | "mixed";
 }
 
 export interface ClientProposalV1 {
@@ -75,6 +112,8 @@ export interface ClientProposalV1 {
     soul_sessions_required: boolean;
     soul_sessions_count: number;
     timeline: string;
+    /** F7.1 — Cronograma por fases derivado del scope, con override opcional. */
+    schedule?: ImplementationSchedule;
   };
   client_responsibilities: string[];
   risks_and_mitigations: Array<{ risk: string; mitigation: string }>;
@@ -206,6 +245,163 @@ function scrubInternalLeak(text: string | undefined | null): string {
     );
   });
   return kept.join(" ").trim();
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// F7.1 — Cronograma de implementación (heurística determinista + override)
+// ───────────────────────────────────────────────────────────────────────────────
+
+const MONTH_ES = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+];
+
+function fmtDateEs(d: Date): string {
+  return `${d.getDate()} ${MONTH_ES[d.getMonth()]}`;
+}
+
+function addWeeks(start: Date, weeks: number): Date {
+  const d = new Date(start.getTime());
+  d.setDate(d.getDate() + weeks * 7);
+  return d;
+}
+
+function clampWeeks(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
+/**
+ * Deriva un cronograma por fases a partir del scope (Step 28) y aplica el
+ * override manual si está presente. Heurística reproducible:
+ * - MVP: ceil(mvp_count × 1.2) + 1 semana de cierre, mín 6, máx 16.
+ * - Fast-follow: ceil(ff_count × 1.0), mín 2, máx 10 (sólo si ff_count > 0).
+ * - Roadmap: nombrado como fase posterior a confirmar, sin estimar semanas.
+ */
+export function deriveImplementationSchedule(
+  scope: ScopeArchitectureV1,
+  override?: ImplementationOverride,
+): ImplementationSchedule {
+  const mvpComponents = (scope.data_foundation ?? []).concat(scope.mvp ?? []);
+  const ffComponents = scope.fast_follow_f2 ?? [];
+  const roadmapComponents = scope.roadmap_f3 ?? [];
+  const mvpCount = mvpComponents.length;
+  const ffCount = ffComponents.length;
+  const roadmapCount = roadmapComponents.length;
+  const soulRequired = !!scope.soul_capture_plan?.required;
+  const hasCompliance = (scope.compliance_blockers?.length ?? 0) > 0;
+
+  const heuristicMvp = clampWeeks(Math.ceil(mvpCount * 1.2) + 1, 6, 16);
+  const heuristicFf = ffCount > 0 ? clampWeeks(Math.ceil(ffCount * 1.0), 2, 10) : 0;
+
+  const mvpWeeks =
+    typeof override?.mvp_weeks === "number" && override.mvp_weeks > 0
+      ? Math.round(override.mvp_weeks)
+      : heuristicMvp;
+  const ffWeeks =
+    typeof override?.fast_follow_weeks === "number" && override.fast_follow_weeks >= 0
+      ? Math.round(override.fast_follow_weeks)
+      : heuristicFf;
+
+  const usedOverrideMvp =
+    typeof override?.mvp_weeks === "number" && override.mvp_weeks > 0;
+  const usedOverrideFf =
+    typeof override?.fast_follow_weeks === "number" && override.fast_follow_weeks >= 0;
+  const source: "heuristic" | "override" | "mixed" =
+    usedOverrideMvp && usedOverrideFf
+      ? "override"
+      : usedOverrideMvp || usedOverrideFf
+      ? "mixed"
+      : "heuristic";
+
+  let startDate: Date | undefined;
+  if (override?.start_date) {
+    const d = new Date(override.start_date);
+    if (!isNaN(d.getTime())) startDate = d;
+  }
+
+  const phases: ImplementationPhase[] = [];
+
+  // Fase 1 — MVP
+  const mvpMilestones: string[] = [];
+  if (soulRequired) {
+    const sessions = scope.soul_capture_plan?.sessions ?? 0;
+    mvpMilestones.push(
+      `${sessions} sesiones de captura de criterio en las primeras ${weeksWindowEs(scope.soul_capture_plan?.weeks_window)}.`,
+    );
+  }
+  mvpMilestones.push("Entregables verificables en módulos críticos del MVP.");
+  if (hasCompliance) {
+    mvpMilestones.push("Artefactos de cumplimiento normativo preparados en paralelo.");
+  }
+  mvpMilestones.push("MVP operativo y validado al cierre de la fase.");
+  phases.push({
+    name: "Fase 1 — MVP",
+    duration_weeks: `${mvpWeeks} semanas`,
+    start_week: 1,
+    end_week: mvpWeeks,
+    start_date: startDate ? fmtDateEs(startDate) : undefined,
+    end_date: startDate ? fmtDateEs(addWeeks(startDate, mvpWeeks)) : undefined,
+    component_count: mvpCount,
+    key_milestones: mvpMilestones,
+    deliverable: "MVP operativo, validado y desplegado en entorno acordado.",
+  });
+
+  // Fase 2 — Fast-follow
+  if (ffWeeks > 0 && ffCount > 0) {
+    const ffStart = mvpWeeks + 1;
+    const ffEnd = mvpWeeks + ffWeeks;
+    phases.push({
+      name: "Fase 2 — Fast-follow",
+      duration_weeks: `${ffWeeks} semanas`,
+      start_week: ffStart,
+      end_week: ffEnd,
+      start_date: startDate ? fmtDateEs(addWeeks(startDate, mvpWeeks)) : undefined,
+      end_date: startDate ? fmtDateEs(addWeeks(startDate, ffEnd)) : undefined,
+      component_count: ffCount,
+      key_milestones: ["Extensión funcional sobre el MVP estabilizado."],
+      deliverable: "Segundo lote de módulos en producción.",
+    });
+  }
+
+  // Fase 3 — Roadmap
+  if (roadmapCount > 0) {
+    phases.push({
+      name: "Fase 3 — Roadmap posterior",
+      duration_weeks: "A confirmar",
+      start_week: 0,
+      end_week: 0,
+      component_count: roadmapCount,
+      key_milestones: ["Evolución continua a planificar tras la Fase 2."],
+      deliverable: "Roadmap revisado y priorizado conjuntamente.",
+    });
+  }
+
+  const totalWeeks = mvpWeeks + ffWeeks;
+  const total_duration_weeks =
+    ffWeeks > 0
+      ? `${totalWeeks} semanas (MVP + Fast-follow)`
+      : `${mvpWeeks} semanas (MVP)`;
+
+  const assumptions: string[] = [
+    "Equipo dedicado por nuestra parte durante todo el proyecto.",
+    "Disponibilidad de stakeholders del cliente para validar entregables al cierre de cada fase.",
+    "Acceso a sistemas, datos y entornos en los plazos acordados.",
+  ];
+  if (soulRequired) {
+    assumptions.push(
+      "Disponibilidad del responsable estratégico para las sesiones de captura de criterio en las primeras semanas.",
+    );
+  }
+
+  return {
+    phases,
+    total_duration_weeks,
+    mvp_ready_week: mvpWeeks,
+    start_date: startDate ? startDate.toISOString().substring(0, 10) : undefined,
+    assumptions,
+    notes: override?.notes?.trim() || undefined,
+    source,
+  };
 }
 
 export function buildClientProposal(input: F7Input): F7Output {
@@ -381,9 +577,14 @@ export function buildClientProposal(input: F7Input): F7Output {
         "El proyecto se ejecuta en fases. Cada fase tiene entregables verificables y un cierre formal antes de iniciar la siguiente.",
       soul_sessions_required: soulRequired,
       soul_sessions_count: soulRequired ? scope.soul_capture_plan.sessions : 0,
-      timeline:
-        commercialTerms.timeline?.trim() ||
-        "Plazos detallados a confirmar al cierre de la sesión de arranque, una vez validados disponibilidad y prioridades.",
+      timeline: (() => {
+        // Si el usuario pasó un timeline literal vía commercialTerms, lo respetamos.
+        if (commercialTerms.timeline?.trim()) return commercialTerms.timeline.trim();
+        // Si no, derivamos un resumen del schedule.
+        const sch = deriveImplementationSchedule(scope, commercialTerms.implementation_override);
+        return `Cronograma estimado: ${sch.total_duration_weeks}. MVP operativo en semana ${sch.mvp_ready_week}.`;
+      })(),
+      schedule: deriveImplementationSchedule(scope, commercialTerms.implementation_override),
     },
     client_responsibilities: clientResponsibilities,
     risks_and_mitigations: risks,
@@ -531,13 +732,49 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
 
   section("Plan de implementación");
   lines.push(p.implementation_plan.summary);
-  if (p.implementation_plan.soul_sessions_required) {
+  lines.push("");
+  lines.push(`**${p.implementation_plan.timeline}**`);
+  lines.push("");
+
+  const sch = p.implementation_plan.schedule;
+  if (sch && sch.phases.length > 0) {
+    lines.push("| Fase | Duración | Componentes | Hito principal |");
+    lines.push("|---|---|---|---|");
+    for (const ph of sch.phases) {
+      const dur = ph.start_date && ph.end_date
+        ? `${ph.duration_weeks} (${ph.start_date} – ${ph.end_date})`
+        : ph.duration_weeks;
+      const range = ph.start_week > 0
+        ? `Sem. ${ph.start_week}-${ph.end_week}`
+        : "—";
+      const comps = ph.component_count > 0 ? `${ph.component_count} módulos` : "—";
+      const milestone = ph.deliverable;
+      lines.push(`| ${ph.name} | ${range} · ${dur} | ${comps} | ${milestone} |`);
+    }
     lines.push("");
-    lines.push(`Incluye ${p.implementation_plan.soul_sessions_count} sesiones de captura de criterio estratégico al inicio del proyecto.`);
+
+    if (p.implementation_plan.soul_sessions_required) {
+      lines.push(
+        `**Sesiones Soul:** ${p.implementation_plan.soul_sessions_count} sesiones de captura de criterio al inicio del proyecto.`,
+      );
+      lines.push("");
+    }
+
+    lines.push("**Supuestos:**");
+    for (const a of sch.assumptions) lines.push(`- ${a}`);
+    lines.push("");
+
+    if (sch.notes) {
+      lines.push(`**Notas:** ${sch.notes}`);
+      lines.push("");
+    }
+  } else if (p.implementation_plan.soul_sessions_required) {
+    lines.push(
+      `Incluye ${p.implementation_plan.soul_sessions_count} sesiones de captura de criterio estratégico al inicio del proyecto.`,
+    );
+    lines.push("");
   }
-  lines.push("");
-  lines.push(`**Plazos:** ${p.implementation_plan.timeline}`);
-  lines.push("");
+
 
   section("Responsabilidades del cliente");
   for (const x of p.client_responsibilities) lines.push(`- ${x}`);

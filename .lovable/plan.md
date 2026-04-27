@@ -1,63 +1,120 @@
-# Plan: Regenerar Step 29 + Step 32 para AFFLUX y validar
+## Objetivo
 
-## Estado actual (verificado en DB)
+Hoy la propuesta cliente (F7 / Step 30) tiene una sección "Plan de implementación" con un único campo `timeline` que **siempre** sale con el fallback genérico ("Plazos detallados a confirmar al cierre de la sesión de arranque…"), porque el mapper `budgetToCommercialTerms` nunca lo rellena. Resultado: el cliente no ve plazos reales en el PDF.
 
-| Step | Version | Apunta a | Problema |
+Vamos a sustituirlo por un **cronograma por fases derivado del scope (heurística determinista) con override manual** desde el panel de presupuesto.
+
+---
+
+## 1 · Heurística determinista (fuente por defecto)
+
+Nueva función `deriveImplementationSchedule(scope)` en `f7-proposal-builder.ts` que produce un objeto:
+
+```ts
+interface ImplementationSchedule {
+  phases: Array<{
+    name: string;            // "Fase 1 — MVP", "Fase 2 — Fast-follow", "Fase 3 — Roadmap"
+    duration_weeks: string;  // "8-10 semanas"
+    start_week: number;      // 1, 11, ...
+    end_week: number;
+    component_count: number;
+    key_milestones: string[];
+    deliverable: string;
+  }>;
+  total_duration_weeks: string;
+  mvp_ready_week: number;
+  assumptions: string[];      // "Equipo dedicado…", "Disponibilidad cliente…"
+}
+```
+
+**Reglas de cálculo** (sin LLM, reproducibles):
+- **Arranque**: 2 semanas fijas (kickoff + sesiones Soul si aplica).
+- **MVP**: `ceil(mvp_count × 1.2)` semanas, mínimo 6, máximo 16.
+- **Fast-follow**: `ceil(ff_count × 1.0)` semanas, solo si `ff_count > 0`.
+- **Roadmap**: solo se nombra como "fase posterior a confirmar", sin estimar semanas.
+- **Cierre**: 1 semana de hardening + entrega.
+- **Hitos clave por fase** derivados de `scope.compliance_blockers` (DPIA antes de producción), `soul_capture_plan` (sesiones en semanas X-Y), y los componentes principales del bucket.
+
+## 2 · Override manual desde el panel de presupuesto
+
+Ampliar `BudgetData` con un campo opcional `implementation_override` y exponerlo en `ProjectBudgetPanel.tsx`:
+
+```ts
+implementation_override?: {
+  mvp_weeks?: number;          // sobrescribe duración MVP
+  fast_follow_weeks?: number;  // sobrescribe duración F2
+  start_date?: string;         // ISO, opcional, para mostrar fechas absolutas
+  notes?: string;              // texto libre que se anexa al cronograma
+}
+```
+
+UI nueva en `ProjectBudgetPanel`: bloque colapsable **"Plazos de implementación"** (visible solo en modo edición) con:
+- 2 inputs numéricos (semanas MVP / semanas Fast-follow) con placeholder mostrando el valor heurístico.
+- Date picker opcional para fecha de arranque.
+- Textarea opcional para notas.
+- Botón "Restaurar valores sugeridos" que vacía los overrides.
+
+## 3 · Propagación al mapper
+
+`budgetToCommercialTerms.ts` pasa el override (si existe) a `commercial_terms_v1.implementation_override`. `f7-proposal-builder` aplica la prioridad: **override manual > heurística > fallback genérico**.
+
+## 4 · Render markdown (sección "Plan de implementación")
+
+Sustituir las 3 líneas actuales por:
+
+```markdown
+## N. Plan de implementación
+
+El proyecto se ejecuta en 3 fases con entregables verificables y cierre formal por fase.
+
+**Cronograma estimado: 12-14 semanas. MVP operativo en semana 10.**
+
+| Fase | Duración | Componentes | Hito principal |
 |---|---|---|---|
-| 28 | **v2** ✅ | — | Correcto: SCOPE-007 movido a F2 (df=1, mvp=13, f2=2) |
-| 29 | v1 ⚠️ | Step 28 **v1** | Desfasado: leyó scope antiguo con revista emocional en MVP |
-| 32 | v1 ⚠️ | Step 29 v1 | Generado **antes** de los 4 ajustes de empaquetado (buildings, agente Compliance/HITL, WhatsApp mock, orden secuencial MVP) |
+| Fase 1 — MVP | Semanas 1-10 (8-10 sem) | 13 componentes | MVP operativo y validado |
+| Fase 2 — Fast-follow | Semanas 11-13 (2-3 sem) | 2 componentes | Extensión funcional |
+| Fase 3 — Roadmap posterior | A confirmar | — | Evolución continua |
 
-**Código deployado**: confirmado que `f9-lovable-build-pack.ts` ya contiene los 4 ajustes (entidad `buildings`, `Agente Compliance / HITL`, WhatsApp como `interfaz/estado/mock`, `sortMvpForBuildOrder`). Solo falta regenerar.
+**Sesiones Soul:** 3 sesiones de captura de criterio en semanas 1 y 2.
 
-## Por qué no puedo ejecutar el action ahora
-- El curl directo al edge function `generate_lovable_build_pack` devuelve **401 Unauthorized** (la sesión browser no propaga el JWT al call server-side desde el sandbox).
-- La regeneración tiene que dispararse desde tu sesión autenticada en la UI (PipelineQAPanel) — o bien aceptar que la haga vía SQL leyendo Step 28 v2 + invocando el módulo determinista en local (ver Paso 3 alt).
+**Supuestos:**
+- Equipo dedicado por nuestra parte durante todo el proyecto.
+- Disponibilidad de stakeholders del cliente para validar entregables al cierre de cada fase.
+- Acceso a sistemas y datos en plazos acordados.
+```
 
-## Pasos
+Si hay `start_date`, se añaden fechas absolutas entre paréntesis (ej. *"Semanas 1-10 (15 may - 24 jul)"*).
 
-### 1. Regenerar Step 29 v2 (PRD técnico) leyendo Step 28 v2
-- Acción: tú pulsas **"Regenerar PRD técnico"** en la UI del wizard (Step 3).
-- Resultado esperado: Step 29 sube a `version=2`, su `source_scope_row_id` apunta a `c9e3ac94...` y `source_scope_version=2`. El nuevo PRD reflejará: mvp=13, f2=2 (Benatar + Revista emocional).
-- Patrón: UPDATE in-place (mismo que usamos con Step 28, por el constraint UNIQUE).
+## 5 · Tests (añadir a `f7-proposal-builder_test.ts`)
 
-### 2. Regenerar Step 32 v2 (Lovable Build Pack)
-- Acción: tú pulsas **"Generar Lovable Build Pack (Step 32)"** en `PipelineQAPanel`.
-- Resultado esperado: Step 32 sube a `version=2`, `source_prd_row_id=b25c43c4...`, `source_prd_version=2`, `source_scope_version=2`.
+- `deriveImplementationSchedule` con scope MVP=13/F2=2 → MVP ≈ 10 sem, total ≈ 13 sem.
+- Override manual gana sobre heurística.
+- Render markdown contiene tabla con las 3 fases.
+- `mvp_ready_week` aparece en negrita en la línea resumen.
+- Sin Soul, no se renderiza la línea de Soul.
+- Si `ff_count = 0`, omite la fila Fast-follow.
+- `detectInternalJargon` sigue limpia tras añadir el cronograma.
 
-### 3. Validación automática del checklist (12 puntos)
-Una vez completados pasos 1-2, leo Step 32 v2 desde DB y devuelvo:
+## 6 · No se toca
 
-- [ ] **(1)** version, row_id, source_prd_row_id, source_scope_row_id, word_count, warnings
-- [ ] **(2)** Trazabilidad PRD↔Scope correcta
-- [ ] **(3)** Counts por bucket
-- [ ] **(4)** Extracto markdown secciones 3, 4, 6, 7, 8, 9
-- [ ] **(5)** Sección 3 contiene entidad `buildings` con todos los campos requeridos
-- [ ] **(6)** Sección 4 MVP en orden secuencial (datos → llamadas → RAG → catalogador → asistente → compliance/HITL → fallecimientos → matching → valoración → MoE → cadencias/WhatsApp)
-- [ ] **(7)** WhatsApp explícito como mock/controlado (sin envío real)
-- [ ] **(8)** Sección 6 con 5 sub-bloques (RAGs, Agentes, MoE/Router, Tools, HITL)
-- [ ] **(9)** "Agente Compliance / HITL" presente
-- [ ] **(10)** Sección 8 incluye Benatar, revista emocional, no envío WhatsApp, no scraping real, no scoring final, no contacto sin revisión
-- [ ] **(11)** Criterios de aceptación con WhatsApp sin envío, HITL en sensibles, matching con justificación, no fast-follow en MVP
-- [ ] **(12)** Sin jerga interna (Step 25/28, Component Registry, Edge Function, RLS, SQL, F4, F5)
+- Step 28 (scope) — solo se lee.
+- Step 29 (PRD) — no afectado.
+- Step 32 (Build Pack) — no afectado.
+- Generación PDF (`generate-document`) — sigue recibiendo `proposal_markdown` ya renderizado.
+- Sanitizadores — los textos del cronograma son neutros, sin jerga.
 
-Y entrego el extracto markdown completo de las secciones 3, 4, 6, 7, 8 y 9.
+## 7 · Archivos a modificar
 
-### 4. Si la validación falla
-- Si bucket integrity falla → diagnostico qué componente se movió.
-- Si word_count fuera de [1500, 2500] → reporto warning sin regenerar (según tu instrucción del checklist punto 8 anterior).
-- Si jerga interna se cuela → diagnostico el origen (probablemente PRD upstream) y propongo strip extra.
+1. `supabase/functions/project-wizard-step/f7-proposal-builder.ts` — `deriveImplementationSchedule`, nuevos tipos, render tabla, prioridad override.
+2. `supabase/functions/project-wizard-step/f7-proposal-builder_test.ts` — 6 tests nuevos.
+3. `src/lib/budgetToCommercialTerms.ts` — propagar `implementation_override` y tipo `BudgetData`.
+4. `src/components/projects/wizard/ProjectBudgetPanel.tsx` — bloque UI "Plazos de implementación" en modo edición.
+5. Deploy `project-wizard-step` y test edge functions.
 
-## Lo que NO hago
-- No toco `f9-lovable-build-pack.ts` (ya está correcto).
-- No toco propuesta cliente, presupuesto, ni scope.
-- No regenero Step 25-28 (Step 28 v2 ya es la verdad).
-- No meto Step 32 en auto-chain.
+## 8 · Validación post-deploy
 
-## Acción que necesito de ti tras aprobar el plan
-1. Pulsar "Regenerar PRD técnico" en Step 3 del wizard.
-2. Esperar a que termine.
-3. Pulsar "Generar Lovable Build Pack (Step 32)" en `PipelineQAPanel`.
-4. Avisarme — yo leo DB y entrego validación + extractos.
-
-Alternativa: si prefieres que invoque yo los actions vía edge function tras aprobar el plan, puedo intentar pasar tu JWT capturado o usar `SUPABASE_SERVICE_ROLE_KEY` desde un script. Avísame si quieres esa ruta y lo añado al plan.
+Tras aprobar, el usuario debe:
+1. Abrir el proyecto AFFLUX, ir al Paso 4 (Presupuesto), entrar en edición y opcionalmente ajustar plazos (o dejar valores sugeridos).
+2. Aprobar presupuesto.
+3. Regenerar propuesta cliente (Paso 5).
+4. Descargar PDF y verificar la nueva tabla en "Plan de implementación".

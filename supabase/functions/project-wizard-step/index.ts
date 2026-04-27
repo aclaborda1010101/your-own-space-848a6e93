@@ -2002,24 +2002,25 @@ REGLAS PARA deep_patterns:
       const { buildClientProposal, renderProposalMarkdown, detectInternalJargon, commercialTermsFromBudgetData } =
         await import("./f7-proposal-builder.ts");
 
-      let commercialTerms = stepData?.commercial_terms_v1;
+      const { data: latestBudgetRow } = await supabase
+        .from("project_wizard_steps")
+        .select("output_data")
+        .eq("project_id", projectId)
+        .eq("step_number", 6)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      // Step 6 (presupuesto aprobado/editado) es la fuente de verdad. El payload
+      // del frontend puede estar stale por estado React/localStorage; aquí se
+      // deriva de nuevo para que el PDF nunca use 14.500/250 si BBDD ya tiene 12.400/215.
+      let commercialTerms = commercialTermsFromBudgetData(latestBudgetRow?.output_data) ?? stepData?.commercial_terms_v1;
       if (!commercialTerms || typeof commercialTerms !== "object" || !commercialTerms.pricing_model) {
-        const { data: latestBudgetRow } = await supabase
-          .from("project_wizard_steps")
-          .select("output_data")
-          .eq("project_id", projectId)
-          .eq("step_number", 6)
-          .order("version", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        commercialTerms = commercialTermsFromBudgetData(latestBudgetRow?.output_data);
-        if (!commercialTerms?.pricing_model) {
-          return new Response(JSON.stringify({
-            error: "Missing commercial_terms_v1 in stepData and no valid approved budget found.",
-          }), {
-            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
-        }
+        return new Response(JSON.stringify({
+          error: "Missing commercial_terms_v1 in stepData and no valid approved budget found.",
+        }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       const { data: step28Row } = await supabase

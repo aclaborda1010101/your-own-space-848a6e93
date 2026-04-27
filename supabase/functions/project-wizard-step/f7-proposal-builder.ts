@@ -1128,7 +1128,9 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
   }
 
   section("Modalidad de pago");
-  lines.push(p.payment_terms);
+  const useFixedPayment =
+    p.budget.monthly_retainer !== undefined || !!p.budget.consulting_retainer?.enabled;
+  lines.push(useFixedPayment ? buildClientPaymentTermsBlock() : p.payment_terms);
   lines.push("");
 
   if (p.support_terms) {

@@ -129,11 +129,19 @@ export const ProjectProposalExport = ({
           <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
             <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <div className="text-foreground/80">
-              {budgetStatus === "editing"
-                ? "Has editado el presupuesto. Apruébalo de nuevo para habilitar la propuesta."
-                : budgetStatus === "generated"
-                ? "Aprueba el presupuesto en el Paso 4 para poder generar la propuesta cliente."
-                : "Genera y aprueba el presupuesto antes de generar la propuesta cliente."}
+              {budgetStatus === "editing" ? (
+                <>
+                  <strong>Has modificado el presupuesto.</strong>{" "}
+                  {hasProposal
+                    ? "La propuesta cliente actual está desactualizada (no refleja tus cambios). "
+                    : ""}
+                  Vuelve al Paso 4, pulsa <strong>Aprobar presupuesto</strong> y la propuesta se regenerará automáticamente.
+                </>
+              ) : budgetStatus === "generated" ? (
+                "Aprueba el presupuesto en el Paso 4 para poder generar la propuesta cliente."
+              ) : (
+                "Genera y aprueba el presupuesto antes de generar la propuesta cliente."
+              )}
             </div>
           </div>
         )}

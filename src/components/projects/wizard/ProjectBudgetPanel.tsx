@@ -66,6 +66,12 @@ interface BudgetData {
   pricing_notes?: string;
   risk_factors?: string[];
   recommended_model?: string;
+  implementation_override?: {
+    mvp_weeks?: number;
+    fast_follow_weeks?: number;
+    start_date?: string;
+    notes?: string;
+  };
 }
 
 interface ProjectBudgetPanelProps {

@@ -247,6 +247,163 @@ function scrubInternalLeak(text: string | undefined | null): string {
   return kept.join(" ").trim();
 }
 
+// ───────────────────────────────────────────────────────────────────────────────
+// F7.1 — Cronograma de implementación (heurística determinista + override)
+// ───────────────────────────────────────────────────────────────────────────────
+
+const MONTH_ES = [
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
+];
+
+function fmtDateEs(d: Date): string {
+  return `${d.getDate()} ${MONTH_ES[d.getMonth()]}`;
+}
+
+function addWeeks(start: Date, weeks: number): Date {
+  const d = new Date(start.getTime());
+  d.setDate(d.getDate() + weeks * 7);
+  return d;
+}
+
+function clampWeeks(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
+/**
+ * Deriva un cronograma por fases a partir del scope (Step 28) y aplica el
+ * override manual si está presente. Heurística reproducible:
+ * - MVP: ceil(mvp_count × 1.2) + 1 semana de cierre, mín 6, máx 16.
+ * - Fast-follow: ceil(ff_count × 1.0), mín 2, máx 10 (sólo si ff_count > 0).
+ * - Roadmap: nombrado como fase posterior a confirmar, sin estimar semanas.
+ */
+export function deriveImplementationSchedule(
+  scope: ScopeArchitectureV1,
+  override?: ImplementationOverride,
+): ImplementationSchedule {
+  const mvpComponents = (scope.data_foundation ?? []).concat(scope.mvp ?? []);
+  const ffComponents = scope.fast_follow_f2 ?? [];
+  const roadmapComponents = scope.roadmap_f3 ?? [];
+  const mvpCount = mvpComponents.length;
+  const ffCount = ffComponents.length;
+  const roadmapCount = roadmapComponents.length;
+  const soulRequired = !!scope.soul_capture_plan?.required;
+  const hasCompliance = (scope.compliance_blockers?.length ?? 0) > 0;
+
+  const heuristicMvp = clampWeeks(Math.ceil(mvpCount * 1.2) + 1, 6, 16);
+  const heuristicFf = ffCount > 0 ? clampWeeks(Math.ceil(ffCount * 1.0), 2, 10) : 0;
+
+  const mvpWeeks =
+    typeof override?.mvp_weeks === "number" && override.mvp_weeks > 0
+      ? Math.round(override.mvp_weeks)
+      : heuristicMvp;
+  const ffWeeks =
+    typeof override?.fast_follow_weeks === "number" && override.fast_follow_weeks >= 0
+      ? Math.round(override.fast_follow_weeks)
+      : heuristicFf;
+
+  const usedOverrideMvp =
+    typeof override?.mvp_weeks === "number" && override.mvp_weeks > 0;
+  const usedOverrideFf =
+    typeof override?.fast_follow_weeks === "number" && override.fast_follow_weeks >= 0;
+  const source: "heuristic" | "override" | "mixed" =
+    usedOverrideMvp && usedOverrideFf
+      ? "override"
+      : usedOverrideMvp || usedOverrideFf
+      ? "mixed"
+      : "heuristic";
+
+  let startDate: Date | undefined;
+  if (override?.start_date) {
+    const d = new Date(override.start_date);
+    if (!isNaN(d.getTime())) startDate = d;
+  }
+
+  const phases: ImplementationPhase[] = [];
+
+  // Fase 1 — MVP
+  const mvpMilestones: string[] = [];
+  if (soulRequired) {
+    const sessions = scope.soul_capture_plan?.sessions ?? 0;
+    mvpMilestones.push(
+      `${sessions} sesiones de captura de criterio en las primeras ${weeksWindowEs(scope.soul_capture_plan?.weeks_window)}.`,
+    );
+  }
+  mvpMilestones.push("Entregables verificables en módulos críticos del MVP.");
+  if (hasCompliance) {
+    mvpMilestones.push("Artefactos de cumplimiento normativo preparados en paralelo.");
+  }
+  mvpMilestones.push("MVP operativo y validado al cierre de la fase.");
+  phases.push({
+    name: "Fase 1 — MVP",
+    duration_weeks: `${mvpWeeks} semanas`,
+    start_week: 1,
+    end_week: mvpWeeks,
+    start_date: startDate ? fmtDateEs(startDate) : undefined,
+    end_date: startDate ? fmtDateEs(addWeeks(startDate, mvpWeeks)) : undefined,
+    component_count: mvpCount,
+    key_milestones: mvpMilestones,
+    deliverable: "MVP operativo, validado y desplegado en entorno acordado.",
+  });
+
+  // Fase 2 — Fast-follow
+  if (ffWeeks > 0 && ffCount > 0) {
+    const ffStart = mvpWeeks + 1;
+    const ffEnd = mvpWeeks + ffWeeks;
+    phases.push({
+      name: "Fase 2 — Fast-follow",
+      duration_weeks: `${ffWeeks} semanas`,
+      start_week: ffStart,
+      end_week: ffEnd,
+      start_date: startDate ? fmtDateEs(addWeeks(startDate, mvpWeeks)) : undefined,
+      end_date: startDate ? fmtDateEs(addWeeks(startDate, ffEnd)) : undefined,
+      component_count: ffCount,
+      key_milestones: ["Extensión funcional sobre el MVP estabilizado."],
+      deliverable: "Segundo lote de módulos en producción.",
+    });
+  }
+
+  // Fase 3 — Roadmap
+  if (roadmapCount > 0) {
+    phases.push({
+      name: "Fase 3 — Roadmap posterior",
+      duration_weeks: "A confirmar",
+      start_week: 0,
+      end_week: 0,
+      component_count: roadmapCount,
+      key_milestones: ["Evolución continua a planificar tras la Fase 2."],
+      deliverable: "Roadmap revisado y priorizado conjuntamente.",
+    });
+  }
+
+  const totalWeeks = mvpWeeks + ffWeeks;
+  const total_duration_weeks =
+    ffWeeks > 0
+      ? `${totalWeeks} semanas (MVP + Fast-follow)`
+      : `${mvpWeeks} semanas (MVP)`;
+
+  const assumptions: string[] = [
+    "Equipo dedicado por nuestra parte durante todo el proyecto.",
+    "Disponibilidad de stakeholders del cliente para validar entregables al cierre de cada fase.",
+    "Acceso a sistemas, datos y entornos en los plazos acordados.",
+  ];
+  if (soulRequired) {
+    assumptions.push(
+      "Disponibilidad del responsable estratégico para las sesiones de captura de criterio en las primeras semanas.",
+    );
+  }
+
+  return {
+    phases,
+    total_duration_weeks,
+    mvp_ready_week: mvpWeeks,
+    start_date: startDate ? startDate.toISOString().substring(0, 10) : undefined,
+    assumptions,
+    notes: override?.notes?.trim() || undefined,
+    source,
+  };
+}
+
 export function buildClientProposal(input: F7Input): F7Output {
   const t0 = Date.now();
   const { scope, commercialTerms } = input;

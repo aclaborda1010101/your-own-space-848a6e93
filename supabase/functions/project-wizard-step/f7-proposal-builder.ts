@@ -819,11 +819,30 @@ export function renderProposalMarkdown(p: ClientProposalV1): string {
   const displayMonthly = p.budget.monthly_retainer_display ??
     (p.budget.monthly_retainer !== undefined ? fmtMoney(p.budget.monthly_retainer, c) : undefined);
 
+  const cr = p.budget.consulting_retainer;
   if (displaySetup) {
-    lines.push(`- **Cuota inicial:** ${displaySetup}`);
+    lines.push(`- **Cuota inicial (desarrollo):** ${displaySetup}`);
+    if (cr?.enabled && cr.setup_fee_before_discount !== undefined) {
+      const beforeDisplay =
+        cr.setup_fee_max_before_discount !== undefined
+          ? `${fmtMoney(cr.setup_fee_before_discount, c)} - ${fmtMoney(cr.setup_fee_max_before_discount, c)}`
+          : fmtMoney(cr.setup_fee_before_discount, c);
+      lines.push(
+        `  - _Importe original: ${beforeDisplay}. Descuento del ${cr.discount_pct}% aplicado por contratación de Consultoría/Asesoría IA recurrente._`,
+      );
+    }
   }
   if (displayMonthly) {
     lines.push(`- **Mensualidad recurrente:** ${displayMonthly}`);
+  }
+  if (cr?.enabled) {
+    const horas = cr.monthly_hours > 0 ? ` (${cr.monthly_hours}h/mes incluidas)` : "";
+    lines.push(
+      `- **Consultoría / Asesoría IA recurrente:** ${fmtMoney(cr.monthly_fee_eur, c)}/mes${horas}`,
+    );
+    if (cr.notes) {
+      lines.push(`  - _${cr.notes}_`);
+    }
   }
   // Total de referencia (orientativo a 12 meses) — solo si tenemos números
   // numéricos exactos (no rangos). Si hay rango (max definido), no calculamos.

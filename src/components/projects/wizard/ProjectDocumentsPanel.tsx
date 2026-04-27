@@ -32,11 +32,13 @@ const STEP_NAMES: Record<number, string> = {
   7: "PRD Técnico",
   8: "Generación de RAGs",
   9: "Detección de Patrones",
+  32: "Lovable Build Pack",
 };
 
 const STEP_CONTENT_TYPE: Record<number, "markdown" | "json"> = {
   2: "json", 3: "markdown", 4: "json", 5: "markdown",
   6: "json", 7: "markdown", 8: "json", 9: "json",
+  32: "markdown",
 };
 
 const statusLabel = (status: string) => {

@@ -272,11 +272,22 @@ export const ProjectBudgetPanel = ({
 
   const handleSave = () => {
     if (!editData) return;
-    onBudgetUpdate?.(editData);
+    // Sync FORZADO: si el setup_fee del modelo recomendado no coincide con el
+    // total de desarrollo, sincronizar antes de guardar para evitar que el PDF
+    // muestre el importe antiguo.
+    let toSave = editData;
+    if (!isSetupSynced(toSave)) {
+      toSave = syncSetupWithDev(toSave);
+      const dev = toSave.development?.total_development_eur;
+      if (dev != null) {
+        toast.info(`Setup del cliente sincronizado a €${dev.toLocaleString()}`);
+      }
+    }
+    onBudgetUpdate?.(toSave);
     // Derivar commercial_terms_v1 y persistir en localStorage para que el
     // pipeline técnico (F7) pueda leerlo sin tocar el schema actual.
     try {
-      const derived = budgetToCommercialTermsV1(editData);
+      const derived = budgetToCommercialTermsV1(toSave);
       if (derived) {
         localStorage.setItem(
           `commercial_terms_v1:${projectId}`,
@@ -286,6 +297,7 @@ export const ProjectBudgetPanel = ({
     } catch (e) {
       console.warn("[ProjectBudgetPanel] failed to derive commercial_terms_v1", e);
     }
+    setEditData(toSave);
     setEditing(false);
   };
 

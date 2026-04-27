@@ -860,6 +860,8 @@ function renderTwoOptionBudgetTable(
   const consultingSetup = cr?.enabled ? setup : undefined;
 
   if (standardSetup === undefined || monthly === undefined) return [];
+  // Si hay rangos (max), no usamos tabla numérica para no inducir totales engañosos.
+  if (budget.setup_fee_max !== undefined || budget.monthly_retainer_max !== undefined) return [];
 
   const out: string[] = [];
   const fmt = (n: number) => fmtMoney(n, currency);

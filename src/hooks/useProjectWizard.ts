@@ -1506,7 +1506,12 @@ export const useProjectWizard = (projectId?: string) => {
           },
         },
       });
-      if (error) throw error;
+      if (error) {
+        const { getEdgeFunctionErrorMessage } = await import("@/lib/edge-function-error");
+        const realMsg = await getEdgeFunctionErrorMessage(error, "Error generando propuesta cliente");
+        console.error("[generateClientProposal] backend error:", realMsg, error);
+        throw new Error(realMsg);
+      }
       if ((data as any)?.error) {
         throw new Error((data as any).error);
       }

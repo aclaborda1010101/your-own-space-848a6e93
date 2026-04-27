@@ -1,34 +1,68 @@
-Diagnóstico: no tienes que empezar desde cero. El presupuesto ya está aprobado y en BBDD contiene los datos correctos: desarrollo 12.400 €, mantenimiento 250 €/mes y asesoría IA 4.000 €/mes / 40h. El fallo está en la regeneración de Step 30: la propuesta guardada sigue siendo la versión 1 antigua y el botón no está creando una nueva versión visible con el renderer actualizado. Además, el backend tiene prioridad absoluta por el presupuesto guardado de Step 6 y puede ignorar parte del `commercial_terms_v1` fresco que envía el frontend.
+## Diagnóstico
 
-Plan de corrección:
+El frontend lanza el error genérico **"La propuesta NO se regeneró (sigue en versión 1)"** porque:
 
-1. Corregir la regeneración de propuesta cliente para presupuestos ya aprobados
-   - En `generate_client_proposal`, usar siempre el presupuesto aprobado/guardado como fuente base, pero mezclar de forma segura los datos frescos del frontend cuando aporten campos editoriales o condiciones calculadas.
-   - Mantener Step 6 como fuente de verdad económica, pero no dejar que una derivación antigua bloquee el nuevo formato de propuesta.
-   - Forzar que cada click en “Regenerar propuesta cliente” inserte una nueva versión Step 30 y actualice el estado React con esa versión.
+1. La edge function `generate_client_proposal` (en `supabase/functions/project-wizard-step/index.ts`, líneas 2123–2156) hace `await supabase.from("project_wizard_steps").insert(...)` **sin capturar el resultado**.
+2. Si ese `INSERT` falla (RLS, JSON inválido, payload demasiado grande, conflicto, etc.), la función **igualmente devuelve `200 OK`** con `{ ok: true, version: newVersion30 }`.
+3. El frontend (`useProjectWizard.ts` líneas 1497–1526) verifica que la versión en BBDD haya subido. Como la fila nunca se insertó, sigue en v1 y lanza el mensaje "La propuesta NO se regeneró (...). Revisa la consola para ver el error del backend."
+4. Pero el backend **nunca loggeó el error real** porque ni el cliente Supabase ni el handler lo imprimieron.
 
-2. Aplicar el nuevo formato aunque el presupuesto ya estuviera aprobado
-   - No exigir volver a editar ni aprobar Step 6 si ya está `approved`.
-   - Al pulsar “Regenerar propuesta cliente”, derivar condiciones desde el Step 6 actual y renderizar con el formato nuevo:
-     - “Desarrollo único”
-     - “Desarrollo + asesoría IA”
-     - mantenimiento descontado 80 €/mes en la opción con asesoría IA: 250 → 170 €/mes
-     - sin fila “Total estimado primer año”
-     - nota de compromiso mínimo 12 meses
-     - modalidad de pago fija: 50% firma / 50% entrega; mensualidades a final de mes; APIs según consumo real
+Por eso ni `error` (de `functions.invoke`) ni `data.error` se activan: el HTTP es 200 limpio, pero la fila no existe.
 
-3. Blindaje anti-propuesta obsoleta
-   - Añadir una comprobación en backend tras renderizar: si el markdown generado aún contiene “Opción estándar”, “Opción con asesoría IA”, “Total estimado primer año”, “se ajustará la cuota mensual” o “plan de mantenimiento incluye 5 horas”, devolver error claro en vez de guardar basura antigua.
-   - Añadir en frontend una comprobación después de regenerar: si la nueva Step 30 contiene patrones antiguos, mostrar aviso y no permitir descargar ese PDF.
+Confirmado en BBDD: solo existe Step 30 v1 (creado el 19:34) — no hay v2 a pesar de los reintentos.
 
-4. Mejorar UX del botón
-   - Cambiar copy/estado para que quede claro: “Regenerar propuesta con presupuesto aprobado”.
-   - Al terminar, mostrar la versión nueva generada y refrescar Step 30 desde BBDD.
-   - Si la versión no sube, mostrar error explícito en vez de aparentar éxito.
+## Cambios
 
-5. Tests y validación
-   - Actualizar/añadir tests del builder F7 para comprobar que el markdown final contiene el formato nuevo y no contiene textos antiguos.
-   - Verificar con el proyecto actual `6ef807d1-9c3b-4a9d-b88a-71530c3d7aaf` que Step 30 pasa de versión 1 a versión 2 y que la sección de presupuesto queda con 12.400 €, 6.200 €, 250 €/mes, 170 €/mes y 4.000 €/mes.
-   - Actualizar `cache-bust` en `src/main.tsx` para evitar que la preview siga usando bundle antiguo.
+### 1. Edge function `supabase/functions/project-wizard-step/index.ts` (Step 30, ~línea 2133)
 
-Resultado esperado: con el presupuesto ya aprobado, solo tendrás que pulsar “Regenerar propuesta cliente”. No hará falta regenerar presupuesto, ni reaprobarlo, ni repetir pasos anteriores.
+Capturar el error del insert y devolver 500 con mensaje real:
+
+```ts
+const { error: insertErr } = await supabase.from("project_wizard_steps").insert({...});
+if (insertErr) {
+  console.error("[generate_client_proposal] INSERT failed:", insertErr);
+  return new Response(JSON.stringify({
+    error: `INSERT_FAILED: ${insertErr.message} (code=${insertErr.code})`,
+    details: insertErr.details ?? null,
+    hint: insertErr.hint ?? null,
+  }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+}
+```
+
+Además, releer la fila recién insertada antes de devolver `ok:true` para confirmar persistencia:
+
+```ts
+const { data: confirm } = await supabase
+  .from("project_wizard_steps")
+  .select("id, version")
+  .eq("project_id", projectId).eq("step_number", 30)
+  .order("version", { ascending: false }).limit(1).maybeSingle();
+if (!confirm || confirm.version !== newVersion30) {
+  return new Response(JSON.stringify({ error: "PERSIST_VERIFY_FAILED" }), { status: 500, headers: ... });
+}
+```
+
+### 2. Aplicar el mismo patrón defensivo a los otros inserts del mismo handler (Step 6 budget, Step 28 scope, etc.) sólo si están sin error-check — revisar rápidamente y arreglar los que falten.
+
+### 3. Frontend `src/hooks/useProjectWizard.ts` (línea 1509)
+
+Mejorar el `throw error` para extraer el cuerpo real del `FunctionsHttpError` usando el helper existente `getEdgeFunctionErrorMessage` (`src/lib/edge-function-error.ts`), de modo que el toast muestre el mensaje real (ej. `INSERT_FAILED: ...`) y no el genérico:
+
+```ts
+if (error) {
+  const realMsg = await getEdgeFunctionErrorMessage(error, "Error generando propuesta cliente");
+  throw new Error(realMsg);
+}
+```
+
+### 4. Cache-bust en `src/main.tsx`
+
+Actualizar el comentario `// cache-bust:` para forzar recarga.
+
+## Resultado esperado
+
+Al pulsar "Regenerar propuesta cliente":
+- Si el insert funciona → v2 creada, propuesta actualizada con los nuevos textos.
+- Si el insert falla → toast con el mensaje real del backend (ej. tamaño de payload, RLS, etc.) en lugar del mensaje genérico "Revisa la consola".
+
+Esto desbloquea el diagnóstico definitivo y, en la mayoría de casos, también la regeneración (porque normalmente el insert sí funciona y el bug era simplemente que un error transitorio anterior se enmascaraba).

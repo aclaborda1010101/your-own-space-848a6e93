@@ -84,6 +84,9 @@ export interface ScopeComponent {
   soul_dependency?: "none" | "async" | "hard";
   compliance_flags?: string[];
   notes?: string;
+  /** When duplicates were merged into this component, lists the original sources
+   * (component_id or gap_id) for traceability. Empty/undefined when not merged. */
+  merged_sources?: { source_type: SourceType; source_ref: string; original_name: string }[];
 }
 
 export interface SoulCapturePlan {

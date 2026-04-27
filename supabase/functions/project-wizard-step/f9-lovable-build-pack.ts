@@ -357,17 +357,17 @@ function buildRoutes(scope: ScopeArchitectureV1): RouteSpec[] {
 function buildDataModel(scope: ScopeArchitectureV1): EntitySpec[] {
   const entities: EntitySpec[] = [
     { name: "owners (propietarios)", fields: ["id", "nombre", "rol", "contacto", "consentimiento", "creado_en"] },
+    { name: "buildings (edificios)", fields: ["id", "direccion", "ciudad", "division_horizontal", "numero_propietarios", "estado", "catastro_ref"] },
     { name: "calls (llamadas)", fields: ["id", "owner_id", "fecha", "resumen", "transcripcion_url", "siguiente_accion"] },
     { name: "notes (notas)", fields: ["id", "owner_id", "texto", "etiquetas", "creado_en"] },
-    { name: "assets (activos)", fields: ["id", "tipo", "ubicacion", "valoracion_estimada", "estado", "owner_id"] },
+    { name: "assets (activos / oportunidades)", fields: ["id", "building_id", "tipo", "ubicacion", "valoracion_estimada", "estado", "owner_id"] },
   ];
   if (scope.mvp.some((c) => /matching|invers/i.test(c.name))) {
     entities.push({ name: "investors (inversores)", fields: ["id", "nombre", "criterios", "ticket_min", "ticket_max"] });
     entities.push({ name: "match_candidates", fields: ["id", "asset_id", "investor_id", "score", "evidencia", "estado"] });
   }
-  if (scope.compliance_blockers?.length) {
-    entities.push({ name: "compliance_cases", fields: ["id", "scope_id", "estado", "dpia_ok", "owner_revisor"] });
-  }
+  // compliance_cases siempre presente: el agente Compliance/HITL es estructural
+  entities.push({ name: "compliance_cases", fields: ["id", "scope_id", "estado", "dpia_ok", "motivo", "owner_revisor", "creado_en"] });
   return entities;
 }
 

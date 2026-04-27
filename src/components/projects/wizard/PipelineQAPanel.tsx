@@ -237,6 +237,18 @@ export const PipelineQAPanel = ({ projectId }: PipelineQAPanelProps) => {
 
     const audit = parsed.audit ?? {};
 
+    // Step 32 — Lovable Build Pack
+    if (lastAction === "generate_lovable_build_pack" || parsed.markdown) {
+      return {
+        ok: parsed.ok,
+        version: parsed.version,
+        word_count: parsed.word_count,
+        warnings: Array.isArray(parsed.warnings) ? parsed.warnings.length : 0,
+        source_prd_row_id: parsed.source_prd_row_id,
+        source_scope_row_id: parsed.source_scope_row_id,
+      };
+    }
+
     // Step 31 — final deliverables audit
     if (lastAction === "audit_final_deliverables" || parsed.deliverables_audit) {
       const a = parsed.deliverables_audit ?? parsed;

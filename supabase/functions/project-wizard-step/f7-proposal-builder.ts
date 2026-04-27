@@ -751,7 +751,7 @@ export function commercialTermsFromBudgetData(budget: any): CommercialTermsV1 | 
 
 const PRICING_MODEL_LABEL_ES: Record<string, string> = {
   fixed_project: "Proyecto cerrado",
-  setup_plus_monthly: "Cuota inicial + mensualidad recurrente",
+  setup_plus_monthly: "Coste de desarrollo inicial + coste de mantenimiento mensual",
   subscription: "Suscripción mensual",
   phased: "Pago por fases",
   retainer: "Iguala mensual",

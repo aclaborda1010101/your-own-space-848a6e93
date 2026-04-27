@@ -64,7 +64,9 @@ export const ProjectDocumentsPanel = ({ projectId, projectName, company, steps }
 
       for (const step of availableSteps) {
         try {
-          const content = STEP_CONTENT_TYPE[step.stepNumber] === "markdown"
+          const content = step.stepNumber === 32
+            ? (step.outputData?.build_pack_markdown ?? "")
+            : STEP_CONTENT_TYPE[step.stepNumber] === "markdown"
             ? (typeof step.outputData === "string" ? step.outputData : step.outputData?.document || JSON.stringify(step.outputData, null, 2))
             : step.outputData;
 

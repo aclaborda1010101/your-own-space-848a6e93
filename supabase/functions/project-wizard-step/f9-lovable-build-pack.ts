@@ -595,6 +595,42 @@ function renderComponentList(list: ComponentRef[]): string {
   );
 }
 
+function renderComponentListNumbered(list: ComponentRef[]): string {
+  if (!list.length) return "_(ninguno)_\n";
+  return (
+    list
+      .map((c, i) => `${i + 1}. **${c.name}**${c.business_job ? ` — ${c.business_job}` : ""}`)
+      .join("\n") + "\n"
+  );
+}
+
+/**
+ * Orden recomendado de construcción del MVP para Lovable.
+ * Reordena solo la presentación (no mueve componentes entre buckets).
+ */
+function sortMvpForBuildOrder(list: ComponentRef[]): ComponentRef[] {
+  const rank = (name: string): number => {
+    const n = name.toLowerCase();
+    if (/pipeline|transcrip|llamada/.test(n)) return 10;
+    if (/rag|conocimiento|knowledge/.test(n)) return 20;
+    if (/catalog|rol|propietario/.test(n)) return 30;
+    if (/asistente|pre.?llamada|post.?llamada|nota|analiz/.test(n)) return 40;
+    if (/compliance|gobernanza|dpia|rgpd|hitl/.test(n)) return 50;
+    if (/falleci|herenc/.test(n)) return 60;
+    if (/matching|activo.*invers|invers.*activo/.test(n)) return 70;
+    if (/valor|brains/.test(n)) return 80;
+    if (/orquest|moe|router/.test(n)) return 90;
+    if (/cadencia|whatsapp|mensaj/.test(n)) return 100;
+    return 35;
+  };
+  return [...list].sort((a, b) => {
+    const ra = rank(a.name);
+    const rb = rank(b.name);
+    if (ra !== rb) return ra - rb;
+    return a.scope_id.localeCompare(b.scope_id);
+  });
+}
+
 export function renderBuildPackMarkdown(pack: LovableBuildPackV1): string {
   const s = pack.sections;
   const lines: string[] = [];

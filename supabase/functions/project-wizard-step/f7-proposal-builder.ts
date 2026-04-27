@@ -141,6 +141,16 @@ export interface ClientProposalV1 {
     optional_addons?: Array<{ name: string; price?: number; description?: string }>;
     ai_usage_cost_policy?: string;
     taxes?: string;
+    /** F7.2 — Consultoría/asesoría IA recurrente. Renderizada al cliente. */
+    consulting_retainer?: {
+      enabled: boolean;
+      monthly_fee_eur: number;
+      monthly_hours: number;
+      discount_pct: number;
+      notes?: string;
+      setup_fee_before_discount?: number;
+      setup_fee_max_before_discount?: number;
+    };
   };
   payment_terms: string;
   support_terms?: string;

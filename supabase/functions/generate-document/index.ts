@@ -2888,7 +2888,14 @@ Devuelve SOLO el JSON.`;
 
     // Upload to storage
     const supabase = getSupabaseAdmin();
-    const filePath = `${projectId}/${stepNumber}/v${ver}.${fileExt}`;
+    // Normalizar versión: aceptar tanto "v3" como "3" / 3.
+    // Para Step 30 forzamos la versión real de BBDD (evita colisiones y
+    // el bug histórico que producía paths como "30/vv1.pdf").
+    const verNum = step30VersionOverride ??
+      (parseInt(String(ver).replace(/^v/i, ""), 10) || 1);
+    const verTag = `v${verNum}`;
+    const ts = stepNumber === 30 ? `-${Date.now()}` : "";
+    const filePath = `${projectId}/${stepNumber}/${verTag}${ts}.${fileExt}`;
 
     const { error: uploadError } = await supabase.storage
       .from("project-documents")

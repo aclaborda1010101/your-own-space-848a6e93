@@ -577,9 +577,14 @@ export function buildClientProposal(input: F7Input): F7Output {
         "El proyecto se ejecuta en fases. Cada fase tiene entregables verificables y un cierre formal antes de iniciar la siguiente.",
       soul_sessions_required: soulRequired,
       soul_sessions_count: soulRequired ? scope.soul_capture_plan.sessions : 0,
-      timeline:
-        commercialTerms.timeline?.trim() ||
-        "Plazos detallados a confirmar al cierre de la sesión de arranque, una vez validados disponibilidad y prioridades.",
+      timeline: (() => {
+        // Si el usuario pasó un timeline literal vía commercialTerms, lo respetamos.
+        if (commercialTerms.timeline?.trim()) return commercialTerms.timeline.trim();
+        // Si no, derivamos un resumen del schedule.
+        const sch = deriveImplementationSchedule(scope, commercialTerms.implementation_override);
+        return `Cronograma estimado: ${sch.total_duration_weeks}. MVP operativo en semana ${sch.mvp_ready_week}.`;
+      })(),
+      schedule: deriveImplementationSchedule(scope, commercialTerms.implementation_override),
     },
     client_responsibilities: clientResponsibilities,
     risks_and_mitigations: risks,

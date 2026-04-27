@@ -777,9 +777,9 @@ function pickHeaderName(p: ClientProposalV1): string {
   const project = (p.project_name || "").trim();
   const decisor = (p.decision_maker_name || "").trim();
 
-  // 1) Si client_company contiene marca (AFFLUX/AFLU), priorizar.
-  if (/AFFLUX|AFLU/i.test(company)) return company;
+  // 1) Si project_name contiene la marca concreta, usarlo como título limpio.
   if (/AFFLUX|AFLU/i.test(project)) return project;
+  if (/AFFLUX|AFLU/i.test(company)) return company;
 
   // 2) Si project_name parece nombre de persona (o coincide con decisor), usar company.
   if (decisor && project.toLowerCase() === decisor.toLowerCase() && company) return company;

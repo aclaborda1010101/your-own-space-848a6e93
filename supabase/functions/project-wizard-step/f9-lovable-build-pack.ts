@@ -607,6 +607,43 @@ function renderComponentListNumbered(list: ComponentRef[]): string {
 }
 
 /**
+ * Renderiza el MVP con un punto inicial fijo de "Modelo de datos y CRUD base"
+ * y una nota de fusión para los módulos WhatsApp/cadencias (presentación únicamente).
+ */
+function renderMvpForLovable(list: ComponentRef[]): string {
+  const ordered = sortMvpForBuildOrder(list);
+  const lines: string[] = [];
+  lines.push(
+    "1. **Modelo de datos y CRUD base** — crear propietarios, edificios, activos, llamadas, notas, inversores, casos de compliance y usuarios. App navegable antes de cualquier integración externa.",
+  );
+  ordered.forEach((c, i) => {
+    lines.push(`${i + 2}. **${c.name}**${c.business_job ? ` — ${c.business_job}` : ""}`);
+  });
+  const hasWaCadence =
+    ordered.some((c) => /cadencia/i.test(c.name)) &&
+    ordered.some((c) => /whatsapp/i.test(c.name));
+  if (hasWaCadence) {
+    lines.push("");
+    lines.push(
+      "> Nota: los módulos de cadencias y WhatsApp se implementan como **una única interfaz MVP de cadencias/WhatsApp mock**: planificación de contactos, estados y simulación de mensajes, sin envío real.",
+    );
+  }
+  return lines.join("\n") + "\n";
+}
+
+/**
+ * Renombra fast-follow para no perder señal diferencial (p.ej. Benatar).
+ */
+function renameFastFollowForClarity(list: ComponentRef[]): ComponentRef[] {
+  return list.map((c) => {
+    if (/compradores institucionales/i.test(c.name) && !/benatar/i.test(c.name)) {
+      return { ...c, name: `${c.name} tipo Benatar` };
+    }
+    return c;
+  });
+}
+
+/**
  * Orden recomendado de construcción del MVP para Lovable.
  * Reordena solo la presentación (no mueve componentes entre buckets).
  */
@@ -676,7 +713,7 @@ export function renderBuildPackMarkdown(pack: LovableBuildPackV1): string {
     "Construir en este orden: primero datos y CRUD, luego pipeline de llamadas, después RAG y catalogador, después asistente pre/post llamada, después compliance/HITL, y por último los módulos especializados. WhatsApp y cadencias se construyen como interfaz/estado/mock, sin envío real.",
   );
   lines.push("");
-  lines.push(renderComponentListNumbered(sortMvpForBuildOrder(s.build_first.mvp)));
+  lines.push(renderMvpForLovable(s.build_first.mvp));
 
   // 5
   lines.push("## 5. Flujos principales");
@@ -741,15 +778,28 @@ export function renderBuildPackMarkdown(pack: LovableBuildPackV1): string {
   // 8
   lines.push("## 8. Qué NO construir todavía");
   lines.push("");
-  lines.push("### Fase posterior (fast-follow)");
-  lines.push("");
-  lines.push(renderComponentList(s.do_not_build_yet.fast_follow_f2));
-  lines.push("### Roadmap");
-  lines.push("");
-  lines.push(renderComponentList(s.do_not_build_yet.roadmap_f3));
-  lines.push("### Exclusiones explícitas");
-  lines.push("");
-  lines.push(renderComponentList(s.do_not_build_yet.exclusions));
+  const ff = renameFastFollowForClarity(s.do_not_build_yet.fast_follow_f2);
+  const rm = s.do_not_build_yet.roadmap_f3;
+  const ex = s.do_not_build_yet.exclusions;
+  if (ff.length) {
+    lines.push("### Fase posterior (fast-follow)");
+    lines.push("");
+    lines.push(renderComponentList(ff));
+  }
+  if (rm.length) {
+    lines.push("### Roadmap");
+    lines.push("");
+    lines.push(renderComponentList(rm));
+  }
+  if (ex.length) {
+    lines.push("### Exclusiones explícitas");
+    lines.push("");
+    lines.push(renderComponentList(ex));
+  }
+  if (!rm.length && !ex.length) {
+    lines.push("_No hay componentes adicionales en roadmap ni exclusiones explícitas en este alcance._");
+    lines.push("");
+  }
   lines.push("### Reglas operativas de exclusión");
   lines.push("");
   lines.push("- No implementar envío real por WhatsApp hasta tener API, consentimiento y revisión legal.");

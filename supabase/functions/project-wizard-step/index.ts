@@ -2217,6 +2217,147 @@ REGLAS PARA deep_patterns:
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
+    // ── Action: generate_lovable_build_pack (Step 32) ─────────────────────
+    // Append-only. Lee el Step 29 aprobado (o último), y el Step 28 que ese
+    // PRD referencia explícitamente (NO busca otro). Genera un Build Pack
+    // operativo (markdown) para pegar en Lovable.dev. No reinterpreta scope.
+    if (action === "generate_lovable_build_pack") {
+      const { buildLovableBuildPack } = await import("./f9-lovable-build-pack.ts");
+
+      const explicitPrdRowId: string | undefined = body?.prdStepRowId || stepData?.prd_step_row_id;
+
+      // 1) Resolver Step 29 (PRD técnico)
+      let step29Row: any = null;
+      if (explicitPrdRowId) {
+        const { data } = await supabase
+          .from("project_wizard_steps")
+          .select("id, version, output_data, project_id, step_number")
+          .eq("id", explicitPrdRowId)
+          .maybeSingle();
+        step29Row = data;
+        if (!step29Row || step29Row.step_number !== 29 || step29Row.project_id !== projectId) {
+          return new Response(JSON.stringify({
+            error: "STALE_OR_INVALID_PRD",
+            message: "El prdStepRowId proporcionado no corresponde a un Step 29 de este proyecto.",
+          }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        }
+      } else {
+        const { data: approved } = await supabase
+          .from("project_wizard_steps")
+          .select("id, version, output_data")
+          .eq("project_id", projectId)
+          .eq("step_number", 29)
+          .eq("status", "approved")
+          .order("version", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (approved?.id) {
+          step29Row = approved;
+        } else {
+          const { data: latest } = await supabase
+            .from("project_wizard_steps")
+            .select("id, version, output_data")
+            .eq("project_id", projectId)
+            .eq("step_number", 29)
+            .order("version", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          step29Row = latest;
+        }
+      }
+
+      const prd = step29Row?.output_data?.technical_prd_v1;
+      if (!step29Row || !prd) {
+        return new Response(JSON.stringify({
+          error: "STALE_OR_INVALID_PRD",
+          message: "No se encontró un PRD técnico válido. Genera el PRD antes de pedir el Build Pack.",
+        }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // 2) Resolver Step 28 EXACTO referenciado por el PRD
+      const sourceRef = prd.source_step;
+      if (!sourceRef?.row_id) {
+        return new Response(JSON.stringify({
+          error: "STALE_OR_INVALID_PRD",
+          message: "El PRD no contiene una referencia explícita al alcance que lo originó.",
+        }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      const { data: scope28Row } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version, output_data")
+        .eq("id", sourceRef.row_id)
+        .maybeSingle();
+      const scope = scope28Row?.output_data?.scope_architecture_v1;
+      if (!scope28Row || !scope) {
+        return new Response(JSON.stringify({
+          error: "STALE_OR_INVALID_PRD",
+          message: "El alcance referenciado por el PRD ya no existe. Regenera el PRD desde un alcance válido.",
+        }), { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // 3) Recuperar nombres del proyecto / cliente
+      const { data: projectRow } = await supabase
+        .from("projects")
+        .select("name, company")
+        .eq("id", projectId)
+        .maybeSingle();
+
+      let f9Out: any;
+      try {
+        f9Out = buildLovableBuildPack({
+          prd,
+          scope,
+          source_steps: {
+            prd_step: { step_number: 29, version: step29Row.version, row_id: step29Row.id },
+            scope_step: { step_number: 28, version: scope28Row.version, row_id: scope28Row.id },
+          },
+          project_name: projectRow?.name || prd.project_name || "Proyecto",
+          client_name: projectRow?.company || prd.client_name || "",
+        });
+      } catch (e: any) {
+        return new Response(JSON.stringify({
+          error: "BUILD_PACK_BUCKET_INTEGRITY_VIOLATION",
+          message: e?.message || "El Build Pack intentó mover componentes entre buckets.",
+        }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+
+      // 4) Append-only Step 32
+      const { data: existing32 } = await supabase
+        .from("project_wizard_steps")
+        .select("id, version")
+        .eq("project_id", projectId)
+        .eq("step_number", 32)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const newVersion32 = existing32 ? existing32.version + 1 : 1;
+
+      await supabase.from("project_wizard_steps").insert({
+        project_id: projectId,
+        step_number: 32,
+        step_name: "Pipeline v2 — Lovable Build Pack",
+        status: "review",
+        input_data: {
+          prd_step_row_id: step29Row.id,
+          scope_step_row_id: scope28Row.id,
+        },
+        output_data: f9Out,
+        model_used: "deterministic",
+        version: newVersion32,
+        user_id: user.id,
+      });
+
+      return new Response(JSON.stringify({
+        ok: true,
+        version: newVersion32,
+        word_count: f9Out.build_pack_meta.word_count,
+        warnings: f9Out.build_pack_meta.warnings,
+        source_prd_row_id: step29Row.id,
+        source_scope_row_id: scope28Row.id,
+        markdown: f9Out.build_pack_markdown,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
 
     if (action === "generate_scope") {
       const { briefingJson, contactName, currentDate, attachmentsContent } = stepData;

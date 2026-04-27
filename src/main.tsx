@@ -1,4 +1,4 @@
-// cache-bust: 2026-04-27T20:30-propuesta-upsert-fix
+// cache-bust: 2026-04-27T20:44-propuesta-update-fix
 import "./index.css";
 import { initSafeStorage } from "./lib/safeStorage";
 import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";

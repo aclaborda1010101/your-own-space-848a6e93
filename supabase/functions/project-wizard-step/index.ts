@@ -1157,55 +1157,87 @@ REGLAS PARA deep_patterns:
       });
       console.log(`[wizard] F2 finishReason=${result.finishReason}, outputTokens=${result.tokensOutput}`);
 
-      // Parse JSON from response — robust cleaning with truncation repair
-      let briefing;
+      // Parse JSON from response — robust cleaning with truncation repair v3
+      // Handles: code fences, leading/trailing prose, truncation inside strings,
+      // arrays, or objects. Applied unconditionally (not only on MAX_TOKENS) since
+      // Gemini sometimes truncates without reporting the finishReason.
+      let briefing: any;
       try {
         let cleaned = result.text.trim();
         cleaned = cleaned.replace(/^```(?:json|JSON)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '').trim();
         briefing = JSON.parse(cleaned);
       } catch {
-        // Fallback: find first { and last } in text
-        try {
-          const text = result.text;
-          const firstBrace = text.indexOf('{');
-          const lastBrace = text.lastIndexOf('}');
-          if (firstBrace !== -1 && lastBrace > firstBrace) {
-            briefing = JSON.parse(text.substring(firstBrace, lastBrace + 1));
-          } else {
-            briefing = { raw_text: result.text, parse_error: true };
+        // Aggressive repair: walk the text from the first '{', track string/escape
+        // state, drop the trailing incomplete token, then close all open brackets.
+        const text = result.text || "";
+        const firstBrace = text.indexOf('{');
+        if (firstBrace === -1) {
+          briefing = { raw_text: result.text, parse_error: true };
+        } else {
+          const body = text.substring(firstBrace).replace(/^```(?:json|JSON)?\s*\n?/gm, '').replace(/\n?```\s*$/gm, '');
+
+          // Walk the string to find the deepest valid prefix and recover bracket stack.
+          const stack: string[] = []; // '{' or '['
+          let inString = false;
+          let escape = false;
+          let lastSafeIndex = -1; // index after the last fully-completed value (after ',' or ':' boundary at depth >=1)
+          let lastStringStart = -1; // index of the '"' that opened the currently-open string
+
+          for (let i = 0; i < body.length; i++) {
+            const ch = body[i];
+            if (inString) {
+              if (escape) { escape = false; continue; }
+              if (ch === '\\') { escape = true; continue; }
+              if (ch === '"') { inString = false; lastSafeIndex = i + 1; }
+              continue;
+            }
+            if (ch === '"') { inString = true; lastStringStart = i; continue; }
+            if (ch === '{' || ch === '[') { stack.push(ch); continue; }
+            if (ch === '}' || ch === ']') { stack.pop(); lastSafeIndex = i + 1; continue; }
+            if (ch === ',' || ch === ':') { lastSafeIndex = i + 1; continue; }
           }
-        } catch {
-          // Truncation repair: try closing open brackets
-          if (result.finishReason === "MAX_TOKENS") {
-            console.warn("[wizard] Attempting truncated JSON repair...");
-            try {
-              let truncated = result.text;
-              const firstBrace = truncated.indexOf('{');
-              if (firstBrace !== -1) {
-                truncated = truncated.substring(firstBrace);
-                // Remove trailing incomplete string/value
-                truncated = truncated.replace(/,\s*"[^"]*$/, '').replace(/,\s*$/, '');
-                // Count unclosed brackets and close them
-                let openBraces = 0, openBrackets = 0;
-                for (const ch of truncated) {
-                  if (ch === '{') openBraces++;
-                  else if (ch === '}') openBraces--;
-                  else if (ch === '[') openBrackets++;
-                  else if (ch === ']') openBrackets--;
-                }
-                truncated += ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces));
-                briefing = JSON.parse(truncated);
-                briefing._truncation_repaired = true;
-                console.log("[wizard] Truncated JSON repaired successfully");
-              } else {
-                briefing = { raw_text: result.text, parse_error: true };
-              }
-            } catch {
-              console.error("[wizard] Truncated JSON repair failed");
-              briefing = { raw_text: result.text, parse_error: true };
+
+          let candidate: string;
+          if (inString) {
+            // Truncation happened inside a string — drop the incomplete string entirely.
+            // Cut at lastStringStart and remove any trailing comma/colon left dangling.
+            candidate = body.substring(0, lastStringStart).replace(/[\s,:]+$/, '');
+            // Re-walk to recompute the final bracket stack on this trimmed candidate.
+            stack.length = 0;
+            let s = false, e = false;
+            for (const ch of candidate) {
+              if (s) { if (e) { e = false; continue; } if (ch === '\\') { e = true; continue; } if (ch === '"') s = false; continue; }
+              if (ch === '"') { s = true; continue; }
+              if (ch === '{' || ch === '[') stack.push(ch);
+              else if (ch === '}' || ch === ']') stack.pop();
+            }
+          } else if (lastSafeIndex > 0) {
+            candidate = body.substring(0, lastSafeIndex).replace(/[\s,]+$/, '');
+            stack.length = 0;
+            let s = false, e = false;
+            for (const ch of candidate) {
+              if (s) { if (e) { e = false; continue; } if (ch === '\\') { e = true; continue; } if (ch === '"') s = false; continue; }
+              if (ch === '"') { s = true; continue; }
+              if (ch === '{' || ch === '[') stack.push(ch);
+              else if (ch === '}' || ch === ']') stack.pop();
             }
           } else {
-            briefing = { raw_text: result.text, parse_error: true };
+            candidate = body;
+          }
+
+          // Close all open brackets in reverse order.
+          for (let i = stack.length - 1; i >= 0; i--) {
+            candidate += stack[i] === '{' ? '}' : ']';
+          }
+
+          try {
+            briefing = JSON.parse(candidate);
+            briefing._truncation_repaired = true;
+            briefing._repair_dropped_chars = body.length - candidate.length + stack.length;
+            console.log(`[wizard] JSON repaired (dropped ~${body.length - candidate.length} chars, closed ${stack.length} brackets)`);
+          } catch (repairErr) {
+            console.error("[wizard] Aggressive JSON repair failed:", repairErr instanceof Error ? repairErr.message : repairErr);
+            briefing = { raw_text: result.text, parse_error: true, _repair_attempted: true };
           }
         }
       }

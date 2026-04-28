@@ -1,46 +1,47 @@
-Voy a corregirlo para que el botón “Regenerar propuesta cliente” sea autosuficiente: si ya tienes modelos, precios, consultoría y plazos definidos/aprobados, debe reconstruir la propuesta desde esos datos actuales y guardarla como nueva versión visible, sin obligarte a rehacer todo el presupuesto.
+# Diagnóstico: Brief generado pero PRD no se ha lanzado
 
-## Diagnóstico
+## Lo que ha pasado realmente
 
-El fallo actual no es que falten datos. La propuesta sí se genera, pero el frontend la bloquea porque detecta una frase considerada “obsoleta”: `Opción con asesoría IA`.
+He revisado el proyecto **"Predicción Stock"** (`b35eca56…`) en la base de datos:
 
-El problema concreto es doble:
+| Paso | Estado | Aprobado |
+|------|--------|----------|
+| 1 — Entrada (transcripción) | `approved` | ✅ Sí |
+| 2 — Briefing (extracción + normalización) | `review` (v2) | ❌ **No aprobado** |
+| 3 — PRD | — | No existe |
+| 4 — MVP | — | No existe |
 
-1. El generador backend ya usa un texto parecido en la nueva tabla: `Desarrollo + asesoría IA` y también una nota `La opción con asesoría IA...`.
-2. El frontend tiene un detector demasiado agresivo que considera cualquier mención a “opción con asesoría IA” como texto antiguo, aunque la propuesta se haya regenerado bien.
+**Conclusión:** El brief **sí se generó correctamente** (119 KB extraído, 893 chars limpios tras normalización, sin errores en logs). Lo que falta es que **tú apruebes el Brief en el Paso 2** para que el wizard dispare automáticamente el Paso 3 (PRD) y luego el resto del pipeline.
 
-Resultado: pulsas regenerar, se crea/actualiza Step 30, pero la UI te dice que contiene textos antiguos y te manda a refrescar, creando un bucle inútil.
+En el código (`useProjectWizard.ts` línea 1132-1147) el flujo es explícito:
+> *"After approving Brief (step 2): jump to step 3 and auto-launch chained PRD."*
 
-## Plan de cambios
+Es decir: sin click en **"Aprobar Brief"**, no se lanza nada más. No es un bug — es el guardrail diseñado para que revises el brief antes de gastar tokens en el PRD.
 
-1. **Quitar el falso positivo del frontend**
-   - Ajustar `src/hooks/useProjectWizard.ts` para que no marque como obsoleta la frase genérica `Opción con asesoría IA` cuando viene de la nueva propuesta.
-   - Mantener bloqueos solo para textos realmente antiguos o incorrectos.
+## Por qué crees que "no ha generado nada"
 
-2. **Limpiar el copy del backend para evitar confusión**
-   - En `supabase/functions/project-wizard-step/f7-proposal-builder.ts`, cambiar frases ambiguas como “La opción con asesoría IA...” por una redacción nueva tipo:
-     - “La modalidad con acompañamiento IA aplica...”
-   - Mantener la tabla comparativa con precios, consultoría, mantenimiento y plazos.
+El Paso 2 está en estado `review` y muestra el brief para que lo valides. Probablemente:
+- No has pulsado el botón **"Aprobar Brief"** (o equivalente) en la UI del Paso 2.
+- O lo pulsaste pero la llamada falló silenciosamente (no veo errores de aprobación en los logs de la edge function).
 
-3. **Forzar recarga de build de Lovable**
-   - Actualizar `src/main.tsx` con nuevo `cache-bust` para que el preview no siga usando código anterior.
+## Plan de acción (al pasar a modo build)
 
-4. **Verificación técnica**
-   - Ejecutar TypeScript para confirmar que no rompe compilación.
-   - Desplegar la Edge Function `project-wizard-step` para que el backend use el nuevo builder.
+### Opción A — Recomendada: solo verificar el flujo manual
+1. Abrir el Paso 2 en la UI y revisar que el botón **"Aprobar Brief"** esté visible y funcional.
+2. Añadir un log/toast más explícito si la aprobación falla, para que no quede ambiguo.
+3. Si el botón funciona: pulsarlo manualmente → el wizard encadenará Step 3 (PRD) automáticamente.
 
-## Resultado esperado
+### Opción B — Desbloqueo manual desde DB
+Si prefieres no tocar la UI ahora, puedo:
+1. Marcar Step 2 como `approved` directamente vía migración SQL.
+2. Disparar manualmente la generación del Step 3 (PRD) llamando a la edge function `project-wizard-step` con los parámetros adecuados.
 
-Después del cambio, al pulsar **Regenerar propuesta cliente**:
+### Opción C — Auto-aprobar Brief (cambio de comportamiento)
+Cambiar la regla para que tras normalización exitosa el Brief se auto-apruebe y dispare PRD sin intervención. **No lo recomiendo**: pierdes el control de revisión y el Brief de Predicción Stock tiene solo 893 chars limpios — conviene revisarlo antes.
 
-- No tendrás que rehacer ni reaprobar todo el presupuesto.
-- Se leerá el presupuesto actual aprobado desde Supabase.
-- Se aplicarán precios, consultoría, plazos y modelos actuales.
-- Se actualizará Step 30 incrementando versión.
-- La UI mostrará éxito en vez del error falso de “textos antiguos”.
+## Pregunta para ti
 
-## Archivos a tocar
-
-- `src/hooks/useProjectWizard.ts`
-- `supabase/functions/project-wizard-step/f7-proposal-builder.ts`
-- `src/main.tsx`
+¿Qué prefieres?
+- **A**: Reviso/refuerzo el botón de aprobar Brief en la UI (5 min, seguro).
+- **B**: Forzamos ahora la aprobación + lanzamiento del PRD para este proyecto concreto desde backend (rápido, one-shot).
+- **C**: Auto-aprobación tras normalización (cambio de política global, no recomendado).

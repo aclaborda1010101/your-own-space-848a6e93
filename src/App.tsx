@@ -94,7 +94,7 @@ class AppErrorBoundary extends React.Component<
         <div style={{
           minHeight: "100vh", display: "flex", flexDirection: "column",
           alignItems: "center", justifyContent: "center",
-          background: "#141b2d", color: "#fff", fontFamily: "sans-serif",
+          background: "#07090E", color: "#BEFF00", fontFamily: "'Inter',sans-serif",
           padding: "2rem", textAlign: "center", gap: "1rem",
         }}>
           <h1 style={{ fontSize: "1.5rem" }}>Algo salió mal</h1>

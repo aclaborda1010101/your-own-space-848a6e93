@@ -181,13 +181,7 @@ export default function MorningBriefingCard() {
           </div>
         )}
 
-        {/* Alerts */}
-        {briefing.alerts && (
-          <div className="flex items-start gap-2 text-xs">
-            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-orange-400 shrink-0" />
-            <span className="text-orange-200">{briefing.alerts}</span>
-          </div>
-        )}
+        {/* (alerts dup removed) */}
 
         {/* Energy Recommendation */}
         {briefing.energy_recommendation && (

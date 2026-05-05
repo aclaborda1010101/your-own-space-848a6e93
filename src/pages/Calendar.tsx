@@ -51,7 +51,7 @@ import {
 import { es } from "date-fns/locale";
 
 const typeConfig = {
-  work: { icon: Briefcase, label: "Trabajo", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
+  work: { icon: Briefcase, label: "Trabajo", color: "bg-primary/20 text-primary border-primary/30" },
   life: { icon: Heart, label: "Vida", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
   finance: { icon: Wallet, label: "Finanzas", color: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
   health: { icon: Heart, label: "Salud", color: "bg-rose-500/20 text-rose-400 border-rose-500/30" },

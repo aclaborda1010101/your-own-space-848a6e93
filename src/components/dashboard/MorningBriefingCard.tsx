@@ -160,8 +160,8 @@ export default function MorningBriefingCard() {
         {/* Calendar */}
         {briefing.calendar_summary && (
           <div className="flex items-start gap-2 text-xs">
-            <Calendar className="h-3.5 w-3.5 mt-0.5 text-blue-400 shrink-0" />
-            <span className="text-blue-200">{briefing.calendar_summary}</span>
+            <Calendar className="h-3.5 w-3.5 mt-0.5 text-primary shrink-0" />
+            <span className="text-primary/90">{briefing.calendar_summary}</span>
           </div>
         )}
 

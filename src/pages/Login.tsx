@@ -187,7 +187,7 @@ const Login = () => {
 
         {/* Version tag */}
         <p className="absolute bottom-6 text-[10px] text-muted-foreground/40 font-mono tracking-widest">
-          v2.0 — SISTEMA OPERATIVO PERSONAL
+          v11 — LIFE OPERATING SYSTEM
         </p>
       </div>
 

@@ -1,7 +1,7 @@
 import { Briefcase, Heart, Wallet, Activity, Users } from "lucide-react";
 
 const typeConfig = {
-  work: { label: 'Trabajo', icon: Briefcase, bgClass: 'bg-blue-500' },
+  work: { label: 'Trabajo', icon: Briefcase, bgClass: 'bg-primary' },
   life: { label: 'Vida', icon: Heart, bgClass: 'bg-emerald-500' },
   finance: { label: 'Finanzas', icon: Wallet, bgClass: 'bg-amber-500' },
   health: { label: 'Salud', icon: Activity, bgClass: 'bg-rose-500' },

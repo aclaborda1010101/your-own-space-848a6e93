@@ -21,7 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const typeConfig = {
-  work: { color: "bg-blue-500/20 text-blue-400 border-blue-500/30", dot: "bg-blue-400" },
+  work: { color: "bg-primary/20 text-primary border-primary/30", dot: "bg-primary" },
   life: { color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30", dot: "bg-emerald-400" },
   finance: { color: "bg-amber-500/20 text-amber-400 border-amber-500/30", dot: "bg-amber-400" },
   health: { color: "bg-rose-500/20 text-rose-400 border-rose-500/30", dot: "bg-rose-400" },

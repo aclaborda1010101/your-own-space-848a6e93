@@ -2,6 +2,7 @@ import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const JARVIS_SHELL = "v11-lime";
 const JARVIS_STORAGE_KEYS = [
   "__jarvis_build_id",
   "__jarvis_reloaded",
@@ -9,6 +10,8 @@ const JARVIS_STORAGE_KEYS = [
   "__jarvis_preview_html_mismatch_attempts",
   "__jarvis_html_build_ts",
   "__jarvis_html_build_attempts",
+  "__jarvis_active_shell",
+  "__jarvis_shell_sentry_attempts",
   "__jarvis_auto_retry",
   "__jarvis_chunk_reload",
   "__jarvis_boot_auto_retry",
@@ -47,9 +50,11 @@ export const ForceRefreshButton = () => {
       try { sessionStorage.removeItem(key); } catch {}
     }
 
-    // Reload with unified cache-buster
+    // Reload with canonical shell marker so the early guard doesn't loop.
     const url = new URL(window.location.href);
-    url.searchParams.set("_cb", String(Date.now()));
+    url.searchParams.set("jarvis_shell", JARVIS_SHELL);
+    url.searchParams.set("jarvis_cb", String(Date.now()));
+    url.searchParams.delete("_cb");
     url.searchParams.delete("__jarvis_preview_bust");
     window.location.replace(url.toString());
   };

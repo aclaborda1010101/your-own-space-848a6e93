@@ -1,15 +1,27 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
+const BUILD_ID =
+  process.env.COMMIT_SHA ||
+  process.env.RAILWAY_GIT_COMMIT_SHA ||
+  process.env.GITHUB_SHA ||
+  `build-${Date.now()}`;
+
+// Inject the build id into index.html so runtimeFreshness can detect
+// stale bundles served inside the Lovable preview iframe.
+const buildIdHtmlPlugin = (): Plugin => ({
+  name: "inject-build-id-into-html",
+  transformIndexHtml(html) {
+    return html.replace("__BUILD_TS__", BUILD_ID).replace("__BUILD_TS__", BUILD_ID);
+  },
+});
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   define: {
-    __APP_BUILD_ID__: JSON.stringify(
-      process.env.COMMIT_SHA || process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GITHUB_SHA || `build-${Date.now()}`
-    ),
+    __APP_BUILD_ID__: JSON.stringify(BUILD_ID),
   },
   server: {
     host: "::",

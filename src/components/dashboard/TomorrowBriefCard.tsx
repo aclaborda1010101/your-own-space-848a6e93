@@ -85,8 +85,8 @@ export default function TomorrowBriefCard() {
             <p className="text-sm font-medium text-indigo-100">{brief.headline}</p>
             {brief.calendar_summary && (
               <div className="flex items-start gap-2 text-xs">
-                <CalendarDays className="h-3.5 w-3.5 mt-0.5 text-blue-400 shrink-0" />
-                <span className="text-blue-200">{brief.calendar_summary}</span>
+                <CalendarDays className="h-3.5 w-3.5 mt-0.5 text-primary shrink-0" />
+                <span className="text-primary/90">{brief.calendar_summary}</span>
               </div>
             )}
             {brief.task_focus && (

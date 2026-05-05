@@ -18,7 +18,7 @@ interface CalendarTypeFilterProps {
 }
 
 const typeOptions: { value: EventType; label: string; icon: React.ElementType; color: string }[] = [
-  { value: "work", label: "Trabajo", icon: Briefcase, color: "text-blue-400" },
+  { value: "work", label: "Trabajo", icon: Briefcase, color: "text-primary" },
   { value: "life", label: "Vida", icon: Heart, color: "text-emerald-400" },
   { value: "finance", label: "Finanzas", icon: Wallet, color: "text-amber-400" },
   { value: "health", label: "Salud", icon: Heart, color: "text-rose-400" },

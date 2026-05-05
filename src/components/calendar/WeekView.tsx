@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 const timeSlots = Array.from({ length: 14 }, (_, i) => i + 7); // 7:00 to 20:00
 
 const typeConfig = {
-  work: { color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
+  work: { color: "bg-primary/20 text-primary border-primary/30" },
   life: { color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
   finance: { color: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
   health: { color: "bg-rose-500/20 text-rose-400 border-rose-500/30" },

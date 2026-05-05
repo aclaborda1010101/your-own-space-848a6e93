@@ -1,4 +1,4 @@
-// cache-bust: 2026-05-05T09:00-v11-lime-shell-sentry
+// cache-bust: 2026-05-05T10:00-v11-lime-blue-purge
 import "./index.css";
 import { initSafeStorage } from "./lib/safeStorage";
 import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";
@@ -35,7 +35,9 @@ function installShellSentry() {
     if (!isPreview) return;
 
     const SENTRY_KEY = "__jarvis_shell_sentry_attempts";
-    const STALE_MARKERS = ["JARVIS v2.0", "v2.0 — SISTEMA", "Comunicaciones"];
+    // Markers from old shells. "v2.0 — SISTEMA" was removed because the
+    // current login legitimately had that text and was triggering reload loops.
+    const STALE_MARKERS = ["JARVIS v2.0 · ONLINE", "JARVIS v2.0 — SISTEMA"];
 
     const check = () => {
       try {

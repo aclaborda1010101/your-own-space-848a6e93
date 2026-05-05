@@ -14,7 +14,9 @@ const BUILD_ID =
 const buildIdHtmlPlugin = (): Plugin => ({
   name: "inject-build-id-into-html",
   transformIndexHtml(html) {
-    return html.replace("__BUILD_TS__", BUILD_ID).replace("__BUILD_TS__", BUILD_ID);
+    // Replace ALL occurrences of __BUILD_TS__ globally so HTML and inline
+    // scripts always carry the same BUILD_ID as the bundle.
+    return html.split("__BUILD_TS__").join(BUILD_ID);
   },
 });
 

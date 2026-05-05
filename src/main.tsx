@@ -1,4 +1,4 @@
-// cache-bust: 2026-05-05T05:30-briefing-gemini-migration
+// cache-bust: 2026-05-05T06:00-iframe-build-id-injection
 import "./index.css";
 import { initSafeStorage } from "./lib/safeStorage";
 import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";

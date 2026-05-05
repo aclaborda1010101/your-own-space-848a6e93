@@ -1,4 +1,4 @@
-// cache-bust: 2026-05-05T05:00-security-hardening-v2
+// cache-bust: 2026-05-05T05:30-briefing-gemini-migration
 import "./index.css";
 import { initSafeStorage } from "./lib/safeStorage";
 import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";

@@ -6,8 +6,10 @@ const JARVIS_STORAGE_KEYS = [
   "__jarvis_build_id",
   "__jarvis_reloaded",
   "__jarvis_preview_sw_reset_attempts",
+  "__jarvis_preview_html_mismatch_attempts",
   "__jarvis_auto_retry",
   "__jarvis_chunk_reload",
+  "__jarvis_boot_auto_retry",
 ];
 
 export const ForceRefreshButton = () => {

@@ -1,4 +1,4 @@
-// cache-bust: 2026-05-05T06:00-iframe-build-id-injection
+// cache-bust: 2026-05-05T07:30-early-html-build-guard
 import "./index.css";
 import { initSafeStorage } from "./lib/safeStorage";
 import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";

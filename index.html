@@ -7,7 +7,55 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <meta name="x-build-ts" content="__BUILD_TS__" />
-    <script>window.__APP_BUILD_TS__ = "__BUILD_TS__";</script>
+    <script>
+      window.__APP_BUILD_TS__ = "__BUILD_TS__";
+      // Early freshness guard — runs before main bundle. If preview HTML carries
+      // a build id different from the one we last saw on this client, nuke
+      // SW/caches and reload once with a cache-buster, so the iframe never
+      // keeps showing an old bundle.
+      (function(){
+        try {
+          var h = location.hostname;
+          var isPreview = (h === 'localhost' || h === '127.0.0.1' || h.indexOf('lovableproject.com') !== -1 || h.indexOf('lovable.app') !== -1 || h.indexOf('preview--') === 0 || h.indexOf('id-preview--') === 0);
+          if (!isPreview) return;
+          var current = window.__APP_BUILD_TS__ || '';
+          if (!current) return;
+          var KEY = '__jarvis_html_build_ts';
+          var ATTEMPTS = '__jarvis_html_build_attempts';
+          var saved = '';
+          try { saved = localStorage.getItem(KEY) || ''; } catch(_){}
+          if (saved && saved !== current) {
+            var n = 0;
+            try { n = Number(sessionStorage.getItem(ATTEMPTS) || '0'); } catch(_){}
+            if (n < 2) {
+              try { sessionStorage.setItem(ATTEMPTS, String(n + 1)); } catch(_){}
+              try { localStorage.setItem(KEY, current); } catch(_){}
+              try {
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then(function(rs){
+                    rs.forEach(function(r){ try{ r.unregister(); }catch(_){} });
+                  });
+                }
+              } catch(_){}
+              try {
+                if ('caches' in window) {
+                  caches.keys().then(function(ks){ ks.forEach(function(k){ try{ caches.delete(k); }catch(_){} }); });
+                }
+              } catch(_){}
+              var url = location.href.split('#')[0];
+              var hash = location.hash || '';
+              var sep = url.indexOf('?') >= 0 ? '&' : '?';
+              location.replace(url + sep + '_cb=' + Date.now() + hash);
+              return;
+            }
+          } else {
+            try { sessionStorage.removeItem(ATTEMPTS); } catch(_){}
+          }
+          try { localStorage.setItem(KEY, current); } catch(_){}
+          try { console.info('[jarvis] build', current); } catch(_){}
+        } catch(_){}
+      })();
+    </script>
     <title>JARVIS</title>
     <meta name="description" content="Tu asistente personal inteligente para productividad, finanzas, nutrición y más" />
     <meta name="author" content="Lovable" />

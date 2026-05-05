@@ -1,43 +1,37 @@
-# Forzar refresco real del iframe de preview de Lovable
+He revisado el estado actual y hay dos señales claras:
 
-## Problema
+1. El guard de build existe, pero depende de que el iframe llegue a ejecutar el bundle nuevo o al menos reciba un HTML nuevo. Si Lovable Preview mantiene una instancia/HTML anterior, puede seguir mostrando el bundle viejo sin disparar la comparación.
+2. El briefing matutino ya apunta en código a `google/gemini-3-flash-preview`, pero puede seguir devolviendo resultados antiguos por dos vías: caché de la tabla `daily_briefings` para el día actual, o Edge Function desplegada todavía en versión anterior. Además no veo llamadas recientes a `daily-briefing` en logs, lo que encaja con que la preview no esté llegando al código nuevo o esté usando datos ya cacheados.
 
-La URL directa muestra la versión nueva, pero el iframe de preview de Lovable sigue mostrando la versión vieja. El guard `runtimeFreshness.ts` no es capaz de detectar el desfase porque le faltan las señales de build que espera leer del HTML.
+Plan de corrección:
 
-## Causa raíz
+1. Endurecer el refresco de la preview desde el HTML, antes de React
+   - Añadir un “early freshness guard” inline en `index.html` que se ejecute antes de cargar `/src/main.tsx`.
+   - En hosts de preview (`lovableproject.com`, `id-preview--`, `preview--`, localhost), comparará el `x-build-ts` del HTML contra una clave guardada en `sessionStorage/localStorage`.
+   - Si detecta un build distinto, limpiará service workers/caches y recargará una sola vez con `_cb=<timestamp>`.
+   - Esto cubre el caso donde el bundle viejo no llega a ejecutar `runtimeFreshness.ts` correctamente.
 
-1. `src/lib/runtimeFreshness.ts` busca `<meta name="x-build-ts">` o `window.__APP_BUILD_TS__` para detectar mismatch HTML↔bundle. Ninguno existe en `index.html`, así que la rama de auto-recarga del iframe nunca se dispara.
-2. Hay que confirmar si `vite.config.ts` define `__APP_BUILD_ID__` con un timestamp único por build. Si está fijo, `handleBuildChange()` tampoco se entera.
+2. Hacer que el build id sea más robusto
+   - Ajustar el plugin de `vite.config.ts` para reemplazar todos los `__BUILD_TS__` de forma global, no solo dos ocurrencias.
+   - Mantener un único `BUILD_ID` compartido entre HTML y bundle.
+   - Añadir una marca visible de versión en consola solo en preview, para poder comprobar rápidamente si la preview ejecuta el bundle correcto.
 
-## Cambios
+3. Evitar que el briefing muestre contenido diario antiguo
+   - Cambiar `MorningBriefingCard` para que, cuando se pulse refrescar/generar, fuerce regeneración real y no acepte el briefing cacheado.
+   - Mostrar en la tarjeta si el briefing viene de caché o acaba de generarse, con una fecha/hora simple de actualización si existe en el registro.
+   - Corregir el render duplicado de `alerts` que ahora puede mostrar dos bloques de alertas.
 
-### 1. `vite.config.ts`
-- Asegurar que `define` inyecta `__APP_BUILD_ID__: JSON.stringify(Date.now().toString())` en cada build (verificar primero, añadir si falta).
+4. Asegurar que `daily-briefing` usa el modelo nuevo en producción
+   - Reconfirmar `DEFAULT_MODEL = 'google/gemini-3-flash-preview'` y añadir `model_used`/metadato en la respuesta y en `full_content` para que el frontend pueda mostrar o depurar qué modelo respondió.
+   - Si la tabla no admite columna nueva, no se hará migración: se incluirá dentro de `full_content._meta` para evitar tocar esquema.
+   - Desplegar la Edge Function `daily-briefing` después del cambio para que no dependa de un despliegue pendiente.
 
-### 2. `index.html`
-- Añadir en `<head>`:
-  ```html
-  <meta name="x-build-ts" content="__BUILD_TS__" />
-  <script>window.__APP_BUILD_TS__ = "__BUILD_TS__";</script>
-  ```
-- Añadir un plugin Vite simple (o usar `transformIndexHtml` inline en `vite.config.ts`) que reemplace `__BUILD_TS__` con `Date.now()` en cada build.
+5. Forzar rebuild de Lovable Preview
+   - Actualizar el comentario `// cache-bust:` en `src/main.tsx` con un timestamp nuevo.
+   - Esto obliga a Lovable a reconstruir el frontend y activa el nuevo guard temprano.
 
-### 3. `src/lib/runtimeFreshness.ts`
-- Bajar `PREVIEW_RESET_MAX_ATTEMPTS` mismatch a 1 (ya está en 2, suficiente, dejar igual).
-- Asegurar que `htmlBuildMismatchesBundle()` también dispara `nukeSwAndCaches()` (ya lo hace).
-- Sin más cambios.
-
-### 4. `src/main.tsx`
-- Actualizar el comentario `// cache-bust` con nuevo timestamp para forzar rebuild del bundle.
-
-## Resultado esperado
-
-Cada nuevo build de Lovable:
-1. Sirve un `index.html` con un `x-build-ts` nuevo.
-2. Si el iframe corre un bundle viejo, `__APP_BUILD_ID__ !== x-build-ts` → `runtimeFreshness` borra SW/caché y recarga el iframe automáticamente.
-3. El usuario ve la versión nueva sin abrir pestaña aparte.
-
-## Verificación
-
-- Abrir el iframe de preview, comprobar en consola que `window.__APP_BUILD_TS__` y `__APP_BUILD_ID__` coinciden.
-- Forzar un nuevo cambio trivial y confirmar que el iframe se auto-recarga sin intervención.
+6. Verificación posterior
+   - Abrir `/nutrition` y/o `/dashboard` en preview.
+   - Revisar consola para confirmar el build id nuevo.
+   - Revisar network/logs de `daily-briefing` cuando se pulse regenerar.
+   - Confirmar que ya no aparece el contenido viejo ni el mensaje genérico “Error cargando el briefing matutino” sin detalle.

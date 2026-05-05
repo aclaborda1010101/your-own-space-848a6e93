@@ -7,8 +7,20 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <meta name="x-build-ts" content="__BUILD_TS__" />
+    <!-- Lima theme tokens (defensa anti-flash azul) -->
+    <style>
+      :root {
+        --primary: 73 100% 50%;
+        --primary-foreground: 222 47% 5%;
+        --ring: 73 100% 50%;
+        --sidebar-primary: 73 100% 50%;
+        --background: 222 47% 5%;
+        --foreground: 180 30% 96%;
+      }
+    </style>
     <script>
       window.__APP_BUILD_TS__ = "__BUILD_TS__";
+      window.__JARVIS_ACTIVE_SHELL = "v11-lime";
       // Early freshness guard — runs before main bundle. If preview HTML carries
       // a build id different from the one we last saw on this client, nuke
       // SW/caches and reload once with a cache-buster, so the iframe never
@@ -30,22 +42,28 @@
             if (n < 2) {
               try { sessionStorage.setItem(ATTEMPTS, String(n + 1)); } catch(_){}
               try { localStorage.setItem(KEY, current); } catch(_){}
+              var swP = Promise.resolve();
               try {
                 if ('serviceWorker' in navigator) {
-                  navigator.serviceWorker.getRegistrations().then(function(rs){
-                    rs.forEach(function(r){ try{ r.unregister(); }catch(_){} });
-                  });
+                  swP = navigator.serviceWorker.getRegistrations().then(function(rs){
+                    return Promise.all(rs.map(function(r){ try{ return r.unregister(); }catch(_){ return null; } }));
+                  }).catch(function(){});
                 }
               } catch(_){}
+              var cacheP = Promise.resolve();
               try {
                 if ('caches' in window) {
-                  caches.keys().then(function(ks){ ks.forEach(function(k){ try{ caches.delete(k); }catch(_){} }); });
+                  cacheP = caches.keys().then(function(ks){
+                    return Promise.all(ks.map(function(k){ try{ return caches.delete(k); }catch(_){ return null; } }));
+                  }).catch(function(){});
                 }
               } catch(_){}
-              var url = location.href.split('#')[0];
-              var hash = location.hash || '';
-              var sep = url.indexOf('?') >= 0 ? '&' : '?';
-              location.replace(url + sep + '_cb=' + Date.now() + hash);
+              Promise.all([swP, cacheP]).then(function(){
+                var url = location.href.split('#')[0];
+                var hash = location.hash || '';
+                var sep = url.indexOf('?') >= 0 ? '&' : '?';
+                location.replace(url + sep + '_cb=' + Date.now() + hash);
+              });
               return;
             }
           } else {
@@ -120,7 +138,7 @@
         <p id="__boot_status">Cargando JARVIS...</p>
         <button
           id="__boot_retry"
-          style="display:none;padding:0.75rem 2rem;background:#3b82f6;color:#fff;border:none;border-radius:0.5rem;cursor:pointer;font-size:1rem"
+          style="display:none;padding:0.75rem 2rem;background:#BEFF00;color:#07090E;border:none;border-radius:0.5rem;cursor:pointer;font-size:1rem;font-weight:600"
           onclick="window.__jarvisBootRetry(this)"
         >
           Reintentar

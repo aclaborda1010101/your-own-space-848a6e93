@@ -1,4 +1,4 @@
-// cache-bust: 2026-05-05T07:30-early-html-build-guard
+// cache-bust: 2026-05-05T08:15-v11-lime-shell-marker
 import "./index.css";
 import { initSafeStorage } from "./lib/safeStorage";
 import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";
@@ -6,6 +6,15 @@ import { bootNativeChrome } from "./lib/native/nativeBoot";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 
+declare const __APP_BUILD_ID__: string;
+const ACTIVE_SHELL = "v11-lime";
+(window as any).__JARVIS_ACTIVE_SHELL = ACTIVE_SHELL;
+try {
+  // eslint-disable-next-line no-console
+  console.info(
+    `[jarvis] active shell ${ACTIVE_SHELL} · build ${typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "?"}`
+  );
+} catch {}
 (window as any).__jarvis_booting = true;
 initSafeStorage();
 // Configure native status bar / hide splash (no-op on web)

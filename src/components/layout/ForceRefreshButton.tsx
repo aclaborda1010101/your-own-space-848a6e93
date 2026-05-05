@@ -7,6 +7,8 @@ const JARVIS_STORAGE_KEYS = [
   "__jarvis_reloaded",
   "__jarvis_preview_sw_reset_attempts",
   "__jarvis_preview_html_mismatch_attempts",
+  "__jarvis_html_build_ts",
+  "__jarvis_html_build_attempts",
   "__jarvis_auto_retry",
   "__jarvis_chunk_reload",
   "__jarvis_boot_auto_retry",
@@ -56,13 +58,13 @@ export const ForceRefreshButton = () => {
     <button
       onClick={handleForceRefresh}
       disabled={loading}
-      title="Forzar actualización"
+      title="Forzar actualización (limpia caché)"
       className={cn(
         "fixed bottom-40 right-4 z-50 lg:bottom-6 lg:right-20",
         "flex h-10 w-10 items-center justify-center rounded-full",
-        "bg-muted/80 text-muted-foreground backdrop-blur-sm",
-        "border border-border shadow-md",
-        "hover:bg-accent hover:text-accent-foreground",
+        "bg-primary/15 text-primary backdrop-blur-sm",
+        "border border-primary/40 shadow-[0_0_12px_hsl(var(--primary)/0.35)]",
+        "hover:bg-primary hover:text-primary-foreground",
         "transition-all duration-200",
         loading && "animate-spin"
       )}

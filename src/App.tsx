@@ -105,7 +105,7 @@ class AppErrorBoundary extends React.Component<
             onClick={() => window.location.reload()}
             style={{
               marginTop: "1rem", padding: "0.75rem 2rem",
-              background: "#3b82f6", color: "#fff", border: "none",
+              background: "#BEFF00", color: "#07090E", border: "none", fontWeight: 600,
               borderRadius: "0.5rem", cursor: "pointer", fontSize: "1rem",
             }}
           >

@@ -1,22 +1,23 @@
-# Renombrar proyecto a "Central Culinaria"
+Voy a arreglarlo como problema de caché de preview, sin tocar la lógica funcional.
 
-## Objetivo
-Cambiar el nombre del proyecto `Predicción Stock` (id `b35eca56-dcfa-480a-98c7-ae7f4250f161`) a `Central Culinaria` en la tabla `business_projects`.
+Plan:
+1. Forzar un nuevo rebuild real de la preview
+   - Actualizar el marcador `// cache-bust` en `src/main.tsx` con un timestamp nuevo.
+   - Esto fuerza a Lovable/Vite a recompilar y servir un bundle nuevo.
 
-## Acción
-Crear una migración SQL con:
+2. Hacer más robusta la detección de versión antigua
+   - Revisar/ajustar `src/lib/runtimeFreshness.ts` para que la preview detecte mejor cuando está corriendo un JS antiguo y recargue con `_cb=<timestamp>`.
+   - Mantener la regla actual: no borrar tokens de auth ni recargar agresivamente flujos largos.
 
-```sql
-UPDATE public.business_projects
-SET name = 'Central Culinaria',
-    updated_at = now()
-WHERE id = 'b35eca56-dcfa-480a-98c7-ae7f4250f161';
-```
+3. Reforzar el botón manual de refresco
+   - Confirmar que `ForceRefreshButton` limpia Service Workers, Cache Storage y flags internos.
+   - Si hace falta, añadir también limpieza de flags faltantes como `__jarvis_boot_auto_retry` / mismatch para que el botón sí desbloquee previews atascadas.
 
-## Verificación
-- Releer el registro para confirmar el nuevo nombre.
-- Listado de proyectos en el wizard mostrará "Central Culinaria" tras refrescar.
+4. Validación
+   - Buscar de nuevo `Proyecto Predicción Stock` / `Predicción Stock` en el código para confirmar que no queda hardcodeado.
+   - Confirmar que la migración ya renombra el registro a `Central Culinaria`.
+   - Avisarte de los pasos manuales mínimos: pulsar el botón flotante de refresco o abrir la preview con `?_cb=<timestamp>` si el navegador aún conserva una copia vieja.
 
-## Notas
-- No se toca el contenido del brief, transcripciones ni pasos del wizard.
-- No se modifica ninguna otra tabla; el `id` permanece igual, así que todas las relaciones (briefing, prd, etc.) siguen intactas.
+Resultado esperado:
+- La preview debería dejar de mostrar la versión cacheada.
+- El nombre `Central Culinaria` debería verse cuando la app lea el proyecto desde Supabase ya actualizado.

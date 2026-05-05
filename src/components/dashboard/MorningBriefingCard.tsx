@@ -9,15 +9,21 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 
 interface BriefingData {
-  greeting: string;
-  summary: string;
-  calendar_summary: string;
-  task_priorities: string;
-  alerts: string;
-  motivation: string;
-  energy_recommendation: string;
-  day_score_prediction: number;
+  greeting?: string;
+  summary?: string;
+  calendar_summary?: string;
+  task_priorities?: string | string[];
+  alerts?: string | string[];
+  motivation?: string;
+  energy_recommendation?: string;
+  day_score_prediction?: number;
 }
+
+const toText = (v: unknown): string => {
+  if (!v) return "";
+  if (Array.isArray(v)) return v.filter(Boolean).join(" · ");
+  return String(v);
+};
 
 export default function MorningBriefingCard() {
   const { user } = useAuth();
@@ -33,19 +39,29 @@ export default function MorningBriefingCard() {
       else setLoading(true);
 
       const { data, error } = await supabase.functions.invoke("daily-briefing", {
-        body: { userId: user.id },
+        body: { userId: user.id, type: "morning", force: forceRefresh },
       });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       if (data?.briefing?.full_content) {
         setBriefing(data.briefing.full_content);
       } else if (data?.briefing) {
-        setBriefing(data.briefing);
+        // Map flat DB row → display shape
+        const b = data.briefing;
+        setBriefing({
+          greeting: b.greeting,
+          summary: b.summary,
+          calendar_summary: b.calendar_events?.summary || b.calendar_summary,
+          task_priorities: b.pending_tasks || b.task_priorities,
+          motivation: b.coach_tip || b.motivation,
+        });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("[MorningBriefing] Error:", err);
-      toast.error("Error cargando el briefing matutino");
+      const msg = err?.message || err?.error || "Error cargando el briefing matutino";
+      toast.error(msg);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -142,10 +158,18 @@ export default function MorningBriefingCard() {
         )}
 
         {/* Tasks */}
-        {briefing.task_priorities && (
+        {briefing.task_priorities && toText(briefing.task_priorities) && (
           <div className="flex items-start gap-2 text-xs">
             <ListChecks className="h-3.5 w-3.5 mt-0.5 text-green-400 shrink-0" />
-            <span className="text-green-200">{briefing.task_priorities}</span>
+            <span className="text-green-200">{toText(briefing.task_priorities)}</span>
+          </div>
+        )}
+
+        {/* Alerts */}
+        {briefing.alerts && toText(briefing.alerts) && (
+          <div className="flex items-start gap-2 text-xs">
+            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 text-orange-400 shrink-0" />
+            <span className="text-orange-200">{toText(briefing.alerts)}</span>
           </div>
         )}
 

@@ -1,23 +1,28 @@
-Voy a arreglarlo como problema de caché de preview, sin tocar la lógica funcional.
+Diagnóstico: el error viene de `supabase/functions/daily-briefing/index.ts`. Esa función todavía llama a Anthropic/Claude (`claude-sonnet-4-20250514`) y en logs está fallando con `Your credit balance is too low to access the Anthropic API`. Por eso ves “Error cargando el briefing matutino” y la sensación de “modelo viejo”.
 
-Plan:
-1. Forzar un nuevo rebuild real de la preview
-   - Actualizar el marcador `// cache-bust` en `src/main.tsx` con un timestamp nuevo.
-   - Esto fuerza a Lovable/Vite a recompilar y servir un bundle nuevo.
+Plan de corrección:
 
-2. Hacer más robusta la detección de versión antigua
-   - Revisar/ajustar `src/lib/runtimeFreshness.ts` para que la preview detecte mejor cuando está corriendo un JS antiguo y recargue con `_cb=<timestamp>`.
-   - Mantener la regla actual: no borrar tokens de auth ni recargar agresivamente flujos largos.
+1. Migrar `daily-briefing` a Lovable AI Gateway
+   - Sustituir `ANTHROPIC_API_KEY` y `https://api.anthropic.com/v1/messages` por `LOVABLE_API_KEY` y `https://ai.gateway.lovable.dev/v1/chat/completions`.
+   - Usar Gemini conforme a la memoria del proyecto:
+     - `google/gemini-3-flash-preview` para briefing normal.
+     - Mantener estructura preparada para `google/gemini-3.1-pro-preview` si se quiere elevar calidad después.
+   - Pedir `response_format: { type: "json_object" }` para reducir fallos de parseo.
+   - Cambiar logs y errores de “Claude” a “Lovable AI Gateway/Gemini”.
 
-3. Reforzar el botón manual de refresco
-   - Confirmar que `ForceRefreshButton` limpia Service Workers, Cache Storage y flags internos.
-   - Si hace falta, añadir también limpieza de flags faltantes como `__jarvis_boot_auto_retry` / mismatch para que el botón sí desbloquee previews atascadas.
+2. Mejorar resiliencia del briefing
+   - Si el gateway devuelve error, responder con mensaje claro en JSON y no con error genérico opaco.
+   - Añadir fallback local mínimo para que la tarjeta no quede vacía si la IA falla temporalmente.
+   - Mantener caché por día/tipo en `daily_briefings`, pero permitir regeneración real cuando el usuario pulsa refrescar.
 
-4. Validación
-   - Buscar de nuevo `Proyecto Predicción Stock` / `Predicción Stock` en el código para confirmar que no queda hardcodeado.
-   - Confirmar que la migración ya renombra el registro a `Central Culinaria`.
-   - Avisarte de los pasos manuales mínimos: pulsar el botón flotante de refresco o abrir la preview con `?_cb=<timestamp>` si el navegador aún conserva una copia vieja.
+3. Corregir integración frontend
+   - En `MorningBriefingCard.tsx`, cuando el usuario pulse regenerar, enviar `force: true` a la función.
+   - Mostrar el detalle del error devuelto por la función en el toast, no solo “Error cargando el briefing matutino”.
+   - Normalizar arrays (`task_priorities`, `alerts`) para que no se impriman mal o desaparezcan.
 
-Resultado esperado:
-- La preview debería dejar de mostrar la versión cacheada.
-- El nombre `Central Culinaria` debería verse cuando la app lea el proyecto desde Supabase ya actualizado.
+4. Forzar preview nueva
+   - Actualizar el `cache-bust` en `src/main.tsx` con un timestamp nuevo para que Lovable/Vite no conserve el bundle anterior.
+
+5. Verificación posterior
+   - Revisar logs de la función para confirmar que ya no aparece `Claude API error` ni `api.anthropic.com`.
+   - Confirmar que el briefing responde con `success: true` y contenido de Gemini.

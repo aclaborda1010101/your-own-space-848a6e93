@@ -7,16 +7,17 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const AI_GATEWAY_URL = 'https://ai.gateway.lovable.dev/v1/chat/completions';
+const DEFAULT_MODEL = 'google/gemini-3-flash-preview';
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!ANTHROPIC_API_KEY) {
-    return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }), {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) {
+    return new Response(JSON.stringify({ error: 'LOVABLE_API_KEY not configured' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
@@ -26,7 +27,7 @@ serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    const { userId, timezone = 'Europe/Madrid', type = 'morning' } = await req.json();
+    const { userId, timezone = 'Europe/Madrid', type = 'morning', force = false } = await req.json();
     const briefingType = type === 'evening' ? 'evening' : 'morning';
 
     if (!userId) {
@@ -37,21 +38,30 @@ serve(async (req) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Check if briefing already exists for today + type
-    const { data: existingBriefing } = await supabase
-      .from('daily_briefings')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('briefing_date', today)
-      .eq('briefing_type', briefingType)
-      .maybeSingle();
+    // Check cache (skip when force=true)
+    if (!force) {
+      const { data: existingBriefing } = await supabase
+        .from('daily_briefings')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('briefing_date', today)
+        .eq('briefing_type', briefingType)
+        .maybeSingle();
 
-    if (existingBriefing) {
-      return new Response(JSON.stringify({
-        success: true, briefing: existingBriefing, cached: true,
-      }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      if (existingBriefing) {
+        return new Response(JSON.stringify({
+          success: true, briefing: existingBriefing, cached: true,
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    } else {
+      // Delete previous to allow regeneration
+      await supabase.from('daily_briefings')
+        .delete()
+        .eq('user_id', userId)
+        .eq('briefing_date', today)
+        .eq('briefing_type', briefingType);
     }
 
     console.log(`[daily-briefing] Generating ${briefingType} briefing for ${userId.substring(0, 8)}... on ${today}`);
@@ -193,29 +203,41 @@ REGLAS:
 
     const userPrompt = `Genera el briefing ${isEvening ? 'nocturno' : 'matutino'} para hoy ${today}.\n\nCONTEXTO:\n${contextParts.join('\n\n')}`;
 
-    const response = await fetch(ANTHROPIC_API_URL, {
+    const response = await fetch(AI_GATEWAY_URL, {
       method: 'POST',
       headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
+        model: DEFAULT_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        max_tokens: 1200,
+        response_format: { type: 'json_object' },
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[daily-briefing] Claude error ${response.status}:`, errorText);
-      throw new Error(`Claude API error: ${response.status}`);
+      console.error(`[daily-briefing] AI gateway error ${response.status}:`, errorText);
+      if (response.status === 429) {
+        return new Response(JSON.stringify({ error: 'Rate limit alcanzado en Lovable AI. Reintenta en unos segundos.' }), {
+          status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      if (response.status === 402) {
+        return new Response(JSON.stringify({ error: 'Sin créditos en Lovable AI. Añade saldo en Settings > Workspace > Usage.' }), {
+          status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      throw new Error(`AI gateway error ${response.status}: ${errorText.slice(0, 200)}`);
     }
 
     const data = await response.json();
-    const rawContent = data.content?.[0]?.text || '{}';
+    const rawContent = data.choices?.[0]?.message?.content || '{}';
 
     let briefingContent;
     try {

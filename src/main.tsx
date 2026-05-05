@@ -1,4 +1,4 @@
-// cache-bust: 2026-05-05T00:00-central-culinaria-rename
+// cache-bust: 2026-05-05T05:00-security-hardening-v2
 import "./index.css";
 import { initSafeStorage } from "./lib/safeStorage";
 import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";

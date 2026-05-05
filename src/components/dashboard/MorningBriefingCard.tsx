@@ -30,6 +30,7 @@ export default function MorningBriefingCard() {
   const [briefing, setBriefing] = useState<BriefingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [cached, setCached] = useState(false);
 
   const fetchBriefing = async (forceRefresh = false) => {
     if (!user?.id) return;
@@ -45,10 +46,11 @@ export default function MorningBriefingCard() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
+      setCached(!!data?.cached);
+
       if (data?.briefing?.full_content) {
         setBriefing(data.briefing.full_content);
       } else if (data?.briefing) {
-        // Map flat DB row → display shape
         const b = data.briefing;
         setBriefing({
           greeting: b.greeting,
@@ -60,8 +62,8 @@ export default function MorningBriefingCard() {
       }
     } catch (err: any) {
       console.error("[MorningBriefing] Error:", err);
-      const msg = err?.message || err?.error || "Error cargando el briefing matutino";
-      toast.error(msg);
+      const detail = err?.context?.body || err?.message || err?.error || "Error desconocido";
+      toast.error(`Briefing matutino: ${detail}`);
     } finally {
       setLoading(false);
       setRefreshing(false);

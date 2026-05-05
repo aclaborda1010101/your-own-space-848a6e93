@@ -239,7 +239,7 @@ REGLAS:
     const data = await response.json();
     const rawContent = data.choices?.[0]?.message?.content || '{}';
 
-    let briefingContent;
+    let briefingContent: Record<string, any>;
     try {
       const cleaned = rawContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       briefingContent = JSON.parse(cleaned);
@@ -252,6 +252,10 @@ REGLAS:
         day_score: 7,
       };
     }
+    briefingContent._meta = {
+      model: DEFAULT_MODEL,
+      generated_at: new Date().toISOString(),
+    };
 
     // Save briefing
     const briefingRecord: Record<string, any> = {

@@ -126,6 +126,11 @@ export default function MorningBriefingCard() {
             Briefing Matutino
           </CardTitle>
           <div className="flex items-center gap-2">
+            {cached && (
+              <Badge variant="outline" className="text-xs border-amber-700/50 text-amber-300/80">
+                caché
+              </Badge>
+            )}
             {briefing.day_score_prediction && (
               <Badge variant="outline" className={`${scoreColor} border-current text-xs`}>
                 <Target className="h-3 w-3 mr-1" />
@@ -138,6 +143,7 @@ export default function MorningBriefingCard() {
               className="h-6 w-6"
               onClick={() => fetchBriefing(true)}
               disabled={refreshing}
+              title="Regenerar briefing"
             >
               <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
             </Button>

@@ -21,56 +21,83 @@
     <script>
       window.__APP_BUILD_TS__ = "__BUILD_TS__";
       window.__JARVIS_ACTIVE_SHELL = "v11-lime";
-      // Early freshness guard — runs before main bundle. If preview HTML carries
-      // a build id different from the one we last saw on this client, nuke
-      // SW/caches and reload once with a cache-buster, so the iframe never
-      // keeps showing an old bundle.
+      // Aggressive early shell guard. Runs before React. Detects:
+      //   - new build (__BUILD_TS__ changed) on this client
+      //   - missing v11-lime shell marker (means we boot from old snapshot)
+      //   - active SW or non-empty cache storage in preview
+      // Then clears SW/caches/jarvis-keys and reloads once with canonical
+      // ?jarvis_shell=v11-lime&jarvis_cb=<ts>. Never touches auth tokens.
       (function(){
         try {
           var h = location.hostname;
           var isPreview = (h === 'localhost' || h === '127.0.0.1' || h.indexOf('lovableproject.com') !== -1 || h.indexOf('lovable.app') !== -1 || h.indexOf('preview--') === 0 || h.indexOf('id-preview--') === 0);
           if (!isPreview) return;
           var current = window.__APP_BUILD_TS__ || '';
-          if (!current) return;
+          var SHELL = 'v11-lime';
           var KEY = '__jarvis_html_build_ts';
+          var SHELL_KEY = '__jarvis_active_shell';
           var ATTEMPTS = '__jarvis_html_build_attempts';
-          var saved = '';
-          try { saved = localStorage.getItem(KEY) || ''; } catch(_){}
-          if (saved && saved !== current) {
-            var n = 0;
-            try { n = Number(sessionStorage.getItem(ATTEMPTS) || '0'); } catch(_){}
-            if (n < 2) {
-              try { sessionStorage.setItem(ATTEMPTS, String(n + 1)); } catch(_){}
-              try { localStorage.setItem(KEY, current); } catch(_){}
-              var swP = Promise.resolve();
+          var TECH_KEYS = [KEY, SHELL_KEY, ATTEMPTS, '__jarvis_build_id', '__jarvis_reloaded', '__jarvis_preview_sw_reset_attempts', '__jarvis_preview_html_mismatch_attempts', '__jarvis_auto_retry', '__jarvis_chunk_reload', '__jarvis_boot_auto_retry'];
+
+          var savedBuild = '';
+          var savedShell = '';
+          try { savedBuild = localStorage.getItem(KEY) || ''; } catch(_){}
+          try { savedShell = localStorage.getItem(SHELL_KEY) || ''; } catch(_){}
+
+          var buildChanged = !!(savedBuild && current && savedBuild !== current);
+          var shellMissing = savedShell !== SHELL;
+
+          // Already on a canonical shell URL? URL marker shows a previous reload
+          // already happened in this tab — don't loop.
+          var hasShellParam = false;
+          try { hasShellParam = new URL(location.href).searchParams.get('jarvis_shell') === SHELL; } catch(_){}
+
+          var attempts = 0;
+          try { attempts = Number(sessionStorage.getItem(ATTEMPTS) || '0'); } catch(_){}
+
+          var needReload = (buildChanged || shellMissing) && !hasShellParam && attempts < 2;
+
+          if (needReload) {
+            try { sessionStorage.setItem(ATTEMPTS, String(attempts + 1)); } catch(_){}
+            try { localStorage.setItem(KEY, current); } catch(_){}
+            try { localStorage.setItem(SHELL_KEY, SHELL); } catch(_){}
+            try { console.warn('[jarvis] stale shell detected → cleaning + reloading', { savedBuild: savedBuild, current: current, savedShell: savedShell }); } catch(_){}
+
+            var swP = Promise.resolve();
+            try {
+              if ('serviceWorker' in navigator) {
+                swP = navigator.serviceWorker.getRegistrations().then(function(rs){
+                  return Promise.all(rs.map(function(r){ try{ return r.unregister(); }catch(_){ return null; } }));
+                }).catch(function(){});
+              }
+            } catch(_){}
+            var cacheP = Promise.resolve();
+            try {
+              if ('caches' in window) {
+                cacheP = caches.keys().then(function(ks){
+                  return Promise.all(ks.map(function(k){ try{ return caches.delete(k); }catch(_){ return null; } }));
+                }).catch(function(){});
+              }
+            } catch(_){}
+            Promise.all([swP, cacheP]).then(function(){
               try {
-                if ('serviceWorker' in navigator) {
-                  swP = navigator.serviceWorker.getRegistrations().then(function(rs){
-                    return Promise.all(rs.map(function(r){ try{ return r.unregister(); }catch(_){ return null; } }));
-                  }).catch(function(){});
-                }
-              } catch(_){}
-              var cacheP = Promise.resolve();
-              try {
-                if ('caches' in window) {
-                  cacheP = caches.keys().then(function(ks){
-                    return Promise.all(ks.map(function(k){ try{ return caches.delete(k); }catch(_){ return null; } }));
-                  }).catch(function(){});
-                }
-              } catch(_){}
-              Promise.all([swP, cacheP]).then(function(){
-                var url = location.href.split('#')[0];
-                var hash = location.hash || '';
-                var sep = url.indexOf('?') >= 0 ? '&' : '?';
-                location.replace(url + sep + '_cb=' + Date.now() + hash);
-              });
-              return;
-            }
-          } else {
-            try { sessionStorage.removeItem(ATTEMPTS); } catch(_){}
+                var u = new URL(location.href);
+                u.searchParams.set('jarvis_shell', SHELL);
+                u.searchParams.set('jarvis_cb', String(Date.now()));
+                u.searchParams.delete('_cb');
+                location.replace(u.toString());
+              } catch(_){
+                location.reload();
+              }
+            });
+            return;
           }
-          try { localStorage.setItem(KEY, current); } catch(_){}
-          try { console.info('[jarvis] build', current); } catch(_){}
+
+          // Stable boot: persist markers, reset attempts.
+          try { sessionStorage.removeItem(ATTEMPTS); } catch(_){}
+          try { if (current) localStorage.setItem(KEY, current); } catch(_){}
+          try { localStorage.setItem(SHELL_KEY, SHELL); } catch(_){}
+          try { console.info('[jarvis] active shell', SHELL, '· build', current); } catch(_){}
         } catch(_){}
       })();
     </script>

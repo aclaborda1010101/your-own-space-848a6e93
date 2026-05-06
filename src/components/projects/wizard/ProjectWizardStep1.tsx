@@ -42,20 +42,8 @@ export const ProjectWizardStep1 = ({ onSubmit, saving }: Props) => {
   const [projectType, setProjectType] = useState("mixto");
   const [inputType, setInputType] = useState("text");
   const [inputContent, setInputContent] = useState("");
-  const [contacts, setContacts] = useState<{ id: string; name: string }[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [processing, setProcessing] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      supabase
-        .from("people_contacts")
-        .select("id, name")
-        .eq("user_id", user.id)
-        .order("name")
-        .then(({ data }) => setContacts(data || []));
-    }
-  }, [user]);
 
   // Rebuild combined content whenever files change
   useEffect(() => {

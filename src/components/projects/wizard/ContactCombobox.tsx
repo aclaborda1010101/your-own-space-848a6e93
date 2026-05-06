@@ -147,7 +147,7 @@ export const ContactCombobox = ({ value, onChange, placeholder = "Seleccionar co
                 {contacts.map((c) => (
                   <CommandItem
                     key={c.id}
-                    value={`${c.name} ${c.company || ""}`}
+                    value={`${c.name} ${c.company || ""} ${c.wa_id || ""}`}
                     onSelect={() => {
                       onChange(c.id, c);
                       setOpen(false);
@@ -222,20 +222,64 @@ const CreateContactDialog = ({ open, onOpenChange, defaultName, onCreated }: Cre
       const waId = phone ? normalizePhone(phone) : null;
       const phoneNumbers = waId ? [waId] : null;
 
-      const { data: created, error } = await supabase
-        .from("people_contacts")
-        .insert({
-          user_id: user.id,
-          name: name.trim(),
-          company: company.trim() || null,
-          wa_id: waId,
-          phone_numbers: phoneNumbers,
-          in_strategic_network: true,
-          relationship: "professional",
-        })
-        .select("id, name, company, wa_id")
-        .single();
-      if (error) throw error;
+      // Pre-check: ¿ya existe un contacto con este wa_id?
+      let created: Contact | null = null;
+      let reused = false;
+
+      if (waId) {
+        const { data: existing } = await supabase
+          .from("people_contacts")
+          .select("id, name, company, wa_id")
+          .eq("user_id", user.id)
+          .eq("wa_id", waId)
+          .maybeSingle();
+        if (existing) {
+          created = existing as Contact;
+          reused = true;
+          toast.info(`Ya tenías un contacto con ese número: «${existing.name}». Lo seleccionamos.`);
+        }
+      }
+
+      if (!created) {
+        const { data: inserted, error } = await supabase
+          .from("people_contacts")
+          .insert({
+            user_id: user.id,
+            name: name.trim(),
+            company: company.trim() || null,
+            wa_id: waId,
+            phone_numbers: phoneNumbers,
+            in_strategic_network: true,
+            relationship: "professional",
+          })
+          .select("id, name, company, wa_id")
+          .single();
+
+        if (error) {
+          // Red de seguridad: carrera o índice no detectado en el pre-check
+          if ((error as any).code === "23505" && waId) {
+            const { data: existing2 } = await supabase
+              .from("people_contacts")
+              .select("id, name, company, wa_id")
+              .eq("user_id", user.id)
+              .eq("wa_id", waId)
+              .maybeSingle();
+            if (existing2) {
+              created = existing2 as Contact;
+              reused = true;
+              toast.info(`Ya tenías un contacto con ese número: «${existing2.name}». Lo seleccionamos.`);
+            } else {
+              throw error;
+            }
+          } else {
+            throw error;
+          }
+        } else {
+          created = inserted as Contact;
+        }
+      }
+
+      if (!created) throw new Error("No se pudo crear ni recuperar el contacto");
 
       // Try to link existing WhatsApp messages where sender contains the phone
       let linkedMessages = 0;
@@ -265,12 +309,16 @@ const CreateContactDialog = ({ open, onOpenChange, defaultName, onCreated }: Cre
         }
       }
 
-      toast.success(
-        linkedMessages > 0
-          ? `Contacto creado y vinculado a ${linkedMessages} mensajes WhatsApp`
-          : "Contacto creado en tu Red Estratégica",
-      );
-      onCreated(created as Contact);
+      if (!reused) {
+        toast.success(
+          linkedMessages > 0
+            ? `Contacto creado y vinculado a ${linkedMessages} mensajes WhatsApp`
+            : "Contacto creado en tu Red Estratégica",
+        );
+      } else if (linkedMessages > 0) {
+        toast.success(`Vinculados ${linkedMessages} mensajes WhatsApp al contacto existente`);
+      }
+      onCreated(created);
     } catch (err: any) {
       console.error("[CreateContactDialog] save failed:", err);
       toast.error(err.message || "No se pudo crear el contacto");

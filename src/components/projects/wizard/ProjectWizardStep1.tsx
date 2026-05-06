@@ -136,14 +136,15 @@ export const ProjectWizardStep1 = ({ onSubmit, saving }: Props) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Contacto principal</Label>
-              <Select value={contactId} onValueChange={setContactId}>
-                <SelectTrigger className="bg-background"><SelectValue placeholder="Seleccionar contacto" /></SelectTrigger>
-                <SelectContent>
-                  {contacts.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ContactCombobox
+                value={contactId}
+                onChange={(id, contact) => {
+                  setContactId(id || "");
+                  if (contact?.company && !company.trim()) {
+                    setCompany(contact.company);
+                  }
+                }}
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Tipo de proyecto</Label>

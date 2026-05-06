@@ -70,13 +70,14 @@ async function embed(text: string, userId?: string): Promise<number[] | null> {
 // Topic & summary extraction (Lovable AI Gateway / gemini-flash)
 // One call per chunk, JSON-only
 // ─────────────────────────────────────────────────────────
-async function extractMeta(content: string): Promise<{ summary: string; topics: string[]; importance: number }> {
+async function extractMeta(content: string, userId?: string): Promise<{ summary: string; topics: string[]; importance: number }> {
   const fallback = {
     summary: content.slice(0, 200),
     topics: [],
     importance: 5,
   };
   try {
+    const userInput = content.slice(0, 4000);
     const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -91,7 +92,7 @@ async function extractMeta(content: string): Promise<{ summary: string; topics: 
             content:
               "Extract metadata from text. Reply ONLY JSON: {\"summary\":\"1-2 sentences max 200 chars\",\"topics\":[\"tag1\",\"tag2\"],\"importance\":1-10}. Topics in lowercase Spanish, max 5. Importance: 1=trivial, 5=normal, 8=important, 10=critical.",
           },
-          { role: "user", content: content.slice(0, 4000) },
+          { role: "user", content: userInput },
         ],
         temperature: 0.3,
       }),
@@ -99,6 +100,22 @@ async function extractMeta(content: string): Promise<{ summary: string; topics: 
     if (!r.ok) return fallback;
     const j = await r.json();
     const raw = j.choices?.[0]?.message?.content?.trim() ?? "";
+
+    // ── Cost tracking ──
+    try {
+      const tokensInput = Number(j.usage?.prompt_tokens) || estimateTokens(userInput);
+      const tokensOutput = Number(j.usage?.completion_tokens) || estimateTokens(raw);
+      const costUsd = calculateCost("gemini-flash", tokensInput, tokensOutput);
+      recordCost(sb as any, {
+        userId,
+        service: "google/gemini-3-flash-preview",
+        operation: "jarvis-history-ingest:extract-meta",
+        tokensInput,
+        tokensOutput,
+        costUsd,
+      }).catch(() => {});
+    } catch (_) { /* ignore */ }
+
     const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
     const parsed = JSON.parse(cleaned);
     return {

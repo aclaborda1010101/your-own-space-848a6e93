@@ -1,6 +1,8 @@
 // AI Client - Lovable AI Gateway (Google Gemini 3.1 / 3 models)
 // All calls routed through https://ai.gateway.lovable.dev/v1/chat/completions
 
+import { recordCost, estimateTokens, calculateCost } from "./cost-tracker.ts";
+
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
@@ -20,6 +22,10 @@ export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
   responseFormat?: "text" | "json";
+  // Cost tracking (optional — when provided, records to project_costs)
+  userId?: string;
+  operation?: string;
+  projectId?: string;
 }
 
 // Model aliases → Lovable AI Gateway model names

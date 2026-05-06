@@ -5,6 +5,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { recordCost, estimateTokens, calculateCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +18,9 @@ const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
 const sb = createClient(SUPABASE_URL, SERVICE_KEY);
+
+// OpenAI text-embedding-3-small: $0.02 per 1M tokens
+const EMBEDDING_RATE_PER_MILLION = 0.02;
 
 // ─────────────────────────────────────────────────────────
 // Embedding (OpenAI text-embedding-3-small @ 1024 dims)

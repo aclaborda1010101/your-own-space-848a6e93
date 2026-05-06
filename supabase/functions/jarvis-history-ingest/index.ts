@@ -429,8 +429,8 @@ async function ingestOne(params: {
 
     // Embed + extract meta in parallel
     const [embedding, meta] = await Promise.all([
-      embed(chunkContent),
-      params.fast_meta ? Promise.resolve(fastMeta(chunkContent, params.source_type, loaded.metadata)) : extractMeta(chunkContent),
+      embed(chunkContent, userId),
+      params.fast_meta ? Promise.resolve(fastMeta(chunkContent, params.source_type, loaded.metadata)) : extractMeta(chunkContent, userId),
     ]);
 
     // Importance boost by source

@@ -7337,12 +7337,12 @@ export type Database = {
           id: string
           metadata: Json | null
           operation: string
-          project_id: string
+          project_id: string | null
           service: string
-          step_number: number
+          step_number: number | null
           tokens_input: number | null
           tokens_output: number | null
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           api_calls?: number | null
@@ -7351,12 +7351,12 @@ export type Database = {
           id?: string
           metadata?: Json | null
           operation: string
-          project_id: string
+          project_id?: string | null
           service: string
-          step_number: number
+          step_number?: number | null
           tokens_input?: number | null
           tokens_output?: number | null
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           api_calls?: number | null
@@ -7365,12 +7365,12 @@ export type Database = {
           id?: string
           metadata?: Json | null
           operation?: string
-          project_id?: string
+          project_id?: string | null
           service?: string
-          step_number?: number
+          step_number?: number | null
           tokens_input?: number | null
           tokens_output?: number | null
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {

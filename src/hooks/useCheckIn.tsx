@@ -105,6 +105,7 @@ export const useCheckIn = () => {
   };
 
   const updateDraft = useCallback((data: CheckInData) => {
+    userTouchedRef.current = true;
     setDraftCheckIn(data);
     setPrefilledFromWhoop(false);
   }, []);

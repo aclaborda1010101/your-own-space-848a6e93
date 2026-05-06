@@ -40,14 +40,21 @@ export const useCheckIn = () => {
   const today = getTodayLocal();
 
   // Pre-fill from WHOOP once both check-in fetch and WHOOP fetch are settled.
+  // Re-applies if WHOOP data arrives later, as long as the user hasn't touched the sliders
+  // and there's no check-in already registered for today.
   useEffect(() => {
     if (loading || whoopLoading) return;
     if (isRegistered) return;
     if (userTouchedRef.current) return;
-    if (appliedRef.current) return;
     if (!hasWhoopData || !whoopData) return;
 
     const mapped = mapWhoopToCheckIn(whoopData);
+    console.log("[CheckIn] WHOOP prefill applied", {
+      recovery: whoopData.recovery_score,
+      hrv: whoopData.hrv,
+      sleep_hours: whoopData.sleep_hours,
+      mapped,
+    });
     setDraftCheckIn({
       energy: mapped.energy,
       mood: mapped.mood,

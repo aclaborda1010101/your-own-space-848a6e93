@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { recordCost, estimateTokens, calculateCost, WHISPER_RATE_PER_MINUTE } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -64,7 +65,7 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-async function transcribeAudio(base64: string, mimetype: string): Promise<string> {
+async function transcribeAudio(base64: string, mimetype: string, userId?: string): Promise<string> {
   if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY missing");
   const bytes = base64ToBytes(base64);
   const ext = mimetype.includes("mp4") ? "m4a" : mimetype.includes("wav") ? "wav" : "ogg";
@@ -82,10 +83,43 @@ async function transcribeAudio(base64: string, mimetype: string): Promise<string
   });
   if (!res.ok) throw new Error(`Groq Whisper failed: ${res.status} ${await res.text()}`);
   const j = await res.json();
+
+  // ── Cost tracking (Whisper: estimate duration from bytes, ~16 KB/s for ogg/opus voice) ──
+  try {
+    const approxBytes = bytes.length;
+    const approxMinutes = approxBytes / (16 * 1024 * 60); // ~16 KB/s opus voice
+    const costUsd = approxMinutes * WHISPER_RATE_PER_MINUTE;
+    recordCost(null, {
+      userId,
+      service: "whisper-large-v3",
+      operation: "process-whatsapp-media:transcribe-audio",
+      tokensInput: 0,
+      tokensOutput: 0,
+      costUsd,
+      metadata: { approx_bytes: approxBytes, approx_minutes: approxMinutes.toFixed(2) },
+    }).catch(() => {});
+  } catch (_) { /* ignore */ }
+
   return (j.text || "").trim();
 }
 
-async function describeImage(base64: string, mimetype: string, caption: string): Promise<string> {
+async function trackVisionCost(j: any, userInput: string, output: string, operation: string, userId?: string) {
+  try {
+    const tokensInput = Number(j.usage?.prompt_tokens) || estimateTokens(userInput) + 258; // image tokens approx
+    const tokensOutput = Number(j.usage?.completion_tokens) || estimateTokens(output);
+    const costUsd = calculateCost("gemini-flash", tokensInput, tokensOutput);
+    recordCost(null, {
+      userId,
+      service: "google/gemini-3-flash-preview",
+      operation,
+      tokensInput,
+      tokensOutput,
+      costUsd,
+    }).catch(() => {});
+  } catch (_) { /* ignore */ }
+}
+
+async function describeImage(base64: string, mimetype: string, caption: string, userId?: string): Promise<string> {
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY missing");
   const dataUrl = `data:${mimetype || "image/jpeg"};base64,${base64.replace(/^data:[^;]+;base64,/, "")}`;
   const userText = caption
@@ -113,13 +147,16 @@ async function describeImage(base64: string, mimetype: string, caption: string):
   });
   if (!res.ok) throw new Error(`Vision failed: ${res.status} ${await res.text()}`);
   const j = await res.json();
-  return (j.choices?.[0]?.message?.content || "").trim();
+  const out = (j.choices?.[0]?.message?.content || "").trim();
+  await trackVisionCost(j, userText, out, "process-whatsapp-media:vision-image", userId);
+  return out;
 }
 
-async function extractPdfText(base64: string, fileName: string): Promise<string> {
+async function extractPdfText(base64: string, fileName: string, userId?: string): Promise<string> {
   // Use Gemini Vision via Lovable Gateway for PDF (multimodal supports PDFs as inline_data)
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY missing");
   const dataUrl = `data:application/pdf;base64,${base64.replace(/^data:[^;]+;base64,/, "")}`;
+  const userText = `Extrae el texto principal y un resumen de 2-4 frases de este PDF llamado "${fileName}". Responde en formato: "RESUMEN: ...\nTEXTO: ...".`;
   const res = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -132,10 +169,7 @@ async function extractPdfText(base64: string, fileName: string): Promise<string>
         {
           role: "user",
           content: [
-            {
-              type: "text",
-              text: `Extrae el texto principal y un resumen de 2-4 frases de este PDF llamado "${fileName}". Responde en formato: "RESUMEN: ...\nTEXTO: ...".`,
-            },
+            { type: "text", text: userText },
             { type: "image_url", image_url: { url: dataUrl } },
           ],
         },
@@ -144,7 +178,9 @@ async function extractPdfText(base64: string, fileName: string): Promise<string>
   });
   if (!res.ok) throw new Error(`PDF extract failed: ${res.status} ${await res.text()}`);
   const j = await res.json();
-  return (j.choices?.[0]?.message?.content || "").trim();
+  const out = (j.choices?.[0]?.message?.content || "").trim();
+  await trackVisionCost(j, userText, out, "process-whatsapp-media:vision-pdf", userId);
+  return out;
 }
 
 serve(async (req) => {
@@ -195,15 +231,28 @@ serve(async (req) => {
     const mt = realMime || mimeType || "";
     let finalContent = "";
 
+    // Look up user_id from message for cost tracking
+    let ownerUserId: string | undefined;
+    try {
+      const { data: msgRow } = await supabase
+        .from("contact_messages")
+        .select("user_id")
+        .eq("id", messageId)
+        .maybeSingle();
+      ownerUserId = (msgRow as any)?.user_id || body.userId;
+    } catch (_) {
+      ownerUserId = body.userId;
+    }
+
     if (mediaKind === "audio") {
-      const text = await transcribeAudio(base64, mt);
+      const text = await transcribeAudio(base64, mt, ownerUserId);
       finalContent = text ? `[🎙️ Audio] ${text}` : "[🎙️ Audio sin contenido reconocible]";
     } else if (mediaKind === "image") {
-      const desc = await describeImage(base64, mt, caption || "");
+      const desc = await describeImage(base64, mt, caption || "", ownerUserId);
       finalContent = `[🖼️ Imagen] ${desc}`;
     } else if (mediaKind === "document") {
       if (mt.includes("pdf") || (fileName || "").toLowerCase().endsWith(".pdf")) {
-        const text = await extractPdfText(base64, fileName || "documento.pdf");
+        const text = await extractPdfText(base64, fileName || "documento.pdf", ownerUserId);
         finalContent = `[📎 PDF: ${fileName || "documento"}]\n${text}`;
       } else {
         finalContent = `[📎 Documento: ${fileName || "archivo"}${caption ? ` — ${caption}` : ""}]`;

@@ -5,6 +5,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { recordCost, estimateTokens, calculateCost } from "../_shared/cost-tracker.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,10 +19,13 @@ const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
 const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 
+// OpenAI text-embedding-3-small: $0.02 per 1M tokens
+const EMBEDDING_RATE_PER_MILLION = 0.02;
+
 // ─────────────────────────────────────────────────────────
 // Embedding (OpenAI text-embedding-3-small @ 1024 dims)
 // ─────────────────────────────────────────────────────────
-async function embed(text: string): Promise<number[] | null> {
+async function embed(text: string, userId?: string): Promise<number[] | null> {
   const truncated = text.slice(0, 32000);
   if (!truncated.trim()) return null;
   try {
@@ -42,6 +46,19 @@ async function embed(text: string): Promise<number[] | null> {
       return null;
     }
     const j = await r.json();
+    // ── Cost tracking ──
+    try {
+      const tokensInput = Number(j.usage?.prompt_tokens) || estimateTokens(truncated);
+      const costUsd = (tokensInput / 1_000_000) * EMBEDDING_RATE_PER_MILLION;
+      recordCost(sb as any, {
+        userId,
+        service: "text-embedding-3-small",
+        operation: "jarvis-history-ingest:embed",
+        tokensInput,
+        tokensOutput: 0,
+        costUsd,
+      }).catch(() => {});
+    } catch (_) { /* ignore */ }
     return j.data?.[0]?.embedding ?? null;
   } catch (e) {
     console.warn("[ingest] embed exception:", e);
@@ -53,13 +70,14 @@ async function embed(text: string): Promise<number[] | null> {
 // Topic & summary extraction (Lovable AI Gateway / gemini-flash)
 // One call per chunk, JSON-only
 // ─────────────────────────────────────────────────────────
-async function extractMeta(content: string): Promise<{ summary: string; topics: string[]; importance: number }> {
+async function extractMeta(content: string, userId?: string): Promise<{ summary: string; topics: string[]; importance: number }> {
   const fallback = {
     summary: content.slice(0, 200),
     topics: [],
     importance: 5,
   };
   try {
+    const userInput = content.slice(0, 4000);
     const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -74,7 +92,7 @@ async function extractMeta(content: string): Promise<{ summary: string; topics: 
             content:
               "Extract metadata from text. Reply ONLY JSON: {\"summary\":\"1-2 sentences max 200 chars\",\"topics\":[\"tag1\",\"tag2\"],\"importance\":1-10}. Topics in lowercase Spanish, max 5. Importance: 1=trivial, 5=normal, 8=important, 10=critical.",
           },
-          { role: "user", content: content.slice(0, 4000) },
+          { role: "user", content: userInput },
         ],
         temperature: 0.3,
       }),
@@ -82,6 +100,22 @@ async function extractMeta(content: string): Promise<{ summary: string; topics: 
     if (!r.ok) return fallback;
     const j = await r.json();
     const raw = j.choices?.[0]?.message?.content?.trim() ?? "";
+
+    // ── Cost tracking ──
+    try {
+      const tokensInput = Number(j.usage?.prompt_tokens) || estimateTokens(userInput);
+      const tokensOutput = Number(j.usage?.completion_tokens) || estimateTokens(raw);
+      const costUsd = calculateCost("gemini-flash", tokensInput, tokensOutput);
+      recordCost(sb as any, {
+        userId,
+        service: "google/gemini-3-flash-preview",
+        operation: "jarvis-history-ingest:extract-meta",
+        tokensInput,
+        tokensOutput,
+        costUsd,
+      }).catch(() => {});
+    } catch (_) { /* ignore */ }
+
     const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
     const parsed = JSON.parse(cleaned);
     return {
@@ -395,8 +429,8 @@ async function ingestOne(params: {
 
     // Embed + extract meta in parallel
     const [embedding, meta] = await Promise.all([
-      embed(chunkContent),
-      params.fast_meta ? Promise.resolve(fastMeta(chunkContent, params.source_type, loaded.metadata)) : extractMeta(chunkContent),
+      embed(chunkContent, userId),
+      params.fast_meta ? Promise.resolve(fastMeta(chunkContent, params.source_type, loaded.metadata)) : extractMeta(chunkContent, userId),
     ]);
 
     // Importance boost by source

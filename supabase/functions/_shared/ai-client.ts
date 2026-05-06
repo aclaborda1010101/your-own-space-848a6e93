@@ -1,6 +1,8 @@
 // AI Client - Lovable AI Gateway (Google Gemini 3.1 / 3 models)
 // All calls routed through https://ai.gateway.lovable.dev/v1/chat/completions
 
+import { recordCost, estimateTokens, calculateCost } from "./cost-tracker.ts";
+
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
@@ -20,6 +22,10 @@ export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
   responseFormat?: "text" | "json";
+  // Cost tracking (optional — when provided, records to project_costs)
+  userId?: string;
+  operation?: string;
+  projectId?: string;
 }
 
 // Model aliases → Lovable AI Gateway model names
@@ -217,6 +223,28 @@ export async function chat(
       if (content) {
         result = content;
         if (tryModel !== model) console.log(`AI Gateway: succeeded with fallback model ${tryModel}`);
+
+        // ── Cost tracking (fire-and-forget) ──
+        try {
+          const usage = data.usage || {};
+          const inputText = messages.map((m) => m.content).join("\n");
+          const tokensInput = Number(usage.prompt_tokens) || estimateTokens(inputText);
+          const tokensOutput = Number(usage.completion_tokens) || estimateTokens(content);
+          const costUsd = calculateCost(tryModel, tokensInput, tokensOutput);
+          recordCost(null, {
+            userId: options.userId,
+            service: tryModel,
+            operation: options.operation || "ai-client:chat",
+            tokensInput,
+            tokensOutput,
+            costUsd,
+            projectId: options.projectId,
+            metadata: { fallback_used: tryModel !== model, original_model: model },
+          }).catch((err) => console.warn("[ai-client] cost recording failed:", err));
+        } catch (err) {
+          console.warn("[ai-client] cost tracking exception:", err);
+        }
+
         break outer;
       }
 

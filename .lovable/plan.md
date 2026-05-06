@@ -1,62 +1,48 @@
+# Plan: instrumentar coste real en las 3 funciones no trackeadas
 
-# Diagnóstico: ¿qué hace Jarvis solo y por qué se come $50?
+## Objetivo
+Que `/ai-costs` muestre exactamente cuánto gastan `jarvis-history-ingest`, `contact-analysis` y `process-whatsapp-media`. Hoy registran $0 y los $50/semana son invisibles.
 
-## Lo que encontré
+## Estrategia (1 cambio central + 3 puntuales)
 
-`project_costs` solo registra ~$0.24 en 7 días (esa tabla solo trackea el wizard). Los $50 vienen de **5 cron jobs en `pg_cron`** que llaman edge functions que a su vez llaman a Lovable AI Gateway sin pasar por el tracker.
+### 1. Instrumentar `_shared/ai-client.ts` (cubre `contact-analysis` entero)
+`contact-analysis` hace **6 llamadas LLM** vía `chat()` del cliente compartido. En lugar de tocar 6 sitios, instrumento una sola vez en `chat()`:
 
-| # | Cron job | Frecuencia | Llamadas/día | Llama a IA | Coste estimado |
-|---|---|---|---|---|---|
-| 1 | `jarvis-history-backfill-cron` → `jarvis-history-ingest` | **cada 5 min** | 288 | **SÍ (LLM por mensaje)** | **MUY ALTO** ⚠️ |
-| 2 | `dispatch-scheduled-notifications` | **cada 1 min** | 1440 | indirecto (puede disparar IA) | MEDIO |
-| 3 | `email-sync-auto` | cada 28 min | 51 | dispara `plaud-fetch` (Whisper + clasif.) | ALTO |
-| 4 | `contact-profiles-refresh-all` → `contact-analysis` | diario 02:00 | 1×N contactos | **SÍ (LLM por contacto)** | **ALTO** ⚠️ |
-| 5 | `reimport-whatsapp-recent` → `process-whatsapp-media` | diario 03:00 | 1×N media | **SÍ (Whisper + Gemini Vision)** | ALTO |
+- Después del `break outer` (cuando hay `result`), leer `data.usage` que devuelve el Gateway (`prompt_tokens`, `completion_tokens`).
+- Si no viene `usage`, estimar con `estimateTokens()` sobre input/output.
+- Añadir parámetros opcionales `userId`, `operation` a `ChatOptions` para que el caller los pase.
+- Llamar `recordCost()` fire-and-forget (no bloquear si falla).
 
-**Sospechosos principales de los $50:**
-- `jarvis-history-backfill-cron` cada 5 min ingiere y embebe historial → si tienes mucho histórico WhatsApp/email, esto solo puede valer decenas de $.
-- `contact-profiles-refresh-all` perfila TODOS los contactos cada noche con LLM (uno a uno).
-- `process-whatsapp-media` reprocesa multimedia de últimos 3 días cada noche (Whisper + Vision).
+Esto trackea automáticamente las 6 llamadas de `contact-analysis` (gemini-flash + gemini-pro) sin tocar el archivo de 1358 líneas.
 
-## Plan propuesto (migración SQL, reversible)
+### 2. `jarvis-history-ingest/index.ts` — `extractMeta()` (línea 56-95)
+Hace `fetch` directo al Gateway (no usa `chat()`). Añadir `recordCost()` después de parsear la respuesta:
+- `service: "gemini-2.5-flash"` (modelo real que devuelve el Gateway)
+- `operation: "jarvis-history-ingest:extract-meta"`
+- Tokens desde `j.usage` o estimados desde el chunk de entrada y el JSON salida.
+- Pasar `userId` recibido en el body de la función.
 
-### Paso 1 — Apagar lo que más probablemente está sangrando
-```sql
--- backfill de historial: pasar de cada 5 min a 1× al día (o pausar)
-SELECT cron.unschedule('jarvis-history-backfill-cron');
-SELECT cron.schedule('jarvis-history-backfill-cron', '0 4 * * *', $$ ... $$);
+**Nota:** `embedText()` también consume (Gemini embeddings ~$0.00001/1k tokens). Lo añado también como `service: "gemini-embedding"` con `operation: "jarvis-history-ingest:embed"`.
 
--- refresh de TODOS los contactos cada noche → semanal
-SELECT cron.unschedule('contact-profiles-refresh-all-daily');
-SELECT cron.schedule('contact-profiles-refresh-all-weekly', '0 2 * * 0', $$ ... $$);
+### 3. `process-whatsapp-media/index.ts` — 3 puntos
+- **`transcribeAudio`**: añadir `recordCost()` con `service: "whisper-large-v3"`, coste = `WHISPER_RATE_PER_MINUTE × duración`. Como no tenemos duración, estimar por bytes (1 MB ≈ 1 min audio comprimido).
+- **`describeImage`**: `service: "gemini-2.5-flash"`, `operation: "process-whatsapp-media:vision-image"`. Usar `j.usage` si viene.
+- **`extractPdfText`**: igual que image pero `operation: "process-whatsapp-media:vision-pdf"`.
+- Pasar `userId` derivado del `messageId` (lookup en `contact_messages` para obtener owner) o aceptarlo en el body si el caller lo manda.
 
--- reimport multimedia WhatsApp diario → semanal
-SELECT cron.unschedule('reimport-whatsapp-multimedia-daily');
-SELECT cron.schedule('reimport-whatsapp-multimedia-weekly', '0 3 * * 0', $$ ... $$);
-```
+## Notas técnicas
 
-### Paso 2 — Reducir frecuencia de los baratos
-- `dispatch-scheduled-notifications`: cada 1 min → cada 5 min (suficiente para notificaciones).
-- `email-sync-auto`: cada 28 min → cada 2 horas.
+- El Gateway de Lovable devuelve `usage: { prompt_tokens, completion_tokens, total_tokens }` en cada respuesta. Lo aprovecho cuando viene; fallback a `estimateTokens()`.
+- `recordCost()` ya existe en `_shared/cost-tracker.ts` y usa SERVICE_ROLE_KEY internamente.
+- Todas las llamadas a `recordCost()` son fire-and-forget con try/catch interno → cero riesgo de romper la función.
+- No toco lógica de negocio, solo añado tracking.
 
-### Paso 3 — Instrumentar coste real
-Añadir `recordCost()` (de `_shared/cost-tracker.ts`) a las 3 funciones que NO lo trackean:
-- `jarvis-history-ingest`
-- `contact-analysis`
-- `process-whatsapp-media`
-
-Así en `/ai-costs` verás exactamente quién gasta qué.
-
-### Paso 4 — Verificación
-- `SELECT * FROM cron.job` para confirmar cambios.
-- Revisar `/ai-costs` dentro de 24-48h con datos reales.
+## Verificación
+1. Forzar 1 ejecución manual de cada función vía `supabase--curl_edge_functions`.
+2. Query: `SELECT operation, COUNT(*), SUM(cost_usd) FROM project_costs WHERE operation LIKE 'jarvis-history-ingest%' OR operation LIKE 'process-whatsapp-media%' OR operation LIKE 'contact-analysis%' GROUP BY operation;`
+3. Confirmar que `/ai-costs` muestra el desglose nuevo.
 
 ## Lo que NO toco
-- Wizard, Jarvis chat manual, POTUS → solo se ejecutan cuando los usas.
-- RLS y seguridad → sin cambios.
-
-## Decisión que necesito de ti
-
-¿Quieres que aplique el plan **agresivo** (apagar/semanalizar los 3 caros + reducir los 2 baratos + instrumentar tracking), o prefieres una versión más conservadora (solo bajar frecuencias, sin pasar a semanal)?
-
-Si dices "adelante" aplico el plan agresivo tal cual.
+- Lógica de extracción, prompts, cron schedules (ya ajustados).
+- Ninguna otra función.
+- RLS, esquema de `project_costs` (ya tiene los campos necesarios).

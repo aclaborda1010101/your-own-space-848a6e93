@@ -11,6 +11,7 @@ import { Upload, Loader2, CheckCircle2, X, Mic, FileText, ArrowRight } from "luc
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { extractTextFromFile } from "@/lib/document-text-extract";
+import { ContactCombobox } from "./ContactCombobox";
 
 interface Props {
   onSubmit: (data: {
@@ -41,20 +42,8 @@ export const ProjectWizardStep1 = ({ onSubmit, saving }: Props) => {
   const [projectType, setProjectType] = useState("mixto");
   const [inputType, setInputType] = useState("text");
   const [inputContent, setInputContent] = useState("");
-  const [contacts, setContacts] = useState<{ id: string; name: string }[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [processing, setProcessing] = useState(false);
-
-  useEffect(() => {
-    if (user) {
-      supabase
-        .from("people_contacts")
-        .select("id, name")
-        .eq("user_id", user.id)
-        .order("name")
-        .then(({ data }) => setContacts(data || []));
-    }
-  }, [user]);
 
   // Rebuild combined content whenever files change
   useEffect(() => {
@@ -147,14 +136,15 @@ export const ProjectWizardStep1 = ({ onSubmit, saving }: Props) => {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Contacto principal</Label>
-              <Select value={contactId} onValueChange={setContactId}>
-                <SelectTrigger className="bg-background"><SelectValue placeholder="Seleccionar contacto" /></SelectTrigger>
-                <SelectContent>
-                  {contacts.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ContactCombobox
+                value={contactId}
+                onChange={(id, contact) => {
+                  setContactId(id || "");
+                  if (contact?.company && !company.trim()) {
+                    setCompany(contact.company);
+                  }
+                }}
+              />
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Tipo de proyecto</Label>

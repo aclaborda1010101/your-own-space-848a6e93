@@ -231,15 +231,28 @@ serve(async (req) => {
     const mt = realMime || mimeType || "";
     let finalContent = "";
 
+    // Look up user_id from message for cost tracking
+    let ownerUserId: string | undefined;
+    try {
+      const { data: msgRow } = await supabase
+        .from("contact_messages")
+        .select("user_id")
+        .eq("id", messageId)
+        .maybeSingle();
+      ownerUserId = (msgRow as any)?.user_id || body.userId;
+    } catch (_) {
+      ownerUserId = body.userId;
+    }
+
     if (mediaKind === "audio") {
-      const text = await transcribeAudio(base64, mt);
+      const text = await transcribeAudio(base64, mt, ownerUserId);
       finalContent = text ? `[🎙️ Audio] ${text}` : "[🎙️ Audio sin contenido reconocible]";
     } else if (mediaKind === "image") {
-      const desc = await describeImage(base64, mt, caption || "");
+      const desc = await describeImage(base64, mt, caption || "", ownerUserId);
       finalContent = `[🖼️ Imagen] ${desc}`;
     } else if (mediaKind === "document") {
       if (mt.includes("pdf") || (fileName || "").toLowerCase().endsWith(".pdf")) {
-        const text = await extractPdfText(base64, fileName || "documento.pdf");
+        const text = await extractPdfText(base64, fileName || "documento.pdf", ownerUserId);
         finalContent = `[📎 PDF: ${fileName || "documento"}]\n${text}`;
       } else {
         finalContent = `[📎 Documento: ${fileName || "archivo"}${caption ? ` — ${caption}` : ""}]`;

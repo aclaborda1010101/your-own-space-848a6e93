@@ -512,18 +512,19 @@ const StartDay = () => {
             </div>
             
             {/* Step Indicators - CLICKABLE */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-0.5 sm:gap-2">
               {STEPS.map((step, index) => {
                 const StepIcon = step.icon;
                 const isActive = currentStep === step.id;
                 const isCompleted = stepsCompleted.has(step.id) || currentStep > step.id;
                 
                 return (
-                  <div key={step.id} className="flex items-center flex-1">
+                  <div key={step.id} className="flex items-center flex-1 min-w-0">
                     <button
                       onClick={() => goToStep(step.id)}
                       className={cn(
-                        "flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all cursor-pointer hover:scale-105",
+                        "flex items-center justify-center shrink-0 rounded-full border-2 transition-all cursor-pointer hover:scale-105",
+                        "w-7 h-7 sm:w-10 sm:h-10",
                         isActive && "bg-primary border-primary text-primary-foreground",
                         isCompleted && !isActive && "bg-success border-success text-success-foreground",
                         !isActive && !isCompleted && "border-border text-muted-foreground hover:border-primary/50"
@@ -531,14 +532,14 @@ const StartDay = () => {
                       title={step.title}
                     >
                       {isCompleted && !isActive ? (
-                        <Check className="w-5 h-5" />
+                        <Check className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
                       ) : (
-                        <StepIcon className="w-5 h-5" />
+                        <StepIcon className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
                       )}
                     </button>
                     {index < STEPS.length - 1 && (
                       <div className={cn(
-                        "flex-1 h-0.5 mx-2",
+                        "flex-1 h-0.5 mx-0.5 sm:mx-2",
                         isCompleted ? "bg-success" : "bg-border"
                       )} />
                     )}

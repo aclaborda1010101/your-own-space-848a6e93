@@ -119,7 +119,7 @@ async function trackVisionCost(j: any, userInput: string, output: string, operat
   } catch (_) { /* ignore */ }
 }
 
-async function describeImage(base64: string, mimetype: string, caption: string): Promise<string> {
+async function describeImage(base64: string, mimetype: string, caption: string, userId?: string): Promise<string> {
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY missing");
   const dataUrl = `data:${mimetype || "image/jpeg"};base64,${base64.replace(/^data:[^;]+;base64,/, "")}`;
   const userText = caption
@@ -147,13 +147,16 @@ async function describeImage(base64: string, mimetype: string, caption: string):
   });
   if (!res.ok) throw new Error(`Vision failed: ${res.status} ${await res.text()}`);
   const j = await res.json();
-  return (j.choices?.[0]?.message?.content || "").trim();
+  const out = (j.choices?.[0]?.message?.content || "").trim();
+  await trackVisionCost(j, userText, out, "process-whatsapp-media:vision-image", userId);
+  return out;
 }
 
-async function extractPdfText(base64: string, fileName: string): Promise<string> {
+async function extractPdfText(base64: string, fileName: string, userId?: string): Promise<string> {
   // Use Gemini Vision via Lovable Gateway for PDF (multimodal supports PDFs as inline_data)
   if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY missing");
   const dataUrl = `data:application/pdf;base64,${base64.replace(/^data:[^;]+;base64,/, "")}`;
+  const userText = `Extrae el texto principal y un resumen de 2-4 frases de este PDF llamado "${fileName}". Responde en formato: "RESUMEN: ...\nTEXTO: ...".`;
   const res = await fetchWithTimeout("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -166,10 +169,7 @@ async function extractPdfText(base64: string, fileName: string): Promise<string>
         {
           role: "user",
           content: [
-            {
-              type: "text",
-              text: `Extrae el texto principal y un resumen de 2-4 frases de este PDF llamado "${fileName}". Responde en formato: "RESUMEN: ...\nTEXTO: ...".`,
-            },
+            { type: "text", text: userText },
             { type: "image_url", image_url: { url: dataUrl } },
           ],
         },
@@ -178,7 +178,9 @@ async function extractPdfText(base64: string, fileName: string): Promise<string>
   });
   if (!res.ok) throw new Error(`PDF extract failed: ${res.status} ${await res.text()}`);
   const j = await res.json();
-  return (j.choices?.[0]?.message?.content || "").trim();
+  const out = (j.choices?.[0]?.message?.content || "").trim();
+  await trackVisionCost(j, userText, out, "process-whatsapp-media:vision-pdf", userId);
+  return out;
 }
 
 serve(async (req) => {

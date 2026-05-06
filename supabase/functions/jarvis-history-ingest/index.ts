@@ -25,7 +25,7 @@ const EMBEDDING_RATE_PER_MILLION = 0.02;
 // ─────────────────────────────────────────────────────────
 // Embedding (OpenAI text-embedding-3-small @ 1024 dims)
 // ─────────────────────────────────────────────────────────
-async function embed(text: string): Promise<number[] | null> {
+async function embed(text: string, userId?: string): Promise<number[] | null> {
   const truncated = text.slice(0, 32000);
   if (!truncated.trim()) return null;
   try {
@@ -46,6 +46,19 @@ async function embed(text: string): Promise<number[] | null> {
       return null;
     }
     const j = await r.json();
+    // ── Cost tracking ──
+    try {
+      const tokensInput = Number(j.usage?.prompt_tokens) || estimateTokens(truncated);
+      const costUsd = (tokensInput / 1_000_000) * EMBEDDING_RATE_PER_MILLION;
+      recordCost(sb as any, {
+        userId,
+        service: "text-embedding-3-small",
+        operation: "jarvis-history-ingest:embed",
+        tokensInput,
+        tokensOutput: 0,
+        costUsd,
+      }).catch(() => {});
+    } catch (_) { /* ignore */ }
     return j.data?.[0]?.embedding ?? null;
   } catch (e) {
     console.warn("[ingest] embed exception:", e);

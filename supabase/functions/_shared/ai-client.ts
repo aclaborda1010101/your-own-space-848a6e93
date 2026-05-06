@@ -223,6 +223,28 @@ export async function chat(
       if (content) {
         result = content;
         if (tryModel !== model) console.log(`AI Gateway: succeeded with fallback model ${tryModel}`);
+
+        // ── Cost tracking (fire-and-forget) ──
+        try {
+          const usage = data.usage || {};
+          const inputText = messages.map((m) => m.content).join("\n");
+          const tokensInput = Number(usage.prompt_tokens) || estimateTokens(inputText);
+          const tokensOutput = Number(usage.completion_tokens) || estimateTokens(content);
+          const costUsd = calculateCost(tryModel, tokensInput, tokensOutput);
+          recordCost(null, {
+            userId: options.userId,
+            service: tryModel,
+            operation: options.operation || "ai-client:chat",
+            tokensInput,
+            tokensOutput,
+            costUsd,
+            projectId: options.projectId,
+            metadata: { fallback_used: tryModel !== model, original_model: model },
+          }).catch((err) => console.warn("[ai-client] cost recording failed:", err));
+        } catch (err) {
+          console.warn("[ai-client] cost tracking exception:", err);
+        }
+
         break outer;
       }
 

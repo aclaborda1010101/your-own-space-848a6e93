@@ -27,32 +27,38 @@ const defaultCheckIn: CheckInData = {
 
 export const useCheckIn = () => {
   const { user } = useAuth();
-  const { data: whoopData, hasData: hasWhoopData } = useJarvisWhoopData();
+  const { data: whoopData, hasData: hasWhoopData, isLoading: whoopLoading } = useJarvisWhoopData();
   const [checkIn, setCheckInState] = useState<CheckInData>(defaultCheckIn);
   const [draftCheckIn, setDraftCheckIn] = useState<CheckInData>(defaultCheckIn);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
   const [prefilledFromWhoop, setPrefilledFromWhoop] = useState(false);
+  const appliedRef = useRef(false);
+  const userTouchedRef = useRef(false);
 
   const today = getTodayLocal();
 
-  // Pre-fill from WHOOP when no check-in exists
+  // Pre-fill from WHOOP once both check-in fetch and WHOOP fetch are settled.
   useEffect(() => {
-    if (!isRegistered && !loading && hasWhoopData && whoopData) {
-      const mapped = mapWhoopToCheckIn(whoopData);
-      const whoopDefaults: CheckInData = {
-        energy: mapped.energy,
-        mood: mapped.mood,
-        focus: mapped.focus,
-        availableTime: mapped.availableTime,
-        interruptionRisk: mapped.interruptionRisk,
-        dayMode: mapped.dayMode,
-      };
-      setDraftCheckIn(whoopDefaults);
-      setPrefilledFromWhoop(true);
-    }
-  }, [isRegistered, loading, hasWhoopData, whoopData]);
+    if (loading || whoopLoading) return;
+    if (isRegistered) return;
+    if (userTouchedRef.current) return;
+    if (appliedRef.current) return;
+    if (!hasWhoopData || !whoopData) return;
+
+    const mapped = mapWhoopToCheckIn(whoopData);
+    setDraftCheckIn({
+      energy: mapped.energy,
+      mood: mapped.mood,
+      focus: mapped.focus,
+      availableTime: mapped.availableTime,
+      interruptionRisk: mapped.interruptionRisk,
+      dayMode: mapped.dayMode,
+    });
+    setPrefilledFromWhoop(true);
+    appliedRef.current = true;
+  }, [loading, whoopLoading, isRegistered, hasWhoopData, whoopData]);
 
   useEffect(() => {
     if (user) {

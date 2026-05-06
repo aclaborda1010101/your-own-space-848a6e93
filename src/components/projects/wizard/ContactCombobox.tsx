@@ -309,12 +309,16 @@ const CreateContactDialog = ({ open, onOpenChange, defaultName, onCreated }: Cre
         }
       }
 
-      toast.success(
-        linkedMessages > 0
-          ? `Contacto creado y vinculado a ${linkedMessages} mensajes WhatsApp`
-          : "Contacto creado en tu Red Estratégica",
-      );
-      onCreated(created as Contact);
+      if (!reused) {
+        toast.success(
+          linkedMessages > 0
+            ? `Contacto creado y vinculado a ${linkedMessages} mensajes WhatsApp`
+            : "Contacto creado en tu Red Estratégica",
+        );
+      } else if (linkedMessages > 0) {
+        toast.success(`Vinculados ${linkedMessages} mensajes WhatsApp al contacto existente`);
+      }
+      onCreated(created);
     } catch (err: any) {
       console.error("[CreateContactDialog] save failed:", err);
       toast.error(err.message || "No se pudo crear el contacto");

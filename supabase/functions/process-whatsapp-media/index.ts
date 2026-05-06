@@ -65,7 +65,7 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-async function transcribeAudio(base64: string, mimetype: string): Promise<string> {
+async function transcribeAudio(base64: string, mimetype: string, userId?: string): Promise<string> {
   if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY missing");
   const bytes = base64ToBytes(base64);
   const ext = mimetype.includes("mp4") ? "m4a" : mimetype.includes("wav") ? "wav" : "ogg";
@@ -83,7 +83,40 @@ async function transcribeAudio(base64: string, mimetype: string): Promise<string
   });
   if (!res.ok) throw new Error(`Groq Whisper failed: ${res.status} ${await res.text()}`);
   const j = await res.json();
+
+  // ── Cost tracking (Whisper: estimate duration from bytes, ~16 KB/s for ogg/opus voice) ──
+  try {
+    const approxBytes = bytes.length;
+    const approxMinutes = approxBytes / (16 * 1024 * 60); // ~16 KB/s opus voice
+    const costUsd = approxMinutes * WHISPER_RATE_PER_MINUTE;
+    recordCost(null, {
+      userId,
+      service: "whisper-large-v3",
+      operation: "process-whatsapp-media:transcribe-audio",
+      tokensInput: 0,
+      tokensOutput: 0,
+      costUsd,
+      metadata: { approx_bytes: approxBytes, approx_minutes: approxMinutes.toFixed(2) },
+    }).catch(() => {});
+  } catch (_) { /* ignore */ }
+
   return (j.text || "").trim();
+}
+
+async function trackVisionCost(j: any, userInput: string, output: string, operation: string, userId?: string) {
+  try {
+    const tokensInput = Number(j.usage?.prompt_tokens) || estimateTokens(userInput) + 258; // image tokens approx
+    const tokensOutput = Number(j.usage?.completion_tokens) || estimateTokens(output);
+    const costUsd = calculateCost("gemini-flash", tokensInput, tokensOutput);
+    recordCost(null, {
+      userId,
+      service: "google/gemini-3-flash-preview",
+      operation,
+      tokensInput,
+      tokensOutput,
+      costUsd,
+    }).catch(() => {});
+  } catch (_) { /* ignore */ }
 }
 
 async function describeImage(base64: string, mimetype: string, caption: string): Promise<string> {

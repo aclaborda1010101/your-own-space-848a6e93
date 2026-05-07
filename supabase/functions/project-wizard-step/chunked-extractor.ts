@@ -410,6 +410,7 @@ REGLAS ESTRICTAS:
 - Conserva citas literales relevantes en evidence_snippets y source_quotes.
 - Devuelve JSON ESTRICTO con la estructura indicada. Todos los arrays son opcionales.
 - Sé CONCISO en descriptions (máx 2 frases) para no agotar el output budget.
+- NO repitas el nombre del proyecto/producto dentro de la misma frase. Una mención por frase es suficiente; usa pronombres después.
 
 PROYECTO OBJETIVO: ${ctx.projectName}
 EMPRESA OBJETIVO: ${ctx.companyName}

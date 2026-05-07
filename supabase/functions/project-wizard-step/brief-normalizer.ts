@@ -1045,14 +1045,45 @@ function applyEditorialPolish(
     aliasSet.delete(projectName.toLowerCase());
     aliasSet.delete(projectName.toUpperCase());
     // Filtramos aliases muy cortos o no parecidos (evita basura).
+    // CRÍTICO: si el alias normalizado es substring del projectName normalizado
+    // (ej. projectName="Plataforma VTC", alias="VTC" o "Plataforma"), NO sustituir.
+    // Eso provoca cascadas tipo "VTC" → "Plataforma VTC" → "Plataforma Plataforma VTC"...
+    const projNorm = normForCompare(projectName);
+    const projWords = new Set(
+      projectName.split(/\s+/).map((w) => normForCompare(w)).filter((w) => w.length > 0),
+    );
     for (const alias of aliasSet) {
       if (alias.length < 3) continue;
       if (!looksLikeAliasOf(alias, projectName)) continue;
+      const aliasNorm = normForCompare(alias);
+      // Skip si el alias es una palabra/substring del projectName.
+      if (projNorm.includes(aliasNorm)) continue;
+      if (projWords.has(aliasNorm)) continue;
       // Word-boundary, case-sensitive primero (preserva mayúsculas).
       const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const re = new RegExp(`\\b${escaped}\\b`, "g");
       replacements.push([re, projectName]);
     }
+  }
+
+  // Post-paso de deduplicación: colapsar repeticiones consecutivas del
+  // projectName o de palabras del projectName que el LLM o el reemplazo
+  // anterior haya generado (ej: "Plataforma VTC Plataforma VTC VTC" → "Plataforma VTC").
+  if (projectName && projectName.length >= 3) {
+    const escapedName = projectName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // 1. Colapsar el nombre completo repetido: "X X X" → "X"
+    const reFullDup = new RegExp(`(?:\\b${escapedName}\\b)(?:[\\s,]+\\b${escapedName}\\b)+`, "gi");
+    replacements.push([reFullDup, projectName]);
+    // 2. Colapsar palabras individuales del projectName repetidas: "VTC VTC VTC" → "VTC"
+    const words = projectName.split(/\s+/).filter((w) => w.length >= 2);
+    for (const w of words) {
+      const escW = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const reWordDup = new RegExp(`\\b${escW}\\b(?:\\s+\\b${escW}\\b)+`, "g");
+      replacements.push([reWordDup, w]);
+    }
+    // 3. Colapsar mezclas tipo "Plataforma VTC VTC" o "VTC Plataforma VTC" después
+    //    de los pasos anteriores: aplicar de nuevo el reemplazo full repetido.
+    replacements.push([new RegExp(`(?:\\b${escapedName}\\b)(?:[\\s,]+\\b${escapedName}\\b)+`, "gi"), projectName]);
   }
 
   function walk(node: any, path: string): any {

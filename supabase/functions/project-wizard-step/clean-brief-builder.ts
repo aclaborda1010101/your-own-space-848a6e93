@@ -230,7 +230,31 @@ export function buildCleanBrief(briefing: any, ctx: { projectName: string }): Cl
   const header = headerLines.join("\n");
 
   const body = sections.map((s) => `## ${s.title}\n\n${s.markdown}`).join("\n\n");
-  const markdown = `${header}\n${body}\n`;
+  let markdown = `${header}\n${body}\n`;
+
+  // Red de seguridad: colapsar repeticiones del projectName o de sus
+  // palabras que hayan sobrevivido al normalizer (defensa en profundidad).
+  if (projectName && projectName.length >= 3) {
+    const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escName = esc(projectName);
+    // "Plataforma VTC Plataforma VTC VTC" → "Plataforma VTC"
+    markdown = markdown.replace(
+      new RegExp(`(?:\\b${escName}\\b)(?:[\\s,]+\\b${escName}\\b)+`, "gi"),
+      projectName,
+    );
+    // Palabras individuales repetidas: "VTC VTC" → "VTC"
+    for (const w of projectName.split(/\s+/).filter((w) => w.length >= 2)) {
+      markdown = markdown.replace(
+        new RegExp(`\\b${esc(w)}\\b(?:\\s+\\b${esc(w)}\\b)+`, "g"),
+        w,
+      );
+    }
+    // Segunda pasada del nombre completo por si quedaron mezclas.
+    markdown = markdown.replace(
+      new RegExp(`(?:\\b${escName}\\b)(?:[\\s,]+\\b${escName}\\b)+`, "gi"),
+      projectName,
+    );
+  }
 
   return { markdown, sections };
 }

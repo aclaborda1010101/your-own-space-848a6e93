@@ -2797,7 +2797,8 @@ Devuelve SOLO el JSON.`;
     else if (stepNumber === 2 && typeof processedContent === "object" && processedContent !== null) {
       const cleanMd = (processedContent as any)._clean_brief_md;
       if (typeof cleanMd === "string" && cleanMd.trim().length > 200) {
-        htmlContent = markdownToHtml(cleanMd);
+        const dedupedMd = collapseProjectNameRepetitions(cleanMd, projectName || "");
+        htmlContent = markdownToHtml(dedupedMd);
       } else {
         htmlContent = markdownToHtml(buildMinimalBriefFallback(processedContent, projectName || ""));
       }

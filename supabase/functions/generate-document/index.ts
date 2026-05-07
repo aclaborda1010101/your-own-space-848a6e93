@@ -1509,6 +1509,38 @@ function escMd(s: any): string {
   return String(s).trim().replace(/\|/g, "\\|");
 }
 
+/**
+ * Defensa en profundidad: colapsa repeticiones consecutivas del projectName y
+ * de sus palabras (ej: "Plataforma VTC Plataforma VTC VTC" → "Plataforma VTC").
+ * Pensado para limpiar markdown de _clean_brief_md guardado por versiones
+ * anteriores del normalizer que generaban cascadas de aliases.
+ */
+function collapseProjectNameRepetitions(md: string, projectName: string): string {
+  if (!md || !projectName || projectName.length < 3) return md;
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let out = md;
+  const escName = esc(projectName);
+
+  // Hacemos varias pasadas porque las repeticiones pueden anidarse.
+  for (let i = 0; i < 5; i++) {
+    const before = out;
+    // 1. Nombre completo repetido: "X X X" → "X"
+    out = out.replace(
+      new RegExp(`(?:\\b${escName}\\b)(?:[\\s,]+\\b${escName}\\b)+`, "gi"),
+      projectName,
+    );
+    // 2. Palabras individuales del nombre repetidas: "VTC VTC" → "VTC", "Plataforma Plataforma" → "Plataforma"
+    for (const w of projectName.split(/\s+/).filter((w) => w.length >= 2)) {
+      out = out.replace(
+        new RegExp(`\\b${esc(w)}\\b(?:\\s+\\b${esc(w)}\\b)+`, "g"),
+        w,
+      );
+    }
+    if (out === before) break;
+  }
+  return out;
+}
+
 function buildMinimalBriefFallback(briefing: any, projectName: string): string {
   const v2 = briefing?.business_extraction_v2 || {};
   const naming = v2.client_naming_check || {};

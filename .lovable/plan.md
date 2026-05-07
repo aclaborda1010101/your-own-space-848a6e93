@@ -1,37 +1,68 @@
-# Plan: Forzar recarga del Check-in con WHOOP
+
+# Por qué el brief repite "Plataforma VTC" tantas veces
 
 ## Diagnóstico
 
-- BD confirma: NO hay check-in para hoy (último: 2026-05-01) y SÍ hay WHOOP reciente (recovery 63, hrv 35).
-- El código actual de `useCheckIn.tsx` ya tiene el fix con `whoopLoading` + `useRef` y debería pre-rellenar.
-- En el preview interno se ve el badge "Pre-rellenado desde WHOOP" con valores 4/4/3 (correctos).
-- En tu pantalla NO sale: la PWA está sirviendo el bundle anterior desde el service worker (`public/sw.js`). Por eso el cambio "no aparece" para ti aunque ya está aplicado.
+El problema tiene **dos causas que se amplifican mutuamente**:
 
-## Solución
+### Causa 1: El LLM ya genera repeticiones leves
+Cuando Gemini extrae señales de cada chunk, a veces repite el nombre del proyecto en sus descripciones (stuttering del modelo). Esto es leve pero existe.
 
-1. **Cache-bust de Lovable preview**: actualizar el marcador `// cache-bust:` en `src/main.tsx` con timestamp nuevo para forzar rebuild y romper el cache del service worker.
-2. **Endurecer el effect de pre-rellenado** para que sobreviva mejor a re-renders y no dependa del orden de carga:
-   - Si `whoopData` cambia (nueva sincronización mientras estás en la página), volver a aplicar siempre que el usuario no haya tocado los sliders y no haya check-in registrado. Cambiar `appliedRef` para que solo bloquee si el usuario interactuó manualmente.
-   - Añadir un `console.log` informativo (`[CheckIn] WHOOP prefill applied`) para que en próximas dudas se pueda diagnosticar desde la consola.
-3. **Refetch defensivo**: cuando se monta la página `/start-day`, llamar a `refetch()` del hook WHOOP por si el dato llegó después del primer render (no-op si ya hay).
+### Causa 2 (principal): Sustitución cascada de aliases
+En `brief-normalizer.ts` (función `cleanupSpanishMarkdown`, líneas 1029-1055), el sistema:
 
-## Archivos a tocar
+1. Detecta aliases como `"VTC"`, `"plataforma"`, `"Plataforma"` del nombre canónico `"Plataforma VTC"`
+2. Aplica reemplazos regex secuenciales: cada alias → `"Plataforma VTC"`
+3. **Problema**: al reemplazar `"VTC"` → `"Plataforma VTC"`, el texto resultante ahora contiene un nuevo "Plataforma" que vuelve a matchear como alias, generando una cascada de repeticiones
 
-- `src/main.tsx` — actualizar comentario `// cache-bust:` con timestamp.
-- `src/hooks/useCheckIn.tsx` — relajar `appliedRef` (solo bloquea con `userTouchedRef`), añadir log de diagnóstico.
+Ejemplo de cascada:
+- Original: `"flota VTC y licencias VTC"`
+- Paso 1 (VTC→Plataforma VTC): `"flota Plataforma VTC y licencias Plataforma VTC"`
+- Paso 2 (Plataforma→Plataforma VTC): `"flota Plataforma VTC VTC y licencias Plataforma VTC VTC"`
+- Y así sucesivamente si hay más pasadas
 
-No se toca lógica de mapeo ni de guardado.
+## Plan de fix
 
-## Verificación
+### 1. `brief-normalizer.ts` — Evitar cascada de aliases (cambio principal)
 
-- Tras el rebuild, recargar `/start-day` (o cerrar y reabrir la PWA si es la app instalada).
-- En consola debe aparecer `[CheckIn] WHOOP prefill applied` con los valores derivados.
-- En el paso 3 deben verse Energía 4/5, Ánimo 4/5, Foco 3/5 y badge "Pre-rellenado desde WHOOP".
+En la sección de sustitución de aliases (línea ~1029), cambiar la estrategia:
 
-## Nota importante para ti
+- **Excluir aliases que son substrings del `projectName`**: si el projectName es "Plataforma VTC", no reemplazar "VTC" ni "Plataforma" individualmente, porque ya forman parte del nombre canónico y causan cascada.
+- Solo reemplazar aliases que son variantes completas (ej: "AFFLUX" → "Afflux", "AFLU" → "AFFLUX").
+- Añadir un **post-paso de deduplicación**: regex que detecte el projectName repetido y lo colapse (ej: `"Plataforma VTC Plataforma VTC VTC"` → `"Plataforma VTC"`).
 
-Si estás usando la app instalada como PWA en el móvil, puede que necesites:
-- Cerrarla por completo y reabrirla, o
-- En el navegador: pull-to-refresh + esperar 5s + recargar otra vez.
+### 2. `clean-brief-builder.ts` — Sanitización de salida
 
-Esto es porque el service worker mantiene la versión antigua hasta el siguiente "ciclo".
+Añadir un paso final en `buildCleanBrief` que limpie repeticiones del projectName en el markdown resultante, como red de seguridad.
+
+### 3. Prompt del chunked-extractor (mejora menor)
+
+Añadir instrucción explícita al prompt: "NO repitas el nombre del proyecto innecesariamente en las descripciones. Usa pronombres o referencia indirecta cuando sea obvio."
+
+## Archivos a modificar
+
+| Archivo | Cambio |
+|---------|--------|
+| `supabase/functions/project-wizard-step/brief-normalizer.ts` | Filtrar aliases substring del projectName; añadir dedup post-reemplazo |
+| `supabase/functions/project-wizard-step/clean-brief-builder.ts` | Añadir limpieza de repeticiones en markdown final |
+| `supabase/functions/project-wizard-step/chunked-extractor.ts` | Instrucción anti-repetición en prompts de extracción |
+
+## Detalles técnicos
+
+En `brief-normalizer.ts`, la lógica de filtrado sería:
+
+```text
+// Antes de añadir un alias como reemplazo, verificar:
+// 1. El alias normalizado NO es substring del projectName normalizado
+// 2. El projectName normalizado NO es substring del alias normalizado
+// (ya cubierto por looksLikeAliasOf pero falta el filtro de substring)
+```
+
+El regex de dedup post-reemplazo:
+
+```text
+// Colapsar repeticiones: "Plataforma VTC Plataforma VTC VTC" → "Plataforma VTC"
+const escapedName = projectName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const words = projectName.split(/\s+/);
+// Detectar el nombre o partes repetidas adyacentes y colapsar
+```

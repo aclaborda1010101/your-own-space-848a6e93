@@ -236,6 +236,30 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_kill_switch: {
+        Row: {
+          max_per_hour: number | null
+          notes: string | null
+          operation: string
+          paused: boolean
+          updated_at: string
+        }
+        Insert: {
+          max_per_hour?: number | null
+          notes?: string | null
+          operation: string
+          paused?: boolean
+          updated_at?: string
+        }
+        Update: {
+          max_per_hour?: number | null
+          notes?: string | null
+          operation?: string
+          paused?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ai_news: {
         Row: {
           category: string | null

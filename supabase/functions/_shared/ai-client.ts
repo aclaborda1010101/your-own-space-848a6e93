@@ -2,6 +2,7 @@
 // All calls routed through https://ai.gateway.lovable.dev/v1/chat/completions
 
 import { recordCost, estimateTokens, calculateCost } from "./cost-tracker.ts";
+import { assertAIAllowed } from "./ai-kill-switch.ts";
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
@@ -126,6 +127,9 @@ export async function chat(
   if (!LOVABLE_API_KEY) {
     throw new Error("LOVABLE_API_KEY not configured. Enable Lovable AI in project settings.");
   }
+
+  // Kill-switch / rate-limit check (throws "AI_PAUSED: …" when blocked)
+  await assertAIAllowed(options.operation || "ai-client:chat", options.userId);
 
   // Resolve model alias
   const modelAlias = options.model || "gemini-flash";

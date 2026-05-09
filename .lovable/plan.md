@@ -1,75 +1,42 @@
-# Auditoría y control del consumo de Lovable AI
+# Alerta de gasto automático diario de IA
 
-## Diagnóstico
+## Objetivo
+Avisarte cuando el consumo **automático** de IA (sin chats manuales con JARVIS/POTUS ni Project Wizard) supere un umbral diario que tú definas.
 
-El error de runtime confirma `402 Créditos AI agotados` desde el AI Gateway. Análisis de datos:
+## Qué se considera "automático"
+Operaciones que se disparan sin que tú escribas un prompt:
+- `transcribe-audio` (notas de voz WhatsApp)
+- `vision-image` (imágenes WhatsApp)
+- `shopping-list-auto`
+- `jarvis-history-ingest`
+- Cualquier otra operación futura que no sea `ai-client:chat` ni operaciones del Project Wizard (`budget_estimation`, `extract_briefing`, `ai_audit_internal`, `generate_scope_internal`, etc.)
 
-**Cron jobs activos** (ninguno hace bucles infinitos de IA):
-- `dispatch-scheduled-notifications` cada minuto → no llama IA ✅
-- `email-sync-auto` cada 2h → no llama IA ✅
-- `jarvis-history-backfill-cron` diario → llama IA pero registra coste, ~$0.0001/run
-- 2 jobs semanales menores
+Lista de operaciones manuales a **excluir** se mantiene en una constante en el edge function (fácil de editar).
 
-**Top operaciones por coste (últimos 30 días, lo que SÍ se registra en `project_costs`):**
+## Componentes
 
-| Operación | Modelo | Llamadas | USD |
-|---|---|---:|---:|
-| `budget_estimation` (project-wizard) | claude-sonnet | 17 | **$1.78** |
-| `ai_audit_internal` | gemini-pro | 3 | $0.87 |
-| `generate_scope_internal` | gemini-3.1-pro | 3 | $0.66 |
-| `ai-client:chat` (jarvis) | gemini-3.1-pro | 100 | $0.11 |
-| Resto | varios | ~150 | $0.23 |
-| **Total registrado** | | | **~$3.65** |
+### 1. Edge function `ai-cost-daily-alert` (nuevo)
+- Lee `project_costs` de las últimas 24h filtrando por `operation NOT IN (lista_manual)`
+- Suma `cost_usd`
+- Si supera `threshold_usd` → inserta notificación + envía push (usa `send-push-notification` ya existente)
+- Idempotente: no envía dos alertas el mismo día para el mismo umbral
 
-El balance gratuito mensual del AI Gateway es ~$1, así que **$3.65 ya supera el free tier** y explica el 402. Pero hay mucho gasto que **NO se registra**: 26 funciones llaman al gateway y al menos 4 importantes no usan `cost-tracker`.
+### 2. Schedule (pg_cron)
+- Migración SQL que programa el edge function 1 vez al día a las 09:00 UTC
+- Usa `pg_net` para invocar la función (mismo patrón que otros cron del proyecto)
 
-## Causas del consumo
+### 3. Configuración del umbral
+Dos opciones, elige una en la pregunta de abajo:
+- **A)** Constante en código (ej. `THRESHOLD_USD = 0.10`) — simple, requiere editar para cambiar
+- **B)** Tabla `ai_cost_alert_config` con UI en `/ai-costs` para ajustar umbral desde la app
 
-1. **`budget_estimation` con Claude Sonnet** es el mayor culpable individual: 17 llamadas → $1.78. Cada estimación cuesta ~$0.10. El project-wizard la lanza en F5/F6.
-2. **`ai_audit_internal` y `generate_scope_internal` con Gemini Pro** son llamadas únicas pero pesadas (~$0.30 cada una).
-3. **Funciones sin tracking** que pueden estar sumando coste invisible: `ai-news`, `daily-briefing`, `daily-context-brief`, `pattern-detector-*`, `auto-research`, `finance-auto-goals`, `jarvis-agent`, `jarvis-unified`, `nutrition-recipe`, `openclaw-chat`, `search-rag`, `whoop-health-summary`, `plaud-classify`, etc.
-4. **`process-whatsapp-media`** se dispara por cada audio/imagen entrante por webhook → coste proporcional al volumen WhatsApp.
+## Archivos a crear/editar
+- `supabase/functions/ai-cost-daily-alert/index.ts` (nuevo)
+- `supabase/migrations/<timestamp>_ai_cost_alert_cron.sql` (cron + tabla opción B)
+- `src/components/ai-costs/AICostAlertConfig.tsx` (solo si opción B)
+- `src/pages/AICosts.tsx` (montar el card, solo opción B)
 
-## Plan de acción
-
-### Paso 1 — Instrumentación universal (visibilidad real)
-Añadir `trackAICost`/`recordCost` en TODAS las funciones que llaman al gateway sin registro. Crear un helper `callLovableAI()` en `_shared/ai-gateway.ts` que envuelve la llamada + el tracking + manejo de 402/429, y migrar las 22 funciones identificadas a usarlo. Así nada nuevo escapa a la contabilidad.
-
-### Paso 2 — Reducir el coste de los pesos pesados
-- **`budget_estimation`**: cambiar Claude Sonnet → Gemini 3.1 Pro (10x más barato) o Gemini 3 Flash si la calidad aguanta. Cachear el resultado por `project_id` para no recalcular en cada apertura del wizard.
-- **`ai_audit_internal` / `generate_scope_internal`**: pasar de `gemini-3.1-pro-preview` a `gemini-3-flash-preview` para borradores; reservar Pro solo para la versión final que el usuario confirma.
-
-### Paso 3 — Guardas para evitar bucles
-- Añadir un rate-limit simple por `user_id + operation` en `_shared/cost-tracker.ts` (p.ej. máx N llamadas/hora por operación cara). Si se supera, devolver 429 antes de llamar al gateway.
-- En `process-whatsapp-media`: deduplicar por `message_id` para no reprocesar el mismo media si el webhook se repite.
-
-### Paso 4 — Panel de control
-Mejorar `/ai-costs` con:
-- Top 10 operaciones del mes con coste y nº de llamadas.
-- Coste por usuario.
-- Alerta visual cuando una operación supere un umbral.
-- Botón "pausar" por operación (escribe en una tabla `ai_kill_switch`; el helper `callLovableAI` consulta y bloquea).
-
-### Paso 5 — Configurar límite de gasto en el workspace de Lovable
-(Acción manual, fuera de código) — En **Settings → Cloud & AI balance**, añadir saldo o un cap mensual para que un bug nunca pueda fundir cientos de USD.
-
-## Detalle técnico
-
-- Nuevo archivo `supabase/functions/_shared/ai-gateway.ts`:
-  ```ts
-  export async function callLovableAI({ model, messages, operation, userId, projectId }) {
-    // 1. comprobar kill_switch
-    // 2. comprobar rate-limit (count en project_costs últimas X min)
-    // 3. fetch al gateway con manejo 402/429
-    // 4. recordCost al final (siempre, también en error)
-  }
-  ```
-- Nueva tabla `ai_kill_switch (operation text pk, paused boolean, max_per_hour int)`.
-- Nueva vista SQL `ai_cost_top_operations` para alimentar `/ai-costs`.
-- Migración a `callLovableAI` en las 22 funciones sin tracker; en las 4 que ya usan `recordCost` directo, se conserva pero se añade el chequeo de kill_switch.
-
-## Fuera de alcance
-
-- No tocamos los crons existentes (no son la causa).
-- No cambiamos modelos en chats interactivos (`jarvis-agent`, `jarvis-unified`) — solo en pipelines batch caros.
-- No se tocan prompts de calidad del wizard.
+## Preguntas
+1. **Umbral diario** que dispara la alerta (consumo automático): ¿$0.05, $0.10, $0.25, otro?
+2. **Configuración**: ¿constante en código (A) o ajustable desde UI (B)?
+3. **Canal**: ¿push notification + registro en notificaciones in-app, o solo notificación in-app?

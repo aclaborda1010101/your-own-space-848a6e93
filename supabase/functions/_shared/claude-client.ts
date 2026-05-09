@@ -1,6 +1,9 @@
 // Claude AI Client - Uses Anthropic API directly for portability
 // This provides access to Claude models using the user's ANTHROPIC_API_KEY
 
+import { recordCost, estimateTokens, calculateCost } from "./cost-tracker.ts";
+import { assertAIAllowed } from "./ai-kill-switch.ts";
+
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
 // Validate API key on module load
@@ -18,6 +21,10 @@ export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
   responseFormat?: "text" | "json";
+  // Cost tracking (optional — when provided, records to project_costs)
+  userId?: string;
+  operation?: string;
+  projectId?: string;
 }
 
 // Claude model aliases for convenience
@@ -74,6 +81,9 @@ export async function chat(
     throw new Error("ANTHROPIC_API_KEY not configured");
   }
 
+  // Kill-switch / rate-limit check (throws "AI_PAUSED: …" when blocked)
+  await assertAIAllowed(options.operation || "claude-client:chat", options.userId);
+
   const model = resolveModel(options.model);
   const { system, messages: formattedMessages } = formatMessagesForClaude(messages);
 
@@ -113,10 +123,32 @@ export async function chat(
   }
 
   const data = await response.json();
-  
+
   // Claude returns content as an array of content blocks
   const textContent = data.content?.find((block: { type: string }) => block.type === "text");
-  return textContent?.text || "";
+  const result: string = textContent?.text || "";
+
+  // ── Cost tracking (fire-and-forget) ──
+  try {
+    const usage = data.usage || {};
+    const inputText = messages.map((m) => m.content).join("\n");
+    const tokensInput = Number(usage.input_tokens) || estimateTokens(inputText);
+    const tokensOutput = Number(usage.output_tokens) || estimateTokens(result);
+    const costUsd = calculateCost(model, tokensInput, tokensOutput);
+    recordCost(null, {
+      userId: options.userId,
+      service: model,
+      operation: options.operation || "claude-client:chat",
+      tokensInput,
+      tokensOutput,
+      costUsd,
+      projectId: options.projectId,
+    }).catch((err) => console.warn("[claude-client] cost recording failed:", err));
+  } catch (err) {
+    console.warn("[claude-client] cost tracking exception:", err);
+  }
+
+  return result;
 }
 
 /**

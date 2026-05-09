@@ -16,6 +16,7 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
+import { AIKillSwitchPanel } from "@/components/ai-costs/AIKillSwitchPanel";
 
 interface CostRow {
   id: string;
@@ -154,6 +155,9 @@ export default function AICosts() {
           Historial detallado de uso y costes de modelos de IA
         </p>
       </div>
+
+      {/* Kill switch panel — pausa de emergencia y límites por operación */}
+      <AIKillSwitchPanel knownOperations={operations} />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

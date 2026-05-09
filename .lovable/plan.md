@@ -1,68 +1,75 @@
-
-# Por qué el brief repite "Plataforma VTC" tantas veces
+# Auditoría y control del consumo de Lovable AI
 
 ## Diagnóstico
 
-El problema tiene **dos causas que se amplifican mutuamente**:
+El error de runtime confirma `402 Créditos AI agotados` desde el AI Gateway. Análisis de datos:
 
-### Causa 1: El LLM ya genera repeticiones leves
-Cuando Gemini extrae señales de cada chunk, a veces repite el nombre del proyecto en sus descripciones (stuttering del modelo). Esto es leve pero existe.
+**Cron jobs activos** (ninguno hace bucles infinitos de IA):
+- `dispatch-scheduled-notifications` cada minuto → no llama IA ✅
+- `email-sync-auto` cada 2h → no llama IA ✅
+- `jarvis-history-backfill-cron` diario → llama IA pero registra coste, ~$0.0001/run
+- 2 jobs semanales menores
 
-### Causa 2 (principal): Sustitución cascada de aliases
-En `brief-normalizer.ts` (función `cleanupSpanishMarkdown`, líneas 1029-1055), el sistema:
+**Top operaciones por coste (últimos 30 días, lo que SÍ se registra en `project_costs`):**
 
-1. Detecta aliases como `"VTC"`, `"plataforma"`, `"Plataforma"` del nombre canónico `"Plataforma VTC"`
-2. Aplica reemplazos regex secuenciales: cada alias → `"Plataforma VTC"`
-3. **Problema**: al reemplazar `"VTC"` → `"Plataforma VTC"`, el texto resultante ahora contiene un nuevo "Plataforma" que vuelve a matchear como alias, generando una cascada de repeticiones
+| Operación | Modelo | Llamadas | USD |
+|---|---|---:|---:|
+| `budget_estimation` (project-wizard) | claude-sonnet | 17 | **$1.78** |
+| `ai_audit_internal` | gemini-pro | 3 | $0.87 |
+| `generate_scope_internal` | gemini-3.1-pro | 3 | $0.66 |
+| `ai-client:chat` (jarvis) | gemini-3.1-pro | 100 | $0.11 |
+| Resto | varios | ~150 | $0.23 |
+| **Total registrado** | | | **~$3.65** |
 
-Ejemplo de cascada:
-- Original: `"flota VTC y licencias VTC"`
-- Paso 1 (VTC→Plataforma VTC): `"flota Plataforma VTC y licencias Plataforma VTC"`
-- Paso 2 (Plataforma→Plataforma VTC): `"flota Plataforma VTC VTC y licencias Plataforma VTC VTC"`
-- Y así sucesivamente si hay más pasadas
+El balance gratuito mensual del AI Gateway es ~$1, así que **$3.65 ya supera el free tier** y explica el 402. Pero hay mucho gasto que **NO se registra**: 26 funciones llaman al gateway y al menos 4 importantes no usan `cost-tracker`.
 
-## Plan de fix
+## Causas del consumo
 
-### 1. `brief-normalizer.ts` — Evitar cascada de aliases (cambio principal)
+1. **`budget_estimation` con Claude Sonnet** es el mayor culpable individual: 17 llamadas → $1.78. Cada estimación cuesta ~$0.10. El project-wizard la lanza en F5/F6.
+2. **`ai_audit_internal` y `generate_scope_internal` con Gemini Pro** son llamadas únicas pero pesadas (~$0.30 cada una).
+3. **Funciones sin tracking** que pueden estar sumando coste invisible: `ai-news`, `daily-briefing`, `daily-context-brief`, `pattern-detector-*`, `auto-research`, `finance-auto-goals`, `jarvis-agent`, `jarvis-unified`, `nutrition-recipe`, `openclaw-chat`, `search-rag`, `whoop-health-summary`, `plaud-classify`, etc.
+4. **`process-whatsapp-media`** se dispara por cada audio/imagen entrante por webhook → coste proporcional al volumen WhatsApp.
 
-En la sección de sustitución de aliases (línea ~1029), cambiar la estrategia:
+## Plan de acción
 
-- **Excluir aliases que son substrings del `projectName`**: si el projectName es "Plataforma VTC", no reemplazar "VTC" ni "Plataforma" individualmente, porque ya forman parte del nombre canónico y causan cascada.
-- Solo reemplazar aliases que son variantes completas (ej: "AFFLUX" → "Afflux", "AFLU" → "AFFLUX").
-- Añadir un **post-paso de deduplicación**: regex que detecte el projectName repetido y lo colapse (ej: `"Plataforma VTC Plataforma VTC VTC"` → `"Plataforma VTC"`).
+### Paso 1 — Instrumentación universal (visibilidad real)
+Añadir `trackAICost`/`recordCost` en TODAS las funciones que llaman al gateway sin registro. Crear un helper `callLovableAI()` en `_shared/ai-gateway.ts` que envuelve la llamada + el tracking + manejo de 402/429, y migrar las 22 funciones identificadas a usarlo. Así nada nuevo escapa a la contabilidad.
 
-### 2. `clean-brief-builder.ts` — Sanitización de salida
+### Paso 2 — Reducir el coste de los pesos pesados
+- **`budget_estimation`**: cambiar Claude Sonnet → Gemini 3.1 Pro (10x más barato) o Gemini 3 Flash si la calidad aguanta. Cachear el resultado por `project_id` para no recalcular en cada apertura del wizard.
+- **`ai_audit_internal` / `generate_scope_internal`**: pasar de `gemini-3.1-pro-preview` a `gemini-3-flash-preview` para borradores; reservar Pro solo para la versión final que el usuario confirma.
 
-Añadir un paso final en `buildCleanBrief` que limpie repeticiones del projectName en el markdown resultante, como red de seguridad.
+### Paso 3 — Guardas para evitar bucles
+- Añadir un rate-limit simple por `user_id + operation` en `_shared/cost-tracker.ts` (p.ej. máx N llamadas/hora por operación cara). Si se supera, devolver 429 antes de llamar al gateway.
+- En `process-whatsapp-media`: deduplicar por `message_id` para no reprocesar el mismo media si el webhook se repite.
 
-### 3. Prompt del chunked-extractor (mejora menor)
+### Paso 4 — Panel de control
+Mejorar `/ai-costs` con:
+- Top 10 operaciones del mes con coste y nº de llamadas.
+- Coste por usuario.
+- Alerta visual cuando una operación supere un umbral.
+- Botón "pausar" por operación (escribe en una tabla `ai_kill_switch`; el helper `callLovableAI` consulta y bloquea).
 
-Añadir instrucción explícita al prompt: "NO repitas el nombre del proyecto innecesariamente en las descripciones. Usa pronombres o referencia indirecta cuando sea obvio."
+### Paso 5 — Configurar límite de gasto en el workspace de Lovable
+(Acción manual, fuera de código) — En **Settings → Cloud & AI balance**, añadir saldo o un cap mensual para que un bug nunca pueda fundir cientos de USD.
 
-## Archivos a modificar
+## Detalle técnico
 
-| Archivo | Cambio |
-|---------|--------|
-| `supabase/functions/project-wizard-step/brief-normalizer.ts` | Filtrar aliases substring del projectName; añadir dedup post-reemplazo |
-| `supabase/functions/project-wizard-step/clean-brief-builder.ts` | Añadir limpieza de repeticiones en markdown final |
-| `supabase/functions/project-wizard-step/chunked-extractor.ts` | Instrucción anti-repetición en prompts de extracción |
+- Nuevo archivo `supabase/functions/_shared/ai-gateway.ts`:
+  ```ts
+  export async function callLovableAI({ model, messages, operation, userId, projectId }) {
+    // 1. comprobar kill_switch
+    // 2. comprobar rate-limit (count en project_costs últimas X min)
+    // 3. fetch al gateway con manejo 402/429
+    // 4. recordCost al final (siempre, también en error)
+  }
+  ```
+- Nueva tabla `ai_kill_switch (operation text pk, paused boolean, max_per_hour int)`.
+- Nueva vista SQL `ai_cost_top_operations` para alimentar `/ai-costs`.
+- Migración a `callLovableAI` en las 22 funciones sin tracker; en las 4 que ya usan `recordCost` directo, se conserva pero se añade el chequeo de kill_switch.
 
-## Detalles técnicos
+## Fuera de alcance
 
-En `brief-normalizer.ts`, la lógica de filtrado sería:
-
-```text
-// Antes de añadir un alias como reemplazo, verificar:
-// 1. El alias normalizado NO es substring del projectName normalizado
-// 2. El projectName normalizado NO es substring del alias normalizado
-// (ya cubierto por looksLikeAliasOf pero falta el filtro de substring)
-```
-
-El regex de dedup post-reemplazo:
-
-```text
-// Colapsar repeticiones: "Plataforma VTC Plataforma VTC VTC" → "Plataforma VTC"
-const escapedName = projectName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const words = projectName.split(/\s+/);
-// Detectar el nombre o partes repetidas adyacentes y colapsar
-```
+- No tocamos los crons existentes (no son la causa).
+- No cambiamos modelos en chats interactivos (`jarvis-agent`, `jarvis-unified`) — solo en pipelines batch caros.
+- No se tocan prompts de calidad del wizard.

@@ -1,4 +1,4 @@
-// cache-bust: 2026-05-06T19:55-checkin-whoop-prefill-v2
+// cache-bust: 2026-05-09T15:50-ai-kill-switch-v1
 import "./index.css";
 import { initSafeStorage } from "./lib/safeStorage";
 import { ensureRuntimeFreshness } from "./lib/runtimeFreshness";

@@ -26,8 +26,26 @@ export const ExecutiveSummaryCard = () => {
       const { data, error: fnErr } = await supabase.functions.invoke(
         force ? "jarvis-executive-summary?force=true" : "jarvis-executive-summary",
       );
-      if (fnErr) throw fnErr;
-      if ((data as any)?.error) throw new Error((data as any).error);
+      // Note: 402/429 from edge fn arrive as fnErr; we degrade gracefully instead of crashing.
+      if (fnErr) {
+        const raw = String(fnErr?.message || "");
+        if (raw.includes("402") || /agotad/i.test(raw)) {
+          setError("Créditos de IA agotados. Pausa o ajusta límites en el panel de control de gasto IA más abajo.");
+          if (force) toast.error("Sin créditos de IA");
+          return;
+        }
+        if (raw.includes("429")) {
+          setError("Demasiadas peticiones. Intenta en un minuto.");
+          if (force) toast.error("Rate limit");
+          return;
+        }
+        throw fnErr;
+      }
+      if ((data as any)?.error) {
+        setError((data as any).error);
+        if (force) toast.error((data as any).error);
+        return;
+      }
       setSummary((data as any).summary);
       setGeneratedAt((data as any).generated_at);
       if (force) toast.success("Resumen actualizado");
